@@ -77,7 +77,7 @@ def _register_error_handlers(app: Flask):
 
     @app.errorhandler(500)
     def server_error(exc):
-        app.logger.error("Unhandled server error: %s", exc)
+        app.logger.error("Unhandled server error: %s", exc, exc_info=True)
         return fail("An unexpected error occurred. Please try again later.", 500)
 
 
