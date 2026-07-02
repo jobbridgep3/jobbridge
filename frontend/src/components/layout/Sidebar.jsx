@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import { ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 
-import jobbridgeLogo from '../../assets/logo.svg'
+import jobbridgeLogo from '../../assets/peso-logo.png'
 import { NAV_BY_ROLE, ROLE_LABELS } from '../../config/navigation'
 import { sidebarWidth } from '../../lib/motion'
 import { cn } from '../../lib/utils'

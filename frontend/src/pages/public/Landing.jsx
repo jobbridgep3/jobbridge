@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import { Briefcase, FileSearch, QrCode, ShieldCheck } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-import logo from '../../assets/logo.svg'
+import logo from '../../assets/peso-logo.png'
 import { Button } from '../../components/ui/Button'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
 

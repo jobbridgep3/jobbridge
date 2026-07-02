@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 
-import logo from '../../assets/logo.svg'
+import logo from '../../assets/peso-logo.png'
 import { fadeIn } from '../../lib/motion'
 
 export function AuthLayout({ title, subtitle, children, footer }) {

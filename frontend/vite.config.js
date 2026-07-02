@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['logo.svg'],
+      includeAssets: ['peso-logo.png'],
       manifest: {
         name: 'JobBridge — PESO Pila, Laguna',
         short_name: 'JobBridge',
@@ -16,7 +16,10 @@ export default defineConfig({
         theme_color: '#1e3a8a',
         background_color: '#ffffff',
         display: 'standalone',
-        icons: [{ src: '/logo.svg', sizes: 'any', type: 'image/svg+xml' }],
+        icons: [
+          { src: '/peso-logo.png', sizes: '150x150', type: 'image/png' },
+          { src: '/peso-logo.png', sizes: '630x630', type: 'image/png', purpose: 'any maskable' },
+        ],
       },
     }),
   ],
