@@ -29,7 +29,7 @@ _DEFAULT_RESPONSE = (
 
 
 def is_dialogflow_configured() -> bool:
-    return bool(current_app.config.get("DIALOGFLOW_PROJECT_ID") and current_app.config.get("GOOGLE_APPLICATION_CREDENTIALS"))
+    return bool(current_app.config.get("DIALOGFLOW_PROJECT_ID") and current_app.config.get("DIALOGFLOW_CREDENTIALS_PATH"))
 
 
 def _canned_reply(message: str) -> str:
@@ -48,9 +48,13 @@ def get_reply(message: str, session_id: str = None) -> dict:
 
     try:
         from google.cloud import dialogflow_v2 as dialogflow
+        from google.oauth2 import service_account
 
         project_id = current_app.config["DIALOGFLOW_PROJECT_ID"]
-        session_client = dialogflow.SessionsClient()
+        credentials = service_account.Credentials.from_service_account_file(
+            current_app.config["DIALOGFLOW_CREDENTIALS_PATH"]
+        )
+        session_client = dialogflow.SessionsClient(credentials=credentials)
         session = session_client.session_path(project_id, session_id)
         text_input = dialogflow.TextInput(text=message, language_code="en")
         query_input = dialogflow.QueryInput(text=text_input)

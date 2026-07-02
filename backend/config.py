@@ -60,8 +60,11 @@ class Config:
     CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 
     # --- AI service credentials (optional — stub mode when absent) ---
+    # Vision and Dialogflow live in separate GCP projects/service accounts here, so each
+    # gets its own credential file rather than sharing GOOGLE_APPLICATION_CREDENTIALS.
     GOOGLE_APPLICATION_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
     DIALOGFLOW_PROJECT_ID = os.environ.get("DIALOGFLOW_PROJECT_ID", "")
+    DIALOGFLOW_CREDENTIALS_PATH = os.environ.get("DIALOGFLOW_CREDENTIALS_PATH", "")
 
     # --- Admin seed (used only by seed.py) ---
     ADMIN_SEED_EMAIL = os.environ.get("ADMIN_SEED_EMAIL", "")
