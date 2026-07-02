@@ -1,23 +1,10 @@
-import eventlet
-from eventlet import patcher
+import logging
 
-# Only patch if nothing has patched yet. Gunicorn's own eventlet worker already calls
-# eventlet.monkey_patch(os=False) before importing this module (that's the documented,
-# correct order) — patching a second time here with different args (namely os=True by
-# default) conflicts with gunicorn's own process/signal handling and is what caused the
-# "Working outside of application context" crashes in production. This guard makes the
-# call safe for the one path that does need it directly: `python app.py` for local dev
-# (no gunicorn involved, so nothing has patched yet).
-if not patcher.is_monkey_patched("socket"):
-    eventlet.monkey_patch()  # noqa: E402
+from flask import Flask
 
-import logging  # noqa: E402
-
-from flask import Flask  # noqa: E402
-
-from config import Config  # noqa: E402
-from extensions import cors, db, jwt, limiter, mail, migrate, socketio  # noqa: E402
-from utils.responses import fail  # noqa: E402
+from config import Config
+from extensions import cors, db, jwt, limiter, mail, migrate, socketio
+from utils.responses import fail
 
 logging.basicConfig(level=logging.INFO)
 
