@@ -1,10 +1,16 @@
-import logging
+import eventlet
 
-from flask import Flask
+eventlet.monkey_patch()  # noqa: E402 — must run before any other import (Flask, SQLAlchemy,
+# flask_jwt_extended, etc. create thread-local/context objects at import time; patching after
+# that leaves them un-green and breaks Socket.io/gunicorn's eventlet worker at runtime).
 
-from config import Config
-from extensions import cors, db, jwt, limiter, mail, migrate, socketio
-from utils.responses import fail
+import logging  # noqa: E402
+
+from flask import Flask  # noqa: E402
+
+from config import Config  # noqa: E402
+from extensions import cors, db, jwt, limiter, mail, migrate, socketio  # noqa: E402
+from utils.responses import fail  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 
