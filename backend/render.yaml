@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: jobbridge-backend
+    runtime: python
+    plan: free
+    region: singapore
+    branch: main
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt && python -m spacy download en_core_web_sm && flask db upgrade"
+    startCommand: "gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:$PORT app:app"
+    healthCheckPath: /api/health
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      # The following must be set manually in the Render dashboard (never committed):
+      # DATABASE_URL, JWT_SECRET_KEY, SECRET_KEY, SUPABASE_URL, SUPABASE_ANON_KEY,
+      # SUPABASE_SERVICE_ROLE_KEY, SUPABASE_STORAGE_BUCKET, MAIL_USERNAME, MAIL_PASSWORD,
+      # CORS_ORIGINS (set to the deployed Vercel URL), GOOGLE_APPLICATION_CREDENTIALS,
+      # DIALOGFLOW_PROJECT_ID, ADMIN_SEED_EMAIL, ADMIN_SEED_PASSWORD
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        sync: false
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        sync: false
+      - key: DIALOGFLOW_PROJECT_ID
+        sync: false

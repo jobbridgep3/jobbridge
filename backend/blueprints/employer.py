@@ -96,6 +96,41 @@ def update_company():
     return ok(company.to_dict(), "Company profile updated.")
 
 
+@company_bp.post("/logo")
+@jwt_required()
+@role_required("employer")
+def upload_logo():
+    from services.storage_service import upload_file
+
+    company = _company()
+    if not company:
+        return fail("Company profile not found.", 404)
+    if "file" not in request.files:
+        return fail("No file uploaded.", 400)
+    file = request.files["file"]
+    company.logo_url = upload_file(file.read(), file.filename, folder=f"logos/{company.id}", content_type=file.mimetype)
+    db.session.commit()
+    return ok(company.to_dict(), "Logo uploaded.")
+
+
+@company_bp.post("/documents")
+@jwt_required()
+@role_required("employer")
+def upload_documents():
+    from services.storage_service import upload_file
+
+    company = _company()
+    if not company:
+        return fail("Company profile not found.", 404)
+    if "file" not in request.files:
+        return fail("No file uploaded.", 400)
+    file = request.files["file"]
+    url = upload_file(file.read(), file.filename, folder=f"company-docs/{company.id}", content_type=file.mimetype)
+    company.document_urls = [*(company.document_urls or []), url]
+    db.session.commit()
+    return ok(company.to_dict(), "Document uploaded.")
+
+
 # ---------- Vacancy Management ----------
 
 @vacancies_bp.get("/my")

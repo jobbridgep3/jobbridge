@@ -113,6 +113,12 @@ def verify_otp():
     db.session.commit()
     log_audit(user, "Update", "auth", user.id, "OTP verified")
 
+    if payload["purpose"] == "register":
+        # Auto-issue a JWT so the frontend can immediately drive /complete-profile
+        # (resume upload) without a separate login step in between.
+        token = create_access_token(identity=str(user.id), additional_claims={"role": user.role, "email": user.email})
+        return ok({"token": token, "user": user.to_dict()}, "Verified successfully.")
+
     return ok(message="Verified successfully.")
 
 
