@@ -42,7 +42,7 @@ npm run dev                      # runs on http://localhost:5173
 See `backend/.env.example` and `frontend/.env.example` for the full list. Secrets are never committed — `.env` is git-ignored everywhere.
 
 Notably:
-- `GOOGLE_APPLICATION_CREDENTIALS` / `DIALOGFLOW_PROJECT_ID` are optional. When absent, OCR resume parsing and the chatbot run in a clearly-labeled mock mode so the rest of the system remains fully testable without a Google Cloud account.
+- `GOOGLE_APPLICATION_CREDENTIALS` / `DIALOGFLOW_PROJECT_ID` are optional. When absent, OCR resume parsing and the chatbot run in a clearly-labeled mock mode so the rest of the system remains fully testable without a Google Cloud account. A service-account key is configured for `GOOGLE_APPLICATION_CREDENTIALS` (place it at `backend/credentials/`, git-ignored) — Vision API also requires **billing enabled** on the GCP project, or calls fail with a billing error and the code falls back to mock output automatically.
 - Supabase Row Level Security should be enabled per-table in the dashboard as defense-in-depth. The backend authenticates via `DATABASE_URL` (a Postgres role, not a Supabase client session), so the primary authorization boundary is the JWT + `@role_required` decorator, not RLS.
 
 ## Deployment

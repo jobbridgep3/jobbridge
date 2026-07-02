@@ -5,6 +5,7 @@
 !.env.*.example
 *service-account*.json
 *credentials*.json
+backend/credentials/
 *.pem
 *.key
 
