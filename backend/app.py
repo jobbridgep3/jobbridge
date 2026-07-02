@@ -1,8 +1,15 @@
 import eventlet
+from eventlet import patcher
 
-eventlet.monkey_patch()  # noqa: E402 — must run before any other import (Flask, SQLAlchemy,
-# flask_jwt_extended, etc. create thread-local/context objects at import time; patching after
-# that leaves them un-green and breaks Socket.io/gunicorn's eventlet worker at runtime).
+# Only patch if nothing has patched yet. Gunicorn's own eventlet worker already calls
+# eventlet.monkey_patch(os=False) before importing this module (that's the documented,
+# correct order) — patching a second time here with different args (namely os=True by
+# default) conflicts with gunicorn's own process/signal handling and is what caused the
+# "Working outside of application context" crashes in production. This guard makes the
+# call safe for the one path that does need it directly: `python app.py` for local dev
+# (no gunicorn involved, so nothing has patched yet).
+if not patcher.is_monkey_patched("socket"):
+    eventlet.monkey_patch()  # noqa: E402
 
 import logging  # noqa: E402
 
