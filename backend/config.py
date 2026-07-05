@@ -10,8 +10,8 @@ REQUIRED_VARS = [
     "JWT_SECRET_KEY",
     "SUPABASE_URL",
     "SUPABASE_SERVICE_ROLE_KEY",
-    "MAIL_USERNAME",
-    "MAIL_PASSWORD",
+    "BREVO_API_KEY",
+    "BREVO_SENDER_EMAIL",
 ]
 
 
@@ -48,13 +48,10 @@ class Config:
     SUPABASE_SERVICE_ROLE_KEY = _require("SUPABASE_SERVICE_ROLE_KEY")
     SUPABASE_STORAGE_BUCKET = os.environ.get("SUPABASE_STORAGE_BUCKET", "jobbridge-files")
 
-    # --- Mail (Gmail SMTP) ---
-    MAIL_SERVER = os.environ.get("MAIL_SERVER", "smtp.gmail.com")
-    MAIL_PORT = int(os.environ.get("MAIL_PORT", 587))
-    MAIL_USE_TLS = True
-    MAIL_USERNAME = _require("MAIL_USERNAME")
-    MAIL_PASSWORD = _require("MAIL_PASSWORD")
-    MAIL_DEFAULT_SENDER = ("JobBridge PESO Pila", os.environ.get("MAIL_USERNAME", ""))
+    # --- Mail (Brevo transactional email API — avoids SMTP port blocking on cloud hosts) ---
+    BREVO_API_KEY = _require("BREVO_API_KEY")
+    BREVO_SENDER_EMAIL = _require("BREVO_SENDER_EMAIL")
+    BREVO_SENDER_NAME = os.environ.get("BREVO_SENDER_NAME", "JobBridge PESO Pila")
 
     # --- CORS ---
     CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]

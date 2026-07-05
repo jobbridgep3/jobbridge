@@ -16,9 +16,10 @@ services:
         value: 3.11.9
       # The following must be set manually in the Render dashboard (never committed):
       # DATABASE_URL, JWT_SECRET_KEY, SECRET_KEY, SUPABASE_URL, SUPABASE_ANON_KEY,
-      # SUPABASE_SERVICE_ROLE_KEY, SUPABASE_STORAGE_BUCKET, MAIL_USERNAME, MAIL_PASSWORD,
-      # CORS_ORIGINS (set to the deployed Vercel URL), GOOGLE_APPLICATION_CREDENTIALS,
-      # DIALOGFLOW_PROJECT_ID, ADMIN_SEED_EMAIL, ADMIN_SEED_PASSWORD
+      # SUPABASE_SERVICE_ROLE_KEY, SUPABASE_STORAGE_BUCKET, BREVO_API_KEY,
+      # BREVO_SENDER_EMAIL, BREVO_SENDER_NAME, CORS_ORIGINS (set to the deployed Vercel
+      # URL), GOOGLE_APPLICATION_CREDENTIALS, DIALOGFLOW_PROJECT_ID, ADMIN_SEED_EMAIL,
+      # ADMIN_SEED_PASSWORD
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET_KEY
@@ -33,9 +34,11 @@ services:
         sync: false
       - key: SUPABASE_STORAGE_BUCKET
         sync: false
-      - key: MAIL_USERNAME
+      - key: BREVO_API_KEY
         sync: false
-      - key: MAIL_PASSWORD
+      - key: BREVO_SENDER_EMAIL
+        sync: false
+      - key: BREVO_SENDER_NAME
         sync: false
       - key: CORS_ORIGINS
         sync: false

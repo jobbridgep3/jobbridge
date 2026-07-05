@@ -3,7 +3,7 @@ import logging
 from flask import Flask
 
 from config import Config
-from extensions import cors, db, jwt, limiter, mail, migrate, socketio
+from extensions import cors, db, jwt, limiter, migrate, socketio
 from utils.responses import fail
 
 logging.basicConfig(level=logging.INFO)
@@ -16,7 +16,6 @@ def create_app(config_object=Config):
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-    mail.init_app(app)
     limiter.init_app(app)
     cors.init_app(app, resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}}, supports_credentials=True)
     socketio.init_app(app)
