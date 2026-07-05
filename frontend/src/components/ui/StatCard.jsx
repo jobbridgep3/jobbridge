@@ -21,7 +21,7 @@ export function StatCard({ label, value, icon: Icon, tone = 'primary', className
         </div>
       )}
       <div className="min-w-0">
-        <p className="truncate text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+        <p className="text-xs font-medium uppercase leading-tight tracking-wide text-slate-500">{label}</p>
         <p className="text-2xl font-semibold text-slate-900">{value}</p>
       </div>
     </motion.div>
