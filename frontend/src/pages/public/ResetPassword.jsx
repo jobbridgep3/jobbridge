@@ -4,8 +4,10 @@ import { useLocation, useNavigate } from 'react-router-dom'
 
 import { Button } from '../../components/ui/Button'
 import { Input, Label } from '../../components/ui/Input'
+import { PasswordRequirements } from '../../components/ui/PasswordRequirements'
 import { formatCountdown, useCountdown } from '../../hooks/useCountdown'
 import api from '../../lib/axios'
+import { isStrongPassword } from '../../lib/passwordPolicy'
 import { AuthLayout } from './AuthLayout'
 
 export default function ResetPassword() {
@@ -31,6 +33,10 @@ export default function ResetPassword() {
   const onSubmit = async (e) => {
     e.preventDefault()
     setError(null)
+    if (!isStrongPassword(form.new_password)) {
+      setError('Password does not meet all the requirements below.')
+      return
+    }
     if (form.new_password !== form.confirm_password) {
       setError('Passwords do not match.')
       return
@@ -78,6 +84,7 @@ export default function ResetPassword() {
             value={form.new_password}
             onChange={(e) => setForm({ ...form, new_password: e.target.value })}
           />
+          <PasswordRequirements password={form.new_password} />
         </div>
         <div>
           <Label htmlFor="confirm_password">Confirm New Password</Label>
@@ -93,7 +100,7 @@ export default function ResetPassword() {
             Request a new reset code
           </Button>
         ) : (
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="w-full" disabled={loading || !isStrongPassword(form.new_password)}>
             {loading ? 'Resetting…' : 'Reset Password'}
           </Button>
         )}

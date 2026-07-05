@@ -8,8 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Ca
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { Input, Label } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
+import { PasswordRequirements } from '../../components/ui/PasswordRequirements'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
+import { isStrongPassword } from '../../lib/passwordPolicy'
 import { useAuthStore } from '../../store/authStore'
 
 export function SettingsPage({ showPrivacy = false, showDeactivate = false }) {
@@ -22,6 +24,10 @@ export function SettingsPage({ showPrivacy = false, showDeactivate = false }) {
 
   const changePassword = async (e) => {
     e.preventDefault()
+    if (!isStrongPassword(pwForm.new_password)) {
+      toast.error('New password does not meet all the requirements below.')
+      return
+    }
     if (pwForm.new_password !== pwForm.confirm_password) {
       toast.error('New passwords do not match.')
       return
@@ -76,13 +82,14 @@ export function SettingsPage({ showPrivacy = false, showDeactivate = false }) {
             <div>
               <Label>New Password</Label>
               <Input type="password" value={pwForm.new_password} onChange={(e) => setPwForm({ ...pwForm, new_password: e.target.value })} required minLength={8} />
+              <PasswordRequirements password={pwForm.new_password} />
             </div>
             <div>
               <Label>Confirm New Password</Label>
               <Input type="password" value={pwForm.confirm_password} onChange={(e) => setPwForm({ ...pwForm, confirm_password: e.target.value })} required minLength={8} />
             </div>
             <div className="flex justify-end">
-              <Button type="submit" disabled={saving}>
+              <Button type="submit" disabled={saving || !isStrongPassword(pwForm.new_password)}>
                 {saving ? 'Saving…' : 'Update Password'}
               </Button>
             </div>
