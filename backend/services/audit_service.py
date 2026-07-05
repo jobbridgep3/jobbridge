@@ -17,7 +17,7 @@ def log_audit(user, action: str, module: str, record_id=None, details: str = Non
             action=action,
             module=module,
             record_id=str(record_id) if record_id else None,
-            ip_address=request.headers.get("X-Forwarded-For", request.remote_addr) if request else None,
+            ip_address=request.remote_addr if request else None,
             details=details,
         )
         db.session.add(entry)

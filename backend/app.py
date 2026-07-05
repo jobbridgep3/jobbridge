@@ -1,6 +1,7 @@
 import logging
 
 from flask import Flask
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
 from extensions import cors, db, jwt, limiter, migrate, socketio
@@ -11,6 +12,12 @@ logging.basicConfig(level=logging.INFO)
 
 def create_app(config_object=Config):
     app = Flask(__name__)
+    # Render sits the app behind its own proxy (Cloudflare -> Render's router -> gunicorn),
+    # so request.remote_addr is Render's internal proxy IP for every request unless we trust
+    # the X-Forwarded-For header it sets. Without this, Flask-Limiter's per-IP rate limits
+    # (e.g. login's 5-per-15-minutes) bucket ALL users together under one key, since they all
+    # appear to share the same "IP" — one hop of real traffic, hence x_for=1.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
     app.config.from_object(config_object)
 
     db.init_app(app)
