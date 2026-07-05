@@ -36,11 +36,12 @@ export default function Register() {
   const onSubmit = async (values) => {
     setServerError(null)
     try {
-      await api.post(`/api/auth/register${isEmployer ? '?type=employer' : ''}`, {
+      const res = await api.post(`/api/auth/register${isEmployer ? '?type=employer' : ''}`, {
         ...values,
         hr_contact_name: values.full_name,
       })
-      navigate('/verify-otp', { state: { email: values.email } })
+      const expiresIn = res.data?.data?.expires_in || 60
+      navigate('/verify-otp', { state: { email: values.email, otpDeadline: Date.now() + expiresIn * 1000 } })
     } catch (err) {
       setServerError(err.response?.data?.message || 'Registration failed. Please try again.')
     }

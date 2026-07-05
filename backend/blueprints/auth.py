@@ -27,25 +27,39 @@ from utils.timezone import now_manila
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 account_bp = Blueprint("account", __name__, url_prefix="/api")
 
-OTP_TTL_MINUTES = 10
+# Registration OTP is short-lived since it's requested and used in the same sitting;
+# the password-reset code gets a longer window since the user has to switch to their
+# email app and back.
+OTP_TTL_SECONDS = {
+    "register": 60,
+    "reset_password": 300,
+}
+DEFAULT_OTP_TTL_SECONDS = 60
 
 
 def _generate_otp() -> str:
     return f"{random.randint(0, 999999):06d}"
 
 
-def _issue_otp(user: User, purpose: str):
+def _issue_otp(user: User, purpose: str) -> int:
+    """Creates a new OTP, invalidating any prior unused one for the same purpose.
+
+    Returns the TTL in seconds so callers can tell the frontend exactly how long the
+    code is valid for (driving an accurate countdown instead of a guessed duration).
+    """
     OtpCode.query.filter_by(user_id=user.id, purpose=purpose, used_at=None).delete()
     code = _generate_otp()
+    ttl_seconds = OTP_TTL_SECONDS.get(purpose, DEFAULT_OTP_TTL_SECONDS)
     otp = OtpCode(
         user_id=user.id,
         code=code,
         purpose=purpose,
-        expires_at=now_manila() + timedelta(minutes=OTP_TTL_MINUTES),
+        expires_at=now_manila() + timedelta(seconds=ttl_seconds),
     )
     db.session.add(otp)
     db.session.commit()
     send_otp_email(user.email, code, purpose)
+    return ttl_seconds
 
 
 @auth_bp.post("/register")
@@ -81,10 +95,14 @@ def register():
         db.session.add(company)
 
     db.session.commit()
-    _issue_otp(user, "register")
+    ttl_seconds = _issue_otp(user, "register")
     log_audit(user, "Account Create", "auth", user.id, f"Self-registered as {role}")
 
-    return ok({"email": user.email, "role": role}, "Registered. Check your email for the OTP code.", 201)
+    return ok(
+        {"email": user.email, "role": role, "expires_in": ttl_seconds},
+        "Registered. Check your email for the OTP code.",
+        201,
+    )
 
 
 @auth_bp.post("/verify-otp")
@@ -109,8 +127,12 @@ def verify_otp():
     if otp.expires_at < now_manila():
         return fail("This code has expired. Please request a new one.", 400)
 
-    otp.used_at = now_manila()
     if payload["purpose"] == "register":
+        # This check IS the terminal action for registration, so the code is spent here.
+        # reset_password's code is left unconsumed — the user still has to submit
+        # /reset-password with it, which is the actual point of consumption. Marking it
+        # used here too would make that follow-up call always fail as "invalid code."
+        otp.used_at = now_manila()
         user.is_verified = True
     db.session.commit()
     log_audit(user, "Update", "auth", user.id, "OTP verified")
@@ -131,8 +153,8 @@ def resend_otp():
     user = User.query.filter_by(email=data.get("email")).first()
     if not user:
         return fail("Account not found.", 404)
-    _issue_otp(user, data.get("purpose", "register"))
-    return ok(message="A new code has been sent.")
+    ttl_seconds = _issue_otp(user, data.get("purpose", "register"))
+    return ok({"expires_in": ttl_seconds}, "A new code has been sent.")
 
 
 @auth_bp.post("/login")
@@ -214,8 +236,12 @@ def forgot_password():
     user = User.query.filter_by(email=payload["email"]).first()
     if user:
         _issue_otp(user, "reset_password")
-    # Always respond 200 to avoid leaking which emails are registered.
-    return ok(message="If that email is registered, a reset code has been sent.")
+    # Always respond 200 (with the same fixed TTL) to avoid leaking which emails are
+    # registered — expires_in is a constant, not derived from whether user exists.
+    return ok(
+        {"expires_in": OTP_TTL_SECONDS["reset_password"]},
+        "If that email is registered, a reset code has been sent.",
+    )
 
 
 @auth_bp.post("/reset-password")

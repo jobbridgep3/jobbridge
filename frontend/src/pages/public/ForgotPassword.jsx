@@ -16,9 +16,16 @@ export default function ForgotPassword() {
     e.preventDefault()
     setLoading(true)
     try {
-      await api.post('/api/auth/forgot-password', { email })
+      const res = await api.post('/api/auth/forgot-password', { email })
+      const expiresIn = res.data?.data?.expires_in || 300
       setSent(true)
-      setTimeout(() => navigate('/verify-otp', { state: { email, purpose: 'reset_password' } }), 1500)
+      setTimeout(
+        () =>
+          navigate('/verify-otp', {
+            state: { email, purpose: 'reset_password', otpDeadline: Date.now() + expiresIn * 1000 },
+          }),
+        1500
+      )
     } finally {
       setLoading(false)
     }
