@@ -20,6 +20,7 @@ from schemas.auth_schemas import (
 )
 from services.audit_service import log_audit
 from services.email_service import send_otp_email
+from utils.rate_limit_keys import ip_and_email_key
 from utils.responses import fail, ok
 from utils.timezone import now_manila
 
@@ -48,7 +49,7 @@ def _issue_otp(user: User, purpose: str):
 
 
 @auth_bp.post("/register")
-@limiter.limit("10 per 15 minutes")
+@limiter.limit("10 per 15 minutes", key_func=ip_and_email_key)
 def register():
     role = "employer" if request.args.get("type") == "employer" else "jobseeker"
     try:
@@ -87,6 +88,7 @@ def register():
 
 
 @auth_bp.post("/verify-otp")
+@limiter.limit("10 per 15 minutes", key_func=ip_and_email_key)
 def verify_otp():
     try:
         payload = VerifyOtpSchema().load(request.get_json(force=True) or {})
@@ -123,7 +125,7 @@ def verify_otp():
 
 
 @auth_bp.post("/resend-otp")
-@limiter.limit("5 per 15 minutes")
+@limiter.limit("5 per 15 minutes", key_func=ip_and_email_key)
 def resend_otp():
     data = request.get_json(force=True) or {}
     user = User.query.filter_by(email=data.get("email")).first()
@@ -134,7 +136,7 @@ def resend_otp():
 
 
 @auth_bp.post("/login")
-@limiter.limit("5 per 15 minutes")
+@limiter.limit("5 per 15 minutes", key_func=ip_and_email_key)
 def login():
     try:
         payload = LoginSchema().load(request.get_json(force=True) or {})
@@ -202,7 +204,7 @@ def deactivate_account():
 
 
 @auth_bp.post("/forgot-password")
-@limiter.limit("5 per 15 minutes")
+@limiter.limit("5 per 15 minutes", key_func=ip_and_email_key)
 def forgot_password():
     try:
         payload = ForgotPasswordSchema().load(request.get_json(force=True) or {})
@@ -217,7 +219,7 @@ def forgot_password():
 
 
 @auth_bp.post("/reset-password")
-@limiter.limit("5 per 15 minutes")
+@limiter.limit("5 per 15 minutes", key_func=ip_and_email_key)
 def reset_password():
     try:
         payload = ResetPasswordSchema().load(request.get_json(force=True) or {})
