@@ -12,6 +12,7 @@ REQUIRED_VARS = [
     "SUPABASE_SERVICE_ROLE_KEY",
     "BREVO_API_KEY",
     "BREVO_SENDER_EMAIL",
+    "RECAPTCHA_SECRET_KEY",
 ]
 
 
@@ -52,6 +53,9 @@ class Config:
     BREVO_API_KEY = _require("BREVO_API_KEY")
     BREVO_SENDER_EMAIL = _require("BREVO_SENDER_EMAIL")
     BREVO_SENDER_NAME = os.environ.get("BREVO_SENDER_NAME", "JobBridge PESO Pila")
+
+    # --- reCAPTCHA v2 (login) ---
+    RECAPTCHA_SECRET_KEY = _require("RECAPTCHA_SECRET_KEY")
 
     # --- CORS ---
     CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]

@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import ReCAPTCHA from 'react-google-recaptcha'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import { Link, useNavigate } from 'react-router-dom'
@@ -21,6 +22,8 @@ export default function Login() {
   const navigate = useNavigate()
   const setAuth = useAuthStore((s) => s.setAuth)
   const [serverError, setServerError] = useState(null)
+  const [recaptchaToken, setRecaptchaToken] = useState(null)
+  const recaptchaRef = useRef(null)
   const {
     register,
     handleSubmit,
@@ -30,13 +33,19 @@ export default function Login() {
   const onSubmit = async (values) => {
     setServerError(null)
     try {
-      const res = await api.post('/api/auth/login', values)
+      const res = await api.post('/api/auth/login', { ...values, recaptcha_token: recaptchaToken })
       const { token, user } = res.data.data
       setAuth(token, user)
       toast.success('Welcome back!')
       navigate(ROLE_DASHBOARD[user.role] || '/')
     } catch (err) {
       setServerError(err.response?.data?.message || 'Login failed. Please try again.')
+      // A reCAPTCHA token is single-use (Google's siteverify consumes it on the very
+      // first check, win or lose), so a failed attempt must reset the widget --
+      // otherwise the *next* submit would fail on an already-spent token and show a
+      // confusing "reCAPTCHA failed" instead of the real error (e.g. wrong password).
+      recaptchaRef.current?.reset()
+      setRecaptchaToken(null)
     }
   }
 
@@ -74,7 +83,16 @@ export default function Login() {
           <Input id="password" type="password" placeholder="••••••••" {...register('password')} />
           <FormError>{errors.password?.message}</FormError>
         </div>
-        <Button type="submit" className="w-full" disabled={isSubmitting}>
+        <div>
+          <ReCAPTCHA
+            ref={recaptchaRef}
+            sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
+            onChange={(token) => setRecaptchaToken(token)}
+            onExpired={() => setRecaptchaToken(null)}
+            onErrored={() => setRecaptchaToken(null)}
+          />
+        </div>
+        <Button type="submit" className="w-full" disabled={isSubmitting || !recaptchaToken}>
           {isSubmitting ? 'Logging in…' : 'Log In'}
         </Button>
       </form>

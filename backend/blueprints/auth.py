@@ -20,7 +20,9 @@ from schemas.auth_schemas import (
 )
 from services.audit_service import log_audit
 from services.email_service import send_otp_email
+from utils.client_ip import get_client_ip
 from utils.rate_limit_keys import ip_and_email_key
+from utils.recaptcha import verify_recaptcha
 from utils.responses import fail, ok
 from utils.timezone import now_manila
 
@@ -164,6 +166,9 @@ def login():
         payload = LoginSchema().load(request.get_json(force=True) or {})
     except ValidationError as err:
         return fail("Invalid login data", 400, err.messages)
+
+    if not verify_recaptcha(payload["recaptcha_token"], get_client_ip()):
+        return fail("reCAPTCHA verification failed. Please try again.", 400)
 
     user = User.query.filter_by(email=payload["email"]).first()
     if not user or not user.check_password(payload["password"]):
