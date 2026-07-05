@@ -2,6 +2,12 @@ from marshmallow import Schema, fields, validate
 
 
 class RegisterSchema(Schema):
+    class Meta:
+        # The frontend sends a confirm_password field for client-side match validation
+        # only; the backend never needs it. Ignore unknown fields instead of rejecting
+        # the whole request (marshmallow 3 raises on unknown fields by default).
+        unknown = "exclude"
+
     email = fields.Email(required=True)
     password = fields.String(required=True, validate=validate.Length(min=8))
     full_name = fields.String(required=True, validate=validate.Length(min=2, max=255))
