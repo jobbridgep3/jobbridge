@@ -1,5 +1,7 @@
 import logging
+import threading
 
+from flask import current_app
 from flask_mail import Message
 
 from extensions import mail
@@ -7,15 +9,26 @@ from extensions import mail
 logger = logging.getLogger(__name__)
 
 
+def _send_in_background(app, to: str, subject: str, html_body: str):
+    with app.app_context():
+        try:
+            msg = Message(subject=subject, recipients=[to], html=html_body)
+            mail.send(msg)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Failed to send email to %s: %s", to, exc)
+
+
 def send_email(to: str, subject: str, html_body: str):
-    """Real Gmail SMTP send via Flask-Mail. Never raises to the caller — logs and returns bool."""
-    try:
-        msg = Message(subject=subject, recipients=[to], html=html_body)
-        mail.send(msg)
-        return True
-    except Exception as exc:  # noqa: BLE001
-        logger.error("Failed to send email to %s: %s", to, exc)
-        return False
+    """Queues a real Gmail SMTP send via Flask-Mail on a background thread.
+
+    Flask-Mail/smtplib has no send timeout, so a slow or blocked SMTP connection
+    would otherwise hang the whole HTTP request (seen as registration/login
+    endpoints stalling for a minute+). Sending happens off-thread so callers
+    (register, staff invites, announcements, etc.) never wait on it.
+    """
+    app = current_app._get_current_object()
+    threading.Thread(target=_send_in_background, args=(app, to, subject, html_body), daemon=True).start()
+    return True
 
 
 def send_otp_email(to: str, code: str, purpose: str = "register"):
