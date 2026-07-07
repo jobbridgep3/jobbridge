@@ -16,6 +16,7 @@ import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
+import { formatApiError } from '../../lib/utils'
 import { EducationSection } from '../jobseeker/profile-sections/EducationSection'
 import { EmploymentInfoSection } from '../jobseeker/profile-sections/EmploymentInfoSection'
 import { DOCUMENT_TYPES } from '../jobseeker/profile-sections/options'
@@ -81,7 +82,7 @@ export default function StaffJobseekerDetail({ basePath = '/staff' }) {
       queryClient.setQueryData(['staff', 'jobseekers', id], (prev) => ({ ...prev, ...res.data.data }))
       setEditMode(false)
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Could not save changes.')
+      toast.error(formatApiError(err, 'Could not save changes.'))
     } finally {
       setSaving(false)
     }

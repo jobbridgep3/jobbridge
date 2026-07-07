@@ -10,6 +10,7 @@ import { ProgressBar } from '../../components/ui/ProgressBar'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
+import { formatApiError } from '../../lib/utils'
 import { useAuthStore } from '../../store/authStore'
 import { DocumentsSection } from './profile-sections/DocumentsSection'
 import { EducationSection } from './profile-sections/EducationSection'
@@ -112,7 +113,7 @@ export default function JobseekerProfile() {
       toast.success('Profile updated.')
       refreshFrom(res.data.data)
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Could not save profile.')
+      toast.error(formatApiError(err, 'Could not save profile.'))
     } finally {
       setSaving(false)
     }

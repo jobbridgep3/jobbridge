@@ -19,13 +19,24 @@ cached at module level, for two reasons:
      real OS threads that do NOT inherit that context — so config-dependent work must
      happen before entering tpool, never inside the offloaded function.
 
-Google Cloud Vision's document_text_detection() is a synchronous gRPC call. gRPC's
-C-extension I/O is not covered by eventlet's monkey_patch() (which only patches
-Python-level socket/threading), so calling it directly on the eventlet worker's single
-real OS thread would freeze every other concurrent request (and Socket.IO) until it
-returns or gunicorn's timeout kills the worker — this previously caused production
-WORKER TIMEOUT/SIGKILL crashes. extract_text_from_resume() offloads the blocking work
-via eventlet.tpool.execute() to avoid this.
+PDFs and images are NOT the same API call. Vision's Image proto (used by
+document_text_detection) has no mime_type field and its image-annotation backend only
+decodes raster formats (JPEG/PNG/GIF/BMP/WEBP/RAW/ICO) — it is not designed to succeed
+on raw PDF bytes. Sending a PDF there previously produced a deterministic
+"504 Deadline Exceeded" on every PDF upload (a fixed defect, not a flaky network
+issue). PDFs go through batch_annotate_files() instead, whose InputConfig has a real
+mime_type field for "application/pdf".
+
+Both request types are synchronous gRPC calls. gRPC's C-extension I/O is not covered
+by eventlet's monkey_patch() (which only patches Python-level socket/threading), so
+calling either directly on the eventlet worker's single real OS thread would freeze
+every other concurrent request (and Socket.IO) until it returns or gunicorn's timeout
+kills the worker — this previously caused production WORKER TIMEOUT/SIGKILL crashes.
+extract_text_from_resume() offloads the blocking work via eventlet.tpool.execute() to
+avoid this, and retries once (rebuilding the client) on a transient DeadlineExceeded/
+ServiceUnavailable, in case the long-lived singleton channel went stale during an idle
+period — never as a way to paper over the wrong-API-for-PDF bug, which now succeeds on
+the first attempt.
 
 Callers must check the `mode` in the returned dict rather than assuming success: any
 failure (unconfigured, auth, billing, quota, network, timeout) is reported as
@@ -79,39 +90,81 @@ def _load_credentials(config):
     return None
 
 
-def init_vision_client(app) -> None:
-    """Eagerly builds and caches the Vision client at app boot (inside an app context).
-
-    Must run with app context available (reads app.config directly here rather than via
-    current_app, so it can also be called from outside a request/app-context push).
-    """
+def _build_vision_client(config) -> None:
     global _vision_client, _vision_configured
 
-    credentials = _load_credentials(app.config)
+    credentials = _load_credentials(config)
     if credentials is None:
+        _vision_client = None
         _vision_configured = False
-        logger.warning("Google Vision not configured — OCR will return errors until credentials are set.")
         return
 
     from google.cloud import vision
 
     _vision_client = vision.ImageAnnotatorClient(credentials=credentials)
     _vision_configured = True
-    logger.info("Google Vision client initialized.")
+
+
+def init_vision_client(app) -> None:
+    """Eagerly builds and caches the Vision client at app boot (inside an app context).
+
+    Must run with app context available (reads app.config directly here rather than via
+    current_app, so it can also be called from outside a request/app-context push).
+    """
+    _build_vision_client(app.config)
+    if _vision_configured:
+        logger.info("Google Vision client initialized.")
+    else:
+        logger.warning("Google Vision not configured — OCR will return errors until credentials are set.")
 
 
 def is_vision_configured() -> bool:
     return _vision_configured
 
 
-def _run_ocr(client, file_bytes: bytes, filename: str):
+def _run_ocr_image(client, file_bytes: bytes):
     """Runs entirely inside eventlet.tpool's real OS thread — no Flask context access."""
-    processed = _preprocess_image(file_bytes) if not filename.lower().endswith(".pdf") else file_bytes
-    image = {"content": processed}
-    response = client.document_text_detection(image=image, timeout=25)
+    processed = _preprocess_image(file_bytes)
+    response = client.document_text_detection(image={"content": processed}, timeout=25)
     if response.error.message:
         raise RuntimeError(response.error.message)
     return response.full_text_annotation.text
+
+
+def _run_ocr_pdf(client, pdf_bytes: bytes):
+    """Runs entirely inside eventlet.tpool's real OS thread — no Flask context access.
+
+    document_text_detection() is for single raster images only; PDFs require the
+    separate batch_annotate_files() API, whose InputConfig actually has a mime_type
+    field. Vision's synchronous file-annotation API caps at 5 pages per request —
+    resumes are virtually always 1-2 pages, so this is not a practical limitation.
+    """
+    from google.cloud import vision
+
+    file_request = {
+        "input_config": {"content": pdf_bytes, "mime_type": "application/pdf"},
+        "features": [{"type_": vision.Feature.Type.DOCUMENT_TEXT_DETECTION}],
+        "pages": [1, 2, 3, 4, 5],
+    }
+    batch_response = client.batch_annotate_files(requests=[file_request], timeout=60)
+    file_response = batch_response.responses[0]
+
+    if file_response.error.message:
+        raise RuntimeError(file_response.error.message)
+
+    page_texts = []
+    page_errors = []
+    for page_response in file_response.responses:
+        if page_response.error.message:
+            page_errors.append(page_response.error.message)
+            continue
+        page_texts.append(page_response.full_text_annotation.text)
+
+    if not page_texts:
+        detail = "; ".join(page_errors) if page_errors else "no page responses were returned"
+        raise RuntimeError(f"All pages failed OCR: {detail}")
+
+    return "\n".join(page_texts)
 
 
 def extract_text_from_resume(file_bytes: bytes, filename: str) -> dict:
@@ -120,11 +173,27 @@ def extract_text_from_resume(file_bytes: bytes, filename: str) -> dict:
         logger.warning("Google Vision not configured — cannot process %s", filename)
         return {"text": None, "mode": "error", "detail": "OCR is not configured on this server."}
 
-    try:
-        import eventlet.tpool
+    import eventlet.tpool
+    from flask import current_app
+    from google.api_core.exceptions import DeadlineExceeded, ServiceUnavailable
 
-        text = eventlet.tpool.execute(_run_ocr, _vision_client, file_bytes, filename)
-        return {"text": text, "mode": "real", "detail": None}
-    except Exception as exc:  # noqa: BLE001
-        logger.error("Vision API extraction failed for %s: %s", filename, exc)
-        return {"text": None, "mode": "error", "detail": str(exc)}
+    is_pdf = filename.lower().endswith(".pdf")
+    run = _run_ocr_pdf if is_pdf else _run_ocr_image
+
+    for attempt in range(2):
+        try:
+            text = eventlet.tpool.execute(run, _vision_client, file_bytes)
+            return {"text": text, "mode": "real", "detail": None}
+        except (DeadlineExceeded, ServiceUnavailable) as exc:
+            if attempt == 0:
+                # The long-lived singleton channel may have gone stale during an idle
+                # period — rebuild it once (safe here: this function runs in the
+                # request greenlet, which has real app context) and retry exactly once.
+                logger.warning("Vision call failed (%s) for %s — rebuilding client and retrying once", exc, filename)
+                _build_vision_client(current_app.config)
+                continue
+            logger.error("Vision API extraction failed for %s after retry: %s", filename, exc)
+            return {"text": None, "mode": "error", "detail": str(exc)}
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Vision API extraction failed for %s: %s", filename, exc)
+            return {"text": None, "mode": "error", "detail": str(exc)}
