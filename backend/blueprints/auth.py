@@ -1,8 +1,9 @@
 import random
 from datetime import timedelta
 
-from flask import Blueprint, request
+from flask import Blueprint, Response, request
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
+from limits import parse as parse_rate_limit
 from marshmallow import ValidationError
 
 from extensions import db, limiter
@@ -37,6 +38,25 @@ OTP_TTL_SECONDS = {
     "reset_password": 300,
 }
 DEFAULT_OTP_TTL_SECONDS = 60
+
+# Only wrong-credential responses should burn down the login rate limit; reCAPTCHA
+# failures, deactivated/unverified accounts, etc. are surfaced elsewhere and aren't
+# the brute-force signal this limit exists to catch.
+LOGIN_RATE_LIMIT = "5 per 15 minutes"
+
+
+def _is_failed_login(response: Response) -> bool:
+    return response.status_code == 401
+
+
+def _reset_login_rate_limit() -> None:
+    """Clears the (ip, email) login bucket so a success doesn't inherit a near-miss streak.
+
+    Uses the same limit string and key/scope flask-limiter derives internally
+    (ip_and_email_key() + this endpoint), so it targets exactly the bucket the
+    /login limit above was tracking for this request.
+    """
+    limiter.limiter.clear(parse_rate_limit(LOGIN_RATE_LIMIT), ip_and_email_key(), request.endpoint)
 
 
 def _generate_otp() -> str:
@@ -160,7 +180,7 @@ def resend_otp():
 
 
 @auth_bp.post("/login")
-@limiter.limit("5 per 15 minutes", key_func=ip_and_email_key)
+@limiter.limit(LOGIN_RATE_LIMIT, key_func=ip_and_email_key, deduct_when=_is_failed_login)
 def login():
     try:
         payload = LoginSchema().load(request.get_json(force=True) or {})
@@ -181,6 +201,7 @@ def login():
 
     user.last_login_at = now_manila()
     db.session.commit()
+    _reset_login_rate_limit()
 
     token = create_access_token(identity=str(user.id), additional_claims={"role": user.role, "email": user.email})
     log_audit(user, "Login", "auth", user.id)
