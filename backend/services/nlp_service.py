@@ -1,7 +1,6 @@
 """spaCy NLP + regex parsing of OCR'd resume text into structured profile fields.
 
-This runs fully for real (no external credentials needed) — only the upstream OCR
-step (ocr_service) has a stub fallback.
+This runs fully for real (no external credentials needed).
 """
 
 import logging
@@ -35,6 +34,14 @@ def _get_nlp():
             logger.warning("spaCy model unavailable (%s) — falling back to regex-only parsing", exc)
             _nlp = False
     return _nlp
+
+
+def preload_nlp_model() -> None:
+    """Eagerly loads the spaCy model at app boot so the cost isn't paid inside a
+    user's resume-upload request (a multi-second synchronous load on a cold worker
+    was compounding the OCR worker-timeout issue).
+    """
+    _get_nlp()
 
 
 def parse_resume_text(raw_text: str) -> dict:

@@ -13,6 +13,7 @@ from services.matching_service import rank_jobseekers_for_vacancy
 from services.notification_service import notify_role, notify_user
 from utils.decorators import role_required
 from utils.responses import fail, ok
+from utils.validators import CONTACT_NUMBER_RE
 
 employer_bp = Blueprint("employer", __name__, url_prefix="/api/employer")
 company_bp = Blueprint("company", __name__, url_prefix="/api/company")
@@ -61,6 +62,8 @@ def update_employer_profile():
     if not company:
         return fail("Company profile not found.", 404)
     data = request.get_json(force=True) or {}
+    if data.get("contact_number") and not CONTACT_NUMBER_RE.match(data["contact_number"]):
+        return fail("Contact number must contain digits only (7-15 digits).", 400)
     for field in ("hr_contact_name", "contact_number"):
         if field in data:
             setattr(company, field, data[field])

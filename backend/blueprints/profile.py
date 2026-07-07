@@ -5,24 +5,22 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from marshmallow import ValidationError
 
 from extensions import db
-from models.jobseeker import DOCUMENT_TYPES, Education, JobseekerDocument, JobseekerProfile, WorkExperience
+from models.jobseeker import Education, JobseekerProfile, WorkExperience
 from models.user import User
 from schemas.jobseeker_schemas import ProfileUpdateSchema
 from services.audit_service import log_audit
 from services.nlp_service import parse_resume_text
 from services.ocr_service import extract_text_from_resume
 from services.pdf_service import generate_profile_report, generate_table_report, to_bytesio
+from services.profile_service import apply_document_upload, apply_profile_update, find_document
 from services.storage_service import upload_file, validate_upload_file
 from utils.decorators import role_required
 from utils.responses import fail, ok
 
 profile_bp = Blueprint("profile", __name__, url_prefix="/api/profile")
 
-SINGLE_INSTANCE_DOCUMENT_TYPES = tuple(t for t in DOCUMENT_TYPES if t != "training_certificate")
-
 OCR_MESSAGES = {
     "real": "Resume processed and profile auto-filled from OCR.",
-    "mock": "Resume uploaded. OCR is not configured in this environment, so preview data was used — please fill in your details manually.",
     "error": "Resume uploaded, but we couldn't automatically read this document. Please fill in your details manually.",
 }
 
@@ -56,43 +54,7 @@ def update_profile():
     except ValidationError as err:
         return fail("Invalid profile data", 400, err.messages)
 
-    scalar_fields = (
-        "full_name", "contact_number", "date_of_birth", "gender", "civil_status", "nationality",
-        "barangay", "municipality", "province", "employment_status", "preferred_job_position",
-        "preferred_industry", "preferred_work_location", "expected_salary", "employment_type",
-        "technical_skills", "soft_skills", "languages_spoken", "certifications",
-    )
-    for field in scalar_fields:
-        if field in data:
-            setattr(profile, field, data[field])
-
-    if any(f in data for f in ("barangay", "municipality", "province")):
-        profile.address = ", ".join(filter(None, [profile.barangay, profile.municipality, profile.province])) or profile.address
-
-    if "work_experiences" in data:
-        WorkExperience.query.filter_by(profile_id=profile.id).delete()
-        for we in data["work_experiences"]:
-            db.session.add(WorkExperience(
-                profile_id=profile.id,
-                company=we.get("company", ""),
-                position=we.get("position", ""),
-                start_date=we.get("start_date"),
-                end_date=we.get("end_date"),
-                description=we.get("description"),
-            ))
-
-    if "educations" in data:
-        Education.query.filter_by(profile_id=profile.id).delete()
-        for ed in data["educations"]:
-            db.session.add(Education(
-                profile_id=profile.id,
-                school=ed.get("school", ""),
-                degree=ed.get("degree"),
-                graduation_year=ed.get("graduation_year"),
-                attainment_level=ed.get("attainment_level"),
-                honors=ed.get("honors"),
-            ))
-
+    apply_profile_update(profile, data)
     db.session.commit()
     log_audit(User.query.get(profile.user_id), "Update", "profile", profile.id)
     return ok(profile.to_dict(), "Profile updated.")
@@ -133,25 +95,10 @@ def upload_document():
         return fail("No file uploaded.", 400)
 
     document_type = request.form.get("document_type")
-    if document_type not in DOCUMENT_TYPES:
-        return fail("Invalid document type.", 400)
-
-    file = request.files["file"]
-    file_bytes = file.read()
-    error = validate_upload_file(file_bytes, file.filename)
+    error = apply_document_upload(profile, request.files["file"], document_type)
     if error:
         return fail(error, 400)
 
-    file_url = upload_file(
-        file_bytes, file.filename, folder=f"documents/{profile.user_id}/{document_type}", content_type=file.mimetype
-    )
-
-    if document_type in SINGLE_INSTANCE_DOCUMENT_TYPES:
-        JobseekerDocument.query.filter_by(profile_id=profile.id, document_type=document_type).delete()
-
-    db.session.add(JobseekerDocument(
-        profile_id=profile.id, document_type=document_type, file_url=file_url, original_filename=file.filename,
-    ))
     db.session.commit()
     log_audit(User.query.get(profile.user_id), "Update", "profile", profile.id, f"Document uploaded: {document_type}")
     return ok(profile.to_dict(), "Document uploaded.")
@@ -165,13 +112,14 @@ def delete_document(document_id):
     if not profile:
         return fail("Profile not found.", 404)
 
-    document = JobseekerDocument.query.filter_by(id=document_id, profile_id=profile.id).first()
+    document = find_document(profile, document_id)
     if not document:
         return fail("Document not found.", 404)
 
+    document_type = document.document_type
     db.session.delete(document)
     db.session.commit()
-    log_audit(User.query.get(profile.user_id), "Update", "profile", profile.id, f"Document removed: {document.document_type}")
+    log_audit(User.query.get(profile.user_id), "Update", "profile", profile.id, f"Document removed: {document_type}")
     return ok(profile.to_dict(), "Document removed.")
 
 
@@ -192,7 +140,7 @@ def upload_resume():
         return fail(error, 400)
 
     # Uploaded first and unconditionally — the file itself is never lost regardless of
-    # whether OCR extraction below succeeds, is mocked, or errors out.
+    # whether OCR extraction below succeeds or errors out.
     resume_url = upload_file(file_bytes, file.filename, folder=f"resumes/{profile.user_id}", content_type=file.mimetype)
     profile.resume_url = resume_url
 
@@ -200,11 +148,11 @@ def upload_resume():
     ocr_mode = result["mode"]
 
     parsed = {}
-    if ocr_mode in ("real", "mock"):
+    if ocr_mode == "real":
         profile.resume_raw_text = result["text"]
         parsed = parse_resume_text(result["text"])
     # On "error": leave any prior resume_raw_text/parsed data untouched rather than
-    # overwriting it with nothing or with fabricated mock content.
+    # overwriting it with nothing.
 
     if parsed.get("full_name") and not profile.full_name:
         profile.full_name = parsed["full_name"]

@@ -94,7 +94,7 @@ def register():
         return fail("Invalid registration data", 400, err.messages)
 
     if User.query.filter_by(email=payload["email"]).first():
-        return fail("An account with this email already exists.", 409)
+        return fail("This email address is already registered. Please log in or use a different email.", 409)
 
     user = User(email=payload["email"], role=role, is_verified=False)
     user.set_password(payload["password"])

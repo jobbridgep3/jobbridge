@@ -40,4 +40,5 @@ class User(BaseModel):
             "is_verified": self.is_verified,
             "is_active": self.is_active,
             "must_change_password": self.must_change_password,
+            "profile_picture_url": self.jobseeker_profile.profile_picture_url if self.jobseeker_profile else None,
         }

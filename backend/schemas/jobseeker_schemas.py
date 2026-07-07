@@ -1,5 +1,7 @@
 from marshmallow import Schema, fields, validate
 
+from utils.validators import validate_contact_number
+
 GENDERS = ("Male", "Female", "Prefer not to say")
 CIVIL_STATUSES = ("Single", "Married", "Widowed", "Separated", "Divorced")
 EMPLOYMENT_STATUSES = ("Employed", "Unemployed", "Self-Employed", "Student", "OFW/Returning OFW")
@@ -36,7 +38,7 @@ class ProfileUpdateSchema(Schema):
         unknown = "exclude"
 
     full_name = fields.String(validate=validate.Length(min=2, max=255))
-    contact_number = fields.String(allow_none=True)
+    contact_number = fields.String(allow_none=True, validate=validate_contact_number)
     date_of_birth = fields.Date(allow_none=True)
     gender = fields.String(allow_none=True, validate=validate.OneOf(GENDERS))
     civil_status = fields.String(allow_none=True, validate=validate.OneOf(CIVIL_STATUSES))

@@ -2,6 +2,8 @@ import re
 
 from marshmallow import Schema, ValidationError, fields, validate, validates
 
+from utils.validators import validate_contact_number
+
 # Keep the allowed special characters in one place so the error message and the regex
 # never drift apart.
 PASSWORD_SPECIAL_CHARS = r"""!@#$%^&*()_+\-=\[\]{}|;:'",.<>?/"""
@@ -41,7 +43,7 @@ class RegisterSchema(Schema):
     email = fields.Email(required=True)
     password = fields.String(required=True, validate=validate_strong_password)
     full_name = fields.String(required=True, validate=validate.Length(min=2, max=255))
-    contact_number = fields.String(load_default="")
+    contact_number = fields.String(load_default="", validate=validate_contact_number)
     # employer-only fields
     hr_contact_name = fields.String(load_default="")
     agree_to_terms = fields.Boolean(required=True)

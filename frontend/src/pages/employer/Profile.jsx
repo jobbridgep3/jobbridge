@@ -12,6 +12,7 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
+import { sanitizeDigits } from '../../lib/utils'
 
 export default function EmployerProfile() {
   const queryClient = useQueryClient()
@@ -36,6 +37,8 @@ export default function EmployerProfile() {
       await api.put('/api/employer/profile', form)
       toast.success('Profile updated.')
       queryClient.invalidateQueries({ queryKey: ['employer', 'profile'] })
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not save profile.')
     } finally {
       setSaving(false)
     }
@@ -57,7 +60,12 @@ export default function EmployerProfile() {
           </div>
           <div>
             <Label>Contact Number</Label>
-            <Input value={form.contact_number || ''} onChange={(e) => setForm({ ...form, contact_number: e.target.value })} />
+            <Input
+              value={form.contact_number || ''}
+              inputMode="numeric"
+              maxLength={15}
+              onChange={(e) => setForm({ ...form, contact_number: sanitizeDigits(e.target.value) })}
+            />
           </div>
           <div>
             <Label>Email</Label>

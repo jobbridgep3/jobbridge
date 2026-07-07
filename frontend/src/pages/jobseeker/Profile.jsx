@@ -10,6 +10,7 @@ import { ProgressBar } from '../../components/ui/ProgressBar'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
+import { useAuthStore } from '../../store/authStore'
 import { DocumentsSection } from './profile-sections/DocumentsSection'
 import { EducationSection } from './profile-sections/EducationSection'
 import { EmploymentInfoSection } from './profile-sections/EmploymentInfoSection'
@@ -18,7 +19,6 @@ import { SkillsSection } from './profile-sections/SkillsSection'
 
 const OCR_TOAST = {
   real: { fn: toast.success, message: 'Resume processed — profile auto-filled from OCR.' },
-  mock: { fn: (msg) => toast(msg, { icon: '⚠️' }), message: 'OCR is not configured in this environment — using preview data. Please fill in details manually.' },
   error: { fn: toast.error, message: "We couldn't automatically read this resume. Please fill in your details manually." },
 }
 
@@ -69,6 +69,9 @@ export default function JobseekerProfile() {
       const res = await api.post('/api/profile/picture', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       toast.success('Profile picture updated.')
       refreshFrom(res.data.data)
+      // Keep the nav bar avatar (authStore.user, a separate data source from this
+      // page's React Query cache) in sync immediately — no re-login needed.
+      useAuthStore.getState().updateUser({ profile_picture_url: res.data.data.profile_picture_url })
     } catch {
       toast.error('Could not upload profile picture.')
     } finally {

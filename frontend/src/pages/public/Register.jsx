@@ -9,6 +9,7 @@ import { FormError, Input, Label } from '../../components/ui/Input'
 import { PasswordRequirements } from '../../components/ui/PasswordRequirements'
 import { isStrongPassword } from '../../lib/passwordPolicy'
 import api from '../../lib/axios'
+import { sanitizeDigits } from '../../lib/utils'
 import { AuthLayout } from './AuthLayout'
 import { LegalModal } from './LegalModal'
 
@@ -16,7 +17,7 @@ const schema = z
   .object({
     full_name: z.string().min(2, 'Enter your full name'),
     email: z.string().email('Enter a valid email address'),
-    contact_number: z.string().min(7, 'Enter a valid contact number'),
+    contact_number: z.string().regex(/^[0-9]{7,15}$/, 'Enter numbers only (7–15 digits)'),
     password: z.string().refine(isStrongPassword, {
       message: 'Password does not meet all the requirements below.',
     }),
@@ -37,11 +38,13 @@ export default function Register() {
   const isEmployer = searchParams.get('type') === 'employer'
   const navigate = useNavigate()
   const [serverError, setServerError] = useState(null)
+  const [emailTaken, setEmailTaken] = useState(false)
   const [legalModal, setLegalModal] = useState(null) // 'terms' | 'privacy' | null
   const {
     register,
     handleSubmit,
     watch,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm({ resolver: zodResolver(schema), defaultValues: { agree_to_terms: false } })
 
@@ -49,6 +52,7 @@ export default function Register() {
 
   const onSubmit = async (values) => {
     setServerError(null)
+    setEmailTaken(false)
     try {
       const res = await api.post(`/api/auth/register${isEmployer ? '?type=employer' : ''}`, {
         ...values,
@@ -57,7 +61,13 @@ export default function Register() {
       const expiresIn = res.data?.data?.expires_in || 60
       navigate('/verify-otp', { state: { email: values.email, otpDeadline: Date.now() + expiresIn * 1000 } })
     } catch (err) {
-      setServerError(err.response?.data?.message || 'Registration failed. Please try again.')
+      const message = err.response?.data?.message || 'Registration failed. Please try again.'
+      if (err.response?.status === 409) {
+        setError('email', { type: 'manual', message })
+        setEmailTaken(true)
+      } else {
+        setServerError(message)
+      }
     }
   }
 
@@ -85,10 +95,27 @@ export default function Register() {
           <Label htmlFor="email">Email</Label>
           <Input id="email" type="email" placeholder="you@example.com" {...register('email')} />
           <FormError>{errors.email?.message}</FormError>
+          {emailTaken && (
+            <p className="mt-1 text-xs text-slate-500">
+              <Link to="/login" className="font-medium text-primary-700 hover:underline">
+                Log in instead
+              </Link>
+            </p>
+          )}
         </div>
         <div>
           <Label htmlFor="contact_number">Contact Number</Label>
-          <Input id="contact_number" placeholder="09171234567" {...register('contact_number')} />
+          <Input
+            id="contact_number"
+            placeholder="09171234567"
+            inputMode="numeric"
+            maxLength={15}
+            {...register('contact_number', {
+              onChange: (e) => {
+                e.target.value = sanitizeDigits(e.target.value)
+              },
+            })}
+          />
           <FormError>{errors.contact_number?.message}</FormError>
         </div>
         <div>

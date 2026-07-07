@@ -6,10 +6,10 @@ import { StatCard } from '../../../components/ui/StatCard'
 import api from '../../../lib/axios'
 import { staggerContainer, staggerItem } from '../../../lib/motion'
 
-export function SummaryCards() {
+export function SummaryCards({ apiBase = '/api/admin' }) {
   const { data: stats } = useQuery({
-    queryKey: ['admin', 'dashboard', 'summary'],
-    queryFn: async () => (await api.get('/api/admin/dashboard/summary')).data.data,
+    queryKey: [apiBase, 'dashboard', 'summary'],
+    queryFn: async () => (await api.get(`${apiBase}/dashboard/summary`)).data.data,
     refetchInterval: 60_000,
   })
 

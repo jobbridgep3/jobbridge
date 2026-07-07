@@ -31,6 +31,16 @@ def create_app(config_object=Config):
         import models  # noqa: F401  (registers all models with SQLAlchemy metadata)
         import sockets.events  # noqa: F401  (registers Socket.io handlers)
 
+        # Eagerly built/loaded once at boot (not lazily inside a request) so their
+        # one-time cost (gRPC channel handshake, spaCy model load) never counts toward
+        # a resume-upload request's time budget — see services/ocr_service.py's
+        # module docstring for why this matters for the eventlet worker.
+        from services.nlp_service import preload_nlp_model
+        from services.ocr_service import init_vision_client
+
+        init_vision_client(app)
+        preload_nlp_model()
+
     _register_blueprints(app)
     _register_error_handlers(app)
 

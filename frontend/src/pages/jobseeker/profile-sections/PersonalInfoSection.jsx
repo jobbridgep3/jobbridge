@@ -3,15 +3,16 @@ import { useDropzone } from 'react-dropzone'
 
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
 import { Input, Label, Select } from '../../../components/ui/Input'
+import { sanitizeDigits } from '../../../lib/utils'
 import { CIVIL_STATUSES, GENDERS } from './options'
 
 export function PersonalInfoSection({ form, setForm, onUploadPicture, uploadingPicture }) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: { 'image/*': [] },
     maxFiles: 1,
-    disabled: uploadingPicture,
+    disabled: uploadingPicture || !onUploadPicture,
     onDrop: (accepted) => {
-      if (accepted.length) onUploadPicture(accepted[0])
+      if (accepted.length && onUploadPicture) onUploadPicture(accepted[0])
     },
   })
 
@@ -25,22 +26,24 @@ export function PersonalInfoSection({ form, setForm, onUploadPicture, uploadingP
       <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2 flex items-center gap-4">
           <div
-            {...getRootProps()}
-            className={`flex h-16 w-16 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-dashed text-slate-400 ${
-              isDragActive ? 'border-primary-400 bg-primary-50' : 'border-slate-200 hover:border-primary-300'
-            }`}
+            {...(onUploadPicture ? getRootProps() : {})}
+            className={`flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-dashed text-slate-400 ${
+              onUploadPicture ? 'cursor-pointer' : ''
+            } ${isDragActive ? 'border-primary-400 bg-primary-50' : 'border-slate-200 hover:border-primary-300'}`}
           >
-            <input {...getInputProps()} />
+            {onUploadPicture && <input {...getInputProps()} />}
             {form.profile_picture_url ? (
               <img src={form.profile_picture_url} alt="Profile" className="h-full w-full object-cover" />
             ) : (
               <UserRound className="h-6 w-6" />
             )}
           </div>
-          <div>
-            <p className="text-sm font-medium text-slate-700">Profile Picture</p>
-            <p className="text-xs text-slate-400">{uploadingPicture ? 'Uploading…' : 'Click or drag an image to upload'}</p>
-          </div>
+          {onUploadPicture && (
+            <div>
+              <p className="text-sm font-medium text-slate-700">Profile Picture</p>
+              <p className="text-xs text-slate-400">{uploadingPicture ? 'Uploading…' : 'Click or drag an image to upload'}</p>
+            </div>
+          )}
         </div>
 
         <div>
@@ -53,7 +56,12 @@ export function PersonalInfoSection({ form, setForm, onUploadPicture, uploadingP
         </div>
         <div>
           <Label>Contact Number</Label>
-          <Input value={form.contact_number || ''} onChange={set('contact_number')} />
+          <Input
+            value={form.contact_number || ''}
+            inputMode="numeric"
+            maxLength={15}
+            onChange={(e) => setForm((f) => ({ ...f, contact_number: sanitizeDigits(e.target.value) }))}
+          />
         </div>
         <div>
           <Label>Date of Birth</Label>

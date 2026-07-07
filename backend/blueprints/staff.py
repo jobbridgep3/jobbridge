@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required
+from marshmallow import ValidationError
 
 from extensions import db
 from models.application import Application
@@ -13,11 +14,14 @@ from models.program import ProgramApplication
 from models.referral import ReferralLetter
 from models.user import User
 from models.vacancy import Vacancy
+from schemas.jobseeker_schemas import ProfileUpdateSchema
 from services.audit_service import log_audit
+from services.dashboard_service import build_analytics, build_summary
 from services.email_service import send_verification_status_email
 from services.excel_service import build_excel_report
 from services.notification_service import notify_role, notify_user
 from services.pdf_service import generate_referral_letter, generate_table_report, to_bytesio
+from services.profile_service import apply_document_upload, apply_profile_update, find_document
 from services.storage_service import upload_file
 from sockets.events import emit_to_role
 from utils.decorators import role_required
@@ -42,6 +46,21 @@ def dashboard_stats():
     })
 
 
+@staff_bp.get("/dashboard/summary")
+@jwt_required()
+@role_required("staff", "admin")
+def staff_dashboard_summary():
+    return ok(build_summary())
+
+
+@staff_bp.get("/dashboard/analytics")
+@jwt_required()
+@role_required("staff", "admin")
+def staff_dashboard_analytics():
+    months = int(request.args.get("months", 6))
+    return ok(build_analytics(months))
+
+
 @staff_bp.get("/pending-approvals")
 @jwt_required()
 @role_required("staff", "admin")
@@ -61,11 +80,11 @@ def pending_approvals():
 @jwt_required()
 @role_required("staff", "admin")
 def list_jobseekers():
-    query = JobseekerProfile.query
+    query = JobseekerProfile.query.options(db.joinedload(JobseekerProfile.user))
     if request.args.get("q"):
         query = query.filter(JobseekerProfile.full_name.ilike(f"%{request.args['q']}%"))
     profiles = query.order_by(JobseekerProfile.created_at.desc()).all()
-    return ok([p.to_dict() for p in profiles])
+    return ok([{**p.to_dict(), "is_active": p.user.is_active} for p in profiles])
 
 
 @staff_bp.get("/jobseekers/<profile_id>")
@@ -75,7 +94,9 @@ def get_jobseeker(profile_id):
     profile = JobseekerProfile.query.get(profile_id)
     if not profile:
         return fail("Jobseeker not found.", 404)
-    result = profile.to_dict(include_email=User.query.get(profile.user_id).email)
+    user = User.query.get(profile.user_id)
+    result = profile.to_dict(include_email=user.email)
+    result["is_active"] = user.is_active
     result["applications"] = [a.to_dict() for a in Application.query.filter_by(jobseeker_profile_id=profile.id).all()]
     return ok(result)
 
@@ -142,7 +163,124 @@ def deactivate_jobseeker(profile_id):
     user.is_active = not user.is_active
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Update", "jobseekers", profile.id, f"is_active={user.is_active}")
-    return ok(profile.to_dict(), "Jobseeker account updated.")
+    result = profile.to_dict()
+    result["is_active"] = user.is_active
+    message = "Account has been activated successfully." if user.is_active else "Account has been deactivated successfully."
+    return ok(result, message)
+
+
+@staff_bp.get("/jobseekers/export/excel")
+@jwt_required()
+@role_required("staff", "admin")
+def export_jobseekers_excel():
+    query = db.session.query(JobseekerProfile, User).join(User, User.id == JobseekerProfile.user_id)
+
+    date_from = request.args.get("date_from")
+    date_to = request.args.get("date_to")
+    verification_status = request.args.get("verification_status")
+    is_active_param = request.args.get("is_active")
+    barangay = request.args.get("barangay")
+    municipality = request.args.get("municipality")
+    employment_status = request.args.get("employment_status")
+
+    if date_from:
+        query = query.filter(JobseekerProfile.created_at >= datetime.fromisoformat(date_from))
+    if date_to:
+        query = query.filter(JobseekerProfile.created_at < datetime.fromisoformat(date_to) + timedelta(days=1))
+    if verification_status == "verified":
+        query = query.filter(JobseekerProfile.is_verified_by_staff.is_(True))
+    elif verification_status == "unverified":
+        query = query.filter(JobseekerProfile.is_verified_by_staff.is_(False))
+    if is_active_param == "true":
+        query = query.filter(User.is_active.is_(True))
+    elif is_active_param == "false":
+        query = query.filter(User.is_active.is_(False))
+    if barangay:
+        query = query.filter(JobseekerProfile.barangay.ilike(f"%{barangay}%"))
+    if municipality:
+        query = query.filter(JobseekerProfile.municipality.ilike(f"%{municipality}%"))
+    if employment_status:
+        query = query.filter(JobseekerProfile.employment_status == employment_status)
+
+    rows = [
+        [
+            p.full_name, u.email, p.contact_number or "",
+            p.created_at.strftime("%Y-%m-%d"),
+            p.barangay or "", p.municipality or "", p.province or "",
+            "Verified" if p.is_verified_by_staff else "Unverified",
+            "Active" if u.is_active else "Inactive",
+            p.employment_status or "",
+            f"{p.profile_completion()}%",
+        ]
+        for p, u in query.order_by(JobseekerProfile.created_at.desc()).all()
+    ]
+    columns = [
+        "Full Name", "Email", "Contact Number", "Date Registered", "Barangay", "Municipality",
+        "Province", "Verification Status", "Active Status", "Employment Status", "Profile Completion",
+    ]
+    buf = build_excel_report("Job Seekers Export", columns, rows)
+    log_audit(User.query.get(get_jwt_identity()), "Export", "jobseekers")
+    return send_file(
+        buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True, download_name="jobseekers_export.xlsx",
+    )
+
+
+@staff_bp.put("/jobseekers/<profile_id>/profile")
+@jwt_required()
+@role_required("staff", "admin")
+def update_jobseeker_profile(profile_id):
+    profile = JobseekerProfile.query.get(profile_id)
+    if not profile:
+        return fail("Jobseeker not found.", 404)
+    try:
+        data = ProfileUpdateSchema().load(request.get_json(force=True) or {}, partial=True)
+    except ValidationError as err:
+        return fail("Invalid profile data", 400, err.messages)
+
+    apply_profile_update(profile, data)
+    db.session.commit()
+    log_audit(User.query.get(get_jwt_identity()), "Update", "jobseekers", profile.id, "Profile edited by staff")
+    return ok(profile.to_dict(), "Jobseeker profile updated.")
+
+
+@staff_bp.post("/jobseekers/<profile_id>/documents")
+@jwt_required()
+@role_required("staff", "admin")
+def staff_upload_jobseeker_document(profile_id):
+    profile = JobseekerProfile.query.get(profile_id)
+    if not profile:
+        return fail("Jobseeker not found.", 404)
+    if "file" not in request.files:
+        return fail("No file uploaded.", 400)
+
+    document_type = request.form.get("document_type")
+    error = apply_document_upload(profile, request.files["file"], document_type)
+    if error:
+        return fail(error, 400)
+
+    db.session.commit()
+    log_audit(User.query.get(get_jwt_identity()), "Update", "jobseekers", profile.id, f"Document uploaded by staff: {document_type}")
+    return ok(profile.to_dict(), "Document uploaded.")
+
+
+@staff_bp.delete("/jobseekers/<profile_id>/documents/<document_id>")
+@jwt_required()
+@role_required("staff", "admin")
+def staff_delete_jobseeker_document(profile_id, document_id):
+    profile = JobseekerProfile.query.get(profile_id)
+    if not profile:
+        return fail("Jobseeker not found.", 404)
+
+    document = find_document(profile, document_id)
+    if not document:
+        return fail("Document not found.", 404)
+
+    document_type = document.document_type
+    db.session.delete(document)
+    db.session.commit()
+    log_audit(User.query.get(get_jwt_identity()), "Update", "jobseekers", profile.id, f"Document removed by staff: {document_type}")
+    return ok(profile.to_dict(), "Document removed.")
 
 
 @staff_bp.post("/referral-letter/<application_id>")

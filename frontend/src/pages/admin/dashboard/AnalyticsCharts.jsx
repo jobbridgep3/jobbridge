@@ -42,10 +42,10 @@ const FUNNEL_COLORS = {
   cancelled: '#64748b',
 }
 
-export function AnalyticsCharts() {
+export function AnalyticsCharts({ apiBase = '/api/admin' }) {
   const { data, isLoading } = useQuery({
-    queryKey: ['admin', 'dashboard', 'analytics'],
-    queryFn: async () => (await api.get('/api/admin/dashboard/analytics')).data.data,
+    queryKey: [apiBase, 'dashboard', 'analytics'],
+    queryFn: async () => (await api.get(`${apiBase}/dashboard/analytics`)).data.data,
     refetchInterval: 60_000,
   })
 

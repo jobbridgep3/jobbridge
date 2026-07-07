@@ -40,9 +40,13 @@ export function Header({ breadcrumbItems = [] }) {
 
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 hover:bg-slate-100">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-800 text-xs font-semibold text-white">
-              {initials}
-            </span>
+            {user?.profile_picture_url ? (
+              <img src={user.profile_picture_url} alt="" className="h-8 w-8 rounded-full object-cover" />
+            ) : (
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-800 text-xs font-semibold text-white">
+                {initials}
+              </span>
+            )}
             <span className="hidden max-w-[140px] truncate text-sm font-medium text-slate-700 sm:inline">{user?.email}</span>
             <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
           </DropdownMenuTrigger>

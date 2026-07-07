@@ -1,20 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { Briefcase, Building2, ClipboardCheck, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { Badge } from '../../components/ui/Badge'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { StatCard } from '../../components/ui/StatCard'
+import { PageHeader } from '../../components/ui/PageHeader'
 import api from '../../lib/axios'
-import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
+import { fadeIn } from '../../lib/motion'
+import { AnalyticsCharts } from '../admin/dashboard/AnalyticsCharts'
+import { SummaryCards } from '../admin/dashboard/SummaryCards'
 
 export default function StaffDashboard() {
-  const { data: stats } = useQuery({
-    queryKey: ['staff', 'dashboard-stats'],
-    queryFn: async () => (await api.get('/api/staff/dashboard-stats')).data.data,
-  })
   const { data: pending } = useQuery({
     queryKey: ['staff', 'pending-approvals'],
     queryFn: async () => (await api.get('/api/staff/pending-approvals')).data.data,
@@ -26,23 +23,10 @@ export default function StaffDashboard() {
 
   return (
     <motion.div {...fadeIn} className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">PESO Staff Command Center</h1>
-        <p className="mt-1 text-sm text-slate-500">Full operational overview of JobBridge.</p>
-      </div>
+      <PageHeader title="PESO Staff Command Center" description="Full operational overview of JobBridge." />
 
-      <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {[
-          { label: 'Jobseekers', value: stats?.total_jobseekers ?? '–', icon: Users, tone: 'primary' },
-          { label: 'Employers', value: stats?.total_employers ?? '–', icon: Building2, tone: 'primary' },
-          { label: 'Active Vacancies', value: stats?.active_vacancies ?? '–', icon: Briefcase, tone: 'success' },
-          { label: 'Placements this Month', value: stats?.placements_this_month ?? '–', icon: ClipboardCheck, tone: 'warning' },
-        ].map((s) => (
-          <motion.div key={s.label} variants={staggerItem}>
-            <StatCard {...s} />
-          </motion.div>
-        ))}
-      </motion.div>
+      <SummaryCards apiBase="/api/staff" />
+      <AnalyticsCharts apiBase="/api/staff" />
 
       <Card>
         <CardHeader>

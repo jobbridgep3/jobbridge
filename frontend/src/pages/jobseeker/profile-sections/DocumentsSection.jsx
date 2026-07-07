@@ -21,6 +21,10 @@ export function DocumentsSection({ form, onUploadResume, uploadingResume, onUplo
         <CardTitle>Documents</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <p className="rounded-lg bg-blue-50 p-3 text-xs text-blue-800">
+          To save time, simply upload your resume. Our OCR assistant will automatically extract and fill in the available
+          information for you. You can manually edit or complete any remaining fields.
+        </p>
         <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
           Please upload clear, readable, and high-quality PDF or image files. Blurry, cropped, or unreadable documents may
           delay or prevent account verification.
