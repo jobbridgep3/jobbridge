@@ -8,6 +8,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Explicit (redundant with autoUpdate's own defaults, kept for clarity): a new
+      // service worker activates immediately rather than waiting for every open tab
+      // to close, so a deployed fix reaches users on their next navigation instead of
+      // being stuck behind a stale cached bundle indefinitely.
+      workbox: { skipWaiting: true, clientsClaim: true },
       includeAssets: ['peso-logo.png'],
       manifest: {
         name: 'JobBridge — PESO Pila, Laguna',

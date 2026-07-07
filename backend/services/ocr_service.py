@@ -27,16 +27,23 @@ on raw PDF bytes. Sending a PDF there previously produced a deterministic
 issue). PDFs go through batch_annotate_files() instead, whose InputConfig has a real
 mime_type field for "application/pdf".
 
-Both request types are synchronous gRPC calls. gRPC's C-extension I/O is not covered
-by eventlet's monkey_patch() (which only patches Python-level socket/threading), so
-calling either directly on the eventlet worker's single real OS thread would freeze
-every other concurrent request (and Socket.IO) until it returns or gunicorn's timeout
-kills the worker — this previously caused production WORKER TIMEOUT/SIGKILL crashes.
-extract_text_from_resume() offloads the blocking work via eventlet.tpool.execute() to
-avoid this, and retries once (rebuilding the client) on a transient DeadlineExceeded/
-ServiceUnavailable, in case the long-lived singleton channel went stale during an idle
-period — never as a way to paper over the wrong-API-for-PDF bug, which now succeeds on
-the first attempt.
+The client uses transport="rest" (plain HTTPS via google-auth, not gRPC). After fixing
+the PDF-vs-image API mismatch above, BOTH file types still failed in production with
+"504 Deadline Exceeded" — including immediately after a client rebuild, which rules out
+a merely-stale gRPC channel. gRPC's persistent HTTP/2 channel apparently never
+completes a round trip from Render's network to Google's servers; a plain REST request
+(a single ordinary HTTPS call, no long-lived channel to negotiate) does not depend on
+that same network path succeeding.
+
+Both request methods (REST or gRPC) are still synchronous, blocking calls, and REST's
+underlying `requests`/urllib3 socket I/O still is not covered by eventlet's
+monkey_patch() in a way that's safe to call directly from a greenlet (do not assume
+otherwise) — calling it directly on the eventlet worker's single real OS thread would
+freeze every other concurrent request (and Socket.IO) until it returns or gunicorn's
+timeout kills the worker. extract_text_from_resume() offloads the blocking work via
+eventlet.tpool.execute() to avoid this, and retries once (rebuilding the client) on a
+transient DeadlineExceeded/ServiceUnavailable — general defense-in-depth, not a
+substitute for using the right transport/API.
 
 Callers must check the `mode` in the returned dict rather than assuming success: any
 failure (unconfigured, auth, billing, quota, network, timeout) is reported as
@@ -101,7 +108,13 @@ def _build_vision_client(config) -> None:
 
     from google.cloud import vision
 
-    _vision_client = vision.ImageAnnotatorClient(credentials=credentials)
+    # transport="rest" (plain HTTPS via google-auth's requests transport) instead of
+    # the default gRPC. Root cause of the production 504 DEADLINE_EXCEEDED on every
+    # single Vision call (image AND PDF alike, and unaffected by rebuilding the
+    # client) — gRPC's persistent HTTP/2 channel never completed a round trip from
+    # Render's network to Google's servers, while a fresh REST call is a single plain
+    # HTTPS request/response with no long-lived channel to negotiate or go stale.
+    _vision_client = vision.ImageAnnotatorClient(credentials=credentials, transport="rest")
     _vision_configured = True
 
 
