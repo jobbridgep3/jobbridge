@@ -27,7 +27,7 @@ export default function Landing() {
               <Link to="/login">Log In</Link>
             </Button>
             <Button asChild>
-              <Link to="/register">Register</Link>
+              <Link to="/register/choose">Register</Link>
             </Button>
           </div>
         </div>

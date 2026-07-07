@@ -8,9 +8,14 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 
 def _profile_text(jobseeker_profile) -> str:
-    skills = " ".join(jobseeker_profile.skills or [])
+    skills = " ".join(
+        (jobseeker_profile.technical_skills or [])
+        + (jobseeker_profile.soft_skills or [])
+        + (jobseeker_profile.languages_spoken or [])
+        + (jobseeker_profile.certifications or [])
+    )
     experience = " ".join(f"{w.position} {w.company}" for w in jobseeker_profile.work_experiences)
-    education = " ".join(f"{e.degree} {e.school}" for e in jobseeker_profile.educations)
+    education = " ".join(f"{e.degree or ''} {e.school}" for e in jobseeker_profile.educations)
     return f"{skills} {experience} {education}".strip()
 
 

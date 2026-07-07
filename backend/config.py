@@ -64,6 +64,10 @@ class Config:
     # Vision and Dialogflow live in separate GCP projects/service accounts here, so each
     # gets its own credential file rather than sharing GOOGLE_APPLICATION_CREDENTIALS.
     GOOGLE_APPLICATION_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+    # Base64-encoded service-account JSON — used in place of a file path where the
+    # credentials file can't be delivered to disk (e.g. Render, whose builds start from
+    # a fresh git clone with no way to place a git-ignored secret file on it).
+    GOOGLE_APPLICATION_CREDENTIALS_JSON = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON", "")
     DIALOGFLOW_PROJECT_ID = os.environ.get("DIALOGFLOW_PROJECT_ID", "")
     DIALOGFLOW_CREDENTIALS_PATH = os.environ.get("DIALOGFLOW_CREDENTIALS_PATH", "")
 

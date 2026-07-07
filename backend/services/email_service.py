@@ -82,6 +82,29 @@ def send_interview_invite_email(to: str, job_title: str, company_name: str, when
     return send_email(to, f"Interview Invitation — {job_title}", html)
 
 
+def send_verification_status_email(to: str, full_name: str, verified: bool, remarks: str | None = None):
+    if verified:
+        subject = "Your JobBridge profile has been verified"
+        html = f"""
+        <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+          <h2 style="color:#1e3a8a">Profile Verified</h2>
+          <p>Hi {full_name}, your JobBridge profile has been verified by PESO Pila, Laguna.</p>
+          <p>You can now fully use the platform, including applying to PESO-verified employer vacancies.</p>
+        </div>
+        """
+    else:
+        subject = "Action needed: Your JobBridge profile was not verified"
+        html = f"""
+        <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+          <h2 style="color:#1e3a8a">Profile Not Verified</h2>
+          <p>Hi {full_name}, PESO staff reviewed your profile and could not verify it yet.</p>
+          <p><b>Reason:</b> {remarks}</p>
+          <p>Please log in to JobBridge, update or re-upload the information/documents noted above, and your profile will be reviewed again.</p>
+        </div>
+        """
+    return send_email(to, subject, html)
+
+
 def send_announcement_email(to: str, title: str, body: str):
     html = f"""
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto">

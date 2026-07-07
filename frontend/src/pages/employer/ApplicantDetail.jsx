@@ -84,7 +84,7 @@ export default function EmployerApplicantDetail() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap gap-2">
-            {(profile.skills || []).map((s) => (
+            {[...(profile.technical_skills || []), ...(profile.soft_skills || [])].map((s) => (
               <Badge key={s}>{s}</Badge>
             ))}
           </div>

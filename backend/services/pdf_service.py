@@ -90,6 +90,97 @@ def generate_table_report(title: str, columns: list[str], rows: list[list], date
     return _render(body)
 
 
+def generate_profile_report(profile: dict, documents: list[dict]) -> bytes:
+    """Comprehensive Job Seeker application profile, for the jobseeker's own download.
+
+    Takes plain dicts (JobseekerProfile.to_dict() output), not ORM objects, matching the
+    rest of this module's convention of staying decoupled from the ORM. Text-only —
+    deliberately doesn't embed the profile picture or document images, which would add a
+    live Supabase-URL fetch dependency to PDF rendering (none of the existing generators
+    here do that either).
+    """
+    from models.jobseeker import DOCUMENT_TYPE_LABELS, REQUIRED_DOCUMENT_TYPES
+
+    def row(label, value):
+        return f"<tr><th style='width:220px'>{label}</th><td>{value or '—'}</td></tr>"
+
+    personal_rows = "".join([
+        row("Full Name", profile.get("full_name")),
+        row("Email", profile.get("email")),
+        row("Contact Number", profile.get("contact_number")),
+        row("Date of Birth", profile.get("date_of_birth")),
+        row("Age", profile.get("age")),
+        row("Gender", profile.get("gender")),
+        row("Civil Status", profile.get("civil_status")),
+        row("Nationality", profile.get("nationality")),
+        row("Address", profile.get("address")),
+    ])
+
+    employment_rows = "".join([
+        row("Employment Status", profile.get("employment_status")),
+        row("Preferred Job Position", profile.get("preferred_job_position")),
+        row("Preferred Industry", profile.get("preferred_industry")),
+        row("Preferred Work Location", profile.get("preferred_work_location")),
+        row("Expected Salary", profile.get("expected_salary")),
+        row("Employment Type", profile.get("employment_type")),
+    ])
+
+    education_rows = "".join(
+        f"<tr><td>{e['school']}</td><td>{e.get('attainment_level') or ''}</td>"
+        f"<td>{e.get('degree') or 'N/A'}</td><td>{e.get('graduation_year') or ''}</td>"
+        f"<td>{e.get('honors') or ''}</td></tr>"
+        for e in profile.get("educations", [])
+    ) or "<tr><td colspan='5'>No education records provided.</td></tr>"
+
+    work_rows = "".join(
+        f"<tr><td>{w['company']}</td><td>{w['position']}</td>"
+        f"<td>{w.get('start_date') or ''} – {w.get('end_date') or 'present'}</td></tr>"
+        for w in profile.get("work_experiences", [])
+    ) or "<tr><td colspan='3'>No work experience provided.</td></tr>"
+
+    def skill_line(label, key):
+        values = profile.get(key) or []
+        return f"<p><b>{label}:</b> {', '.join(values) if values else '—'}</p>"
+
+    doc_types_present = {d["document_type"] for d in documents}
+    doc_rows = ""
+    for doc_type, label in DOCUMENT_TYPE_LABELS.items():
+        matching = [d for d in documents if d["document_type"] == doc_type]
+        required = doc_type in REQUIRED_DOCUMENT_TYPES
+        status = f"Uploaded ({len(matching)})" if matching else ("Missing" if required else "Not provided")
+        doc_rows += f"<tr><td>{label}{' (Required)' if required else ''}</td><td>{status}</td></tr>"
+    resume_status = "Uploaded" if profile.get("resume_url") else "Missing"
+    doc_rows = f"<tr><td>Resume/CV (Required)</td><td>{resume_status}</td></tr>" + doc_rows
+
+    body = f"""
+    <h2>Job Seeker Application Profile</h2>
+    <p>Profile Completion: <b>{profile.get('profile_completion', 0)}%</b></p>
+
+    <h3>Personal Information</h3>
+    <table>{personal_rows}</table>
+
+    <h3>Employment Information</h3>
+    <table>{employment_rows}</table>
+
+    <h3>Work Experience</h3>
+    <table><thead><tr><th>Company</th><th>Position</th><th>Duration</th></tr></thead><tbody>{work_rows}</tbody></table>
+
+    <h3>Educational Background</h3>
+    <table><thead><tr><th>School</th><th>Attainment</th><th>Course/Program</th><th>Year</th><th>Honors</th></tr></thead>
+    <tbody>{education_rows}</tbody></table>
+
+    <h3>Skills</h3>
+    {skill_line("Technical Skills", "technical_skills")}
+    {skill_line("Soft Skills", "soft_skills")}
+    {skill_line("Languages Spoken", "languages_spoken")}
+    {skill_line("Certifications", "certifications")}
+
+    <h3>Documents</h3>
+    <table><thead><tr><th>Document</th><th>Status</th></tr></thead><tbody>{doc_rows}</tbody></table>
+    """
+    return _render(body)
+
+
 def to_bytesio(pdf_bytes: bytes) -> io.BytesIO:
     buf = io.BytesIO(pdf_bytes)
     buf.seek(0)

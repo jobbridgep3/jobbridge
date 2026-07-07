@@ -6,6 +6,21 @@ from flask import current_app
 
 _client: Client | None = None
 
+ALLOWED_DOCUMENT_EXTENSIONS = {"pdf", "jpg", "jpeg", "png"}
+MAX_DOCUMENT_SIZE_BYTES = 5 * 1024 * 1024  # 5MB
+
+
+def validate_upload_file(file_bytes: bytes, filename: str) -> str | None:
+    """Returns an error message if the file is invalid, else None."""
+    if not file_bytes:
+        return "The uploaded file is empty."
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in ALLOWED_DOCUMENT_EXTENSIONS:
+        return "Only PDF, JPG, and PNG files are allowed."
+    if len(file_bytes) > MAX_DOCUMENT_SIZE_BYTES:
+        return "File is too large. Maximum size is 5MB."
+    return None
+
 
 def get_client() -> Client:
     global _client

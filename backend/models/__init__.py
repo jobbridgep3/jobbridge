@@ -7,7 +7,7 @@ from models.employer import EmployerCompany
 from models.employment import EmploymentRecord
 from models.interview import Interview
 from models.jobfair import JobFair, JobFairBooth, JobFairRegistration
-from models.jobseeker import Education, JobseekerProfile, WorkExperience
+from models.jobseeker import Education, JobseekerDocument, JobseekerProfile, WorkExperience
 from models.notification import Notification
 from models.otp import OtpCode
 from models.program import ProgramApplication
@@ -23,6 +23,7 @@ __all__ = [
     "JobseekerProfile",
     "WorkExperience",
     "Education",
+    "JobseekerDocument",
     "EmployerCompany",
     "Vacancy",
     "Application",

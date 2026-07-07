@@ -46,6 +46,17 @@ def _month_buckets(n: int):
     return buckets
 
 
+# ---------- Integration status ----------
+
+@admin_bp.get("/integrations-status")
+@jwt_required()
+@role_required("admin")
+def integrations_status():
+    from services.ocr_service import is_vision_configured
+
+    return ok({"vision_configured": is_vision_configured()})
+
+
 # ---------- Dashboard Analytics (Admin-exclusive) ----------
 
 @admin_bp.get("/dashboard/summary")

@@ -7,6 +7,7 @@ import { RoleGuard } from './routes/RoleGuard'
 import Landing from './pages/public/Landing'
 import Login from './pages/public/Login'
 import Register from './pages/public/Register'
+import RegisterChoice from './pages/public/RegisterChoice'
 import VerifyOtp from './pages/public/VerifyOtp'
 import ForgotPassword from './pages/public/ForgotPassword'
 import ResetPassword from './pages/public/ResetPassword'
@@ -95,6 +96,7 @@ export default function App() {
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/register/choose" element={<RegisterChoice />} />
       <Route path="/verify-otp" element={<VerifyOtp />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />

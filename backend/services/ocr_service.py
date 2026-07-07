@@ -1,22 +1,37 @@
 """Resume OCR extraction.
 
 Real path: Pillow preprocesses the image -> Google Vision API extracts text.
-Stub path (no GOOGLE_APPLICATION_CREDENTIALS configured): returns a clearly-labeled
-mock extraction so the rest of the pipeline (spaCy parsing, profile auto-fill) can be
-built and tested end-to-end without a Google Cloud account. Swapping in a real
-service-account JSON via GOOGLE_APPLICATION_CREDENTIALS requires no code changes.
+Stub path (no credentials configured at all): returns a clearly-labeled mock
+extraction so the rest of the pipeline (spaCy parsing, profile auto-fill) can be built
+and tested end-to-end without a Google Cloud account.
+
+Credentials can come from either:
+  - GOOGLE_APPLICATION_CREDENTIALS_JSON — base64-encoded service-account JSON key.
+    Used in production (e.g. Render), where a git-ignored key file can't be placed on
+    disk since builds start from a fresh git clone.
+  - GOOGLE_APPLICATION_CREDENTIALS — a file path to the same JSON key. Used in local
+    dev, where the file exists on disk (see backend/credentials/).
+Both are explicitly loaded into a google.oauth2 Credentials object and passed to the
+Vision client — the client never relies on ambient Application Default Credentials, so
+behavior doesn't depend on process-start-time OS environment state.
+
+Callers must check the `mode` in the returned dict rather than assuming success: a
+real Vision failure (auth, billing, quota, network) is reported as `mode: "error"`, not
+silently downgraded to mock data — mock text with fabricated identity details must
+never be merged into a real user's profile as if it were a genuine extraction.
 """
 
+import base64
 import io
+import json
 import logging
-import os
 
 from flask import current_app
 from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-MOCK_RESUME_TEXT = """[MOCK OCR OUTPUT — set GOOGLE_APPLICATION_CREDENTIALS to enable real Vision API extraction]
+MOCK_RESUME_TEXT = """[MOCK OCR OUTPUT — Google Vision is not configured in this environment]
 Juan Dela Cruz
 Pila, Laguna | 09171234567 | juan.delacruz@example.com
 
@@ -49,26 +64,52 @@ def _preprocess_image(file_bytes: bytes) -> bytes:
 
 
 def is_vision_configured() -> bool:
-    return bool(current_app.config.get("GOOGLE_APPLICATION_CREDENTIALS") and os.path.exists(
-        current_app.config["GOOGLE_APPLICATION_CREDENTIALS"]
-    ))
+    """Cheap presence check for either credential source — mirrors _load_credentials()."""
+    cfg = current_app.config
+    if cfg.get("GOOGLE_APPLICATION_CREDENTIALS_JSON"):
+        return True
+    import os
+
+    path = cfg.get("GOOGLE_APPLICATION_CREDENTIALS")
+    return bool(path and os.path.exists(path))
 
 
-def extract_text_from_resume(file_bytes: bytes, filename: str) -> str:
+def _load_credentials():
+    """Builds an explicit google.oauth2 Credentials object from whichever source is set."""
+    import os
+
+    from google.oauth2 import service_account
+
+    cfg = current_app.config
+    json_b64 = cfg.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+    if json_b64:
+        info = json.loads(base64.b64decode(json_b64))
+        return service_account.Credentials.from_service_account_info(info)
+
+    path = cfg.get("GOOGLE_APPLICATION_CREDENTIALS")
+    if path and os.path.exists(path):
+        return service_account.Credentials.from_service_account_file(path)
+
+    return None
+
+
+def extract_text_from_resume(file_bytes: bytes, filename: str) -> dict:
+    """Returns {"text": str|None, "mode": "real"|"mock"|"error", "detail": str|None}."""
     if not is_vision_configured():
         logger.warning("Google Vision not configured — returning mock OCR text for %s", filename)
-        return MOCK_RESUME_TEXT
+        return {"text": MOCK_RESUME_TEXT, "mode": "mock", "detail": None}
 
     try:
         from google.cloud import vision
 
+        credentials = _load_credentials()
         processed = _preprocess_image(file_bytes) if not filename.lower().endswith(".pdf") else file_bytes
-        client = vision.ImageAnnotatorClient()
+        client = vision.ImageAnnotatorClient(credentials=credentials)
         image = vision.Image(content=processed)
         response = client.document_text_detection(image=image)
         if response.error.message:
             raise RuntimeError(response.error.message)
-        return response.full_text_annotation.text
+        return {"text": response.full_text_annotation.text, "mode": "real", "detail": None}
     except Exception as exc:  # noqa: BLE001
-        logger.error("Vision API extraction failed, falling back to mock: %s", exc)
-        return MOCK_RESUME_TEXT
+        logger.error("Vision API extraction failed for %s: %s", filename, exc)
+        return {"text": None, "mode": "error", "detail": str(exc)}

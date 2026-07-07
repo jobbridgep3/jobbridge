@@ -14,6 +14,7 @@ from models.referral import ReferralLetter
 from models.user import User
 from models.vacancy import Vacancy
 from services.audit_service import log_audit
+from services.email_service import send_verification_status_email
 from services.excel_service import build_excel_report
 from services.notification_service import notify_role, notify_user
 from services.pdf_service import generate_referral_letter, generate_table_report, to_bytesio
@@ -86,12 +87,35 @@ def verify_jobseeker(profile_id):
     profile = JobseekerProfile.query.get(profile_id)
     if not profile:
         return fail("Jobseeker not found.", 404)
-    profile.is_verified_by_staff = True
+    user = User.query.get(profile.user_id)
+    data = request.get_json(force=True) or {}
+    approve = data.get("approve", True)
+
+    if approve:
+        # Defense-in-depth: the frontend disables the Verify button below 100%, but a
+        # direct API call must be blocked too.
+        if profile.profile_completion() < 100:
+            return fail("Profile must be 100% complete before it can be verified.", 400)
+        profile.is_verified_by_staff = True
+        profile.verification_remarks = None
+        status_label = "verified"
+    else:
+        remarks = (data.get("remarks") or "").strip()
+        if not remarks:
+            return fail("A reason is required when marking a profile as not verified.", 400)
+        profile.is_verified_by_staff = False
+        profile.verification_remarks = remarks
+        status_label = "not verified"
+
     db.session.commit()
-    notify_user(profile.user_id, "account_verified", "Profile Verified", "PESO Staff has verified your profile.",
-                socket_event="account:verified", socket_payload={"profile_id": str(profile.id)})
-    log_audit(User.query.get(get_jwt_identity()), "Approve", "jobseekers", profile.id)
-    return ok(profile.to_dict(), "Jobseeker verified.")
+    notify_user(
+        profile.user_id, "account_verified", "Profile Verification Update",
+        f"Your profile has been marked {status_label}." + (f" Reason: {profile.verification_remarks}" if not approve else ""),
+        socket_event="account:verified", socket_payload={"profile_id": str(profile.id), "status": status_label},
+    )
+    send_verification_status_email(user.email, profile.full_name, approve, profile.verification_remarks)
+    log_audit(User.query.get(get_jwt_identity()), "Approve" if approve else "Reject", "jobseekers", profile.id)
+    return ok(profile.to_dict(), f"Jobseeker {status_label}.")
 
 
 @staff_bp.put("/jobseekers/<profile_id>/tags")

@@ -18,8 +18,15 @@ services:
       # DATABASE_URL, JWT_SECRET_KEY, SECRET_KEY, SUPABASE_URL, SUPABASE_ANON_KEY,
       # SUPABASE_SERVICE_ROLE_KEY, SUPABASE_STORAGE_BUCKET, BREVO_API_KEY,
       # BREVO_SENDER_EMAIL, BREVO_SENDER_NAME, CORS_ORIGINS (set to the deployed Vercel
-      # URL), GOOGLE_APPLICATION_CREDENTIALS, DIALOGFLOW_PROJECT_ID, ADMIN_SEED_EMAIL,
+      # URL), GOOGLE_APPLICATION_CREDENTIALS_JSON, DIALOGFLOW_PROJECT_ID, ADMIN_SEED_EMAIL,
       # ADMIN_SEED_PASSWORD
+      #
+      # GOOGLE_APPLICATION_CREDENTIALS_JSON: base64-encoded contents of the Vision
+      # service-account JSON key (GOOGLE_APPLICATION_CREDENTIALS, the file-path form, only
+      # works in local dev — Render builds from a fresh git clone with no way to place a
+      # git-ignored key file on disk). Generate the value with:
+      #   PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes("backend/credentials/google-vision-service-account.json"))
+      #   bash:       base64 -w0 backend/credentials/google-vision-service-account.json
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET_KEY
@@ -42,7 +49,7 @@ services:
         sync: false
       - key: CORS_ORIGINS
         sync: false
-      - key: GOOGLE_APPLICATION_CREDENTIALS
+      - key: GOOGLE_APPLICATION_CREDENTIALS_JSON
         sync: false
       - key: DIALOGFLOW_PROJECT_ID
         sync: false
