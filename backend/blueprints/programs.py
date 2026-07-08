@@ -74,7 +74,7 @@ def upload_program_docs(program_type):
     if err:
         return err
     from services.ocr_service import extract_text_from_resume
-    from services.storage_service import upload_file
+    from services.storage_service import upload_file, validate_upload_file
 
     data = request.form
     application = ProgramApplication.query.get(data.get("application_id"))
@@ -85,11 +85,23 @@ def upload_program_docs(program_type):
 
     file = request.files["file"]
     file_bytes = file.read()
-    url = upload_file(file_bytes, file.filename, folder=f"{program_type}-docs/{application.jobseeker_profile_id}", content_type=file.mimetype)
-    ocr_text = extract_text_from_resume(file_bytes, file.filename)
+    error = validate_upload_file(file_bytes, file.filename)
+    if error:
+        return fail(error, 400)
 
+    application_id, profile_id = application.id, application.jobseeker_profile_id
+    # Release the DB connection before the slow, blocking Storage upload + Vision OCR
+    # calls — see the identical comment in blueprints/profile.py's upload_resume for why
+    # holding it open here contributed to exhausting Supabase's pooler connection limit.
+    db.session.close()
+
+    url = upload_file(file_bytes, file.filename, folder=f"{program_type}-docs/{profile_id}", content_type=file.mimetype)
+    result = extract_text_from_resume(file_bytes, file.filename)
+    ocr_text = result["text"] or "" if result["mode"] == "real" else ""
+
+    application = ProgramApplication.query.get(application_id)
     docs = list(application.document_urls or [])
-    docs.append({"url": url, "filename": file.filename, "ocr_text": ocr_text[:2000]})
+    docs.append({"url": url, "filename": file.filename, "ocr_text": ocr_text[:2000], "ocr_status": result["mode"]})
     application.document_urls = docs
     db.session.commit()
     return ok(application.to_dict(), "Document uploaded.")

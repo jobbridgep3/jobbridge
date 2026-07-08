@@ -139,18 +139,28 @@ def upload_resume():
     if error:
         return fail(error, 400)
 
+    profile_id, user_id = profile.id, profile.user_id
+    # Release the DB connection before the slow, blocking Storage upload + Vision OCR
+    # calls (which can take anywhere from a few seconds up to ~120s for a PDF retry).
+    # Otherwise it sits idle-in-transaction for that whole time, needlessly holding one
+    # of Supabase's limited pooler connections and making exhaustion far more likely
+    # under any concurrent load. The session is reopened automatically on next use.
+    db.session.close()
+
     # Uploaded first and unconditionally — the file itself is never lost regardless of
     # whether OCR extraction below succeeds or errors out.
-    resume_url = upload_file(file_bytes, file.filename, folder=f"resumes/{profile.user_id}", content_type=file.mimetype)
-    profile.resume_url = resume_url
-
+    resume_url = upload_file(file_bytes, file.filename, folder=f"resumes/{user_id}", content_type=file.mimetype)
     result = extract_text_from_resume(file_bytes, file.filename)
     ocr_mode = result["mode"]
 
     parsed = {}
     if ocr_mode == "real":
-        profile.resume_raw_text = result["text"]
         parsed = parse_resume_text(result["text"])
+
+    profile = JobseekerProfile.query.get(profile_id)
+    profile.resume_url = resume_url
+    if ocr_mode == "real":
+        profile.resume_raw_text = result["text"]
     # On "error": leave any prior resume_raw_text/parsed data untouched rather than
     # overwriting it with nothing.
 

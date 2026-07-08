@@ -22,8 +22,12 @@ export default function CompleteProfile() {
       const fd = new FormData()
       fd.append('file', accepted[0])
       try {
-        await api.post('/api/profile/resume', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-        toast.success('Resume processed! Your profile has been auto-filled.')
+        const res = await api.post('/api/profile/resume', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+        if (res.data.data.ocr_status === 'real') {
+          toast.success('Resume processed! Your profile has been auto-filled.')
+        } else {
+          toast.error("We couldn't automatically read this resume. You can fill in your details later from your profile.")
+        }
         setDone(true)
       } catch {
         toast.error('Could not process resume. You can add it later from your profile.')

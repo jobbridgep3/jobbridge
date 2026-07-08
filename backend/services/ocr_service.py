@@ -159,7 +159,11 @@ def _run_ocr_pdf(client, pdf_bytes: bytes):
         "features": [{"type_": vision.Feature.Type.DOCUMENT_TEXT_DETECTION}],
         "pages": [1, 2, 3, 4, 5],
     }
-    batch_response = client.batch_annotate_files(requests=[file_request], timeout=60)
+    # 30s, not 60s: extract_text_from_resume() retries once on timeout, so 60s here
+    # would let the worst case (timeout, rebuild, retry, timeout again) reach ~120s —
+    # past gunicorn's --timeout 90 (Procfile) and likely past Render's edge/proxy
+    # timeout too. 30s x 2 keeps the worst case at ~60s, comfortably under both.
+    batch_response = client.batch_annotate_files(requests=[file_request], timeout=30)
     file_response = batch_response.responses[0]
 
     if file_response.error.message:

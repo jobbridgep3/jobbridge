@@ -32,8 +32,14 @@ class Config:
     # --- Database (SQLAlchemy -> Supabase Postgres via session pooler) ---
     SQLALCHEMY_DATABASE_URI = _require("DATABASE_URL")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # NOTE: do not set "poolclass" here. Flask-SQLAlchemy merges this dict onto
+    # extensions.py's `engine_options` via dict.update(), so any "poolclass" key here
+    # — even explicit None — clobbers extensions.py's NullPool. SQLAlchemy's
+    # create_engine() treats poolclass=None as "unspecified" and silently falls back
+    # to the default QueuePool(pool_size=5, max_overflow=10): up to 15 real
+    # connections from this ONE worker process alone, which was exactly exhausting
+    # Supabase's session-pooler budget (error: "max clients ... pool_size: 15").
     SQLALCHEMY_ENGINE_OPTIONS = {
-        "poolclass": None,  # set to NullPool in extensions.py (Supabase pooler already pools)
         "pool_pre_ping": True,
     }
 
