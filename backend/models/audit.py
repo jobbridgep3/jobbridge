@@ -9,7 +9,10 @@ class AuditTrail(BaseModel):
 
     __tablename__ = "audit_trail"
 
-    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=True)
+    # SET NULL on delete: this row is a historical record that must survive the
+    # user's deletion (user_email/user_role are already denormalized onto it for
+    # exactly this reason) — it just loses the live FK link.
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     user_email = db.Column(db.String(255), nullable=True)
     user_role = db.Column(db.String(20), nullable=True)
     action = db.Column(db.String(50), nullable=False)  # Login, Create, Update, Delete, Approve, Reject, Export, Generate...

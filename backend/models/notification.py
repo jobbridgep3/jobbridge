@@ -7,7 +7,9 @@ from models.base import BaseModel
 class Notification(BaseModel):
     __tablename__ = "notifications"
 
-    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False, index=True)
+    # CASCADE on delete: a notification is meaningless without the user whose inbox
+    # it belongs to, so it should be deleted along with the account, not block deletion.
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     type = db.Column(db.String(50), nullable=False)
     title = db.Column(db.String(255), nullable=False)
     message = db.Column(db.Text, nullable=True)
