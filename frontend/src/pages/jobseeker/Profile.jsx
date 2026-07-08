@@ -1,10 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { Download } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 
 import { Button } from '../../components/ui/Button'
+import { CompletionChecklist } from '../../components/ui/CompletionChecklist'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { ProgressBar } from '../../components/ui/ProgressBar'
 import { CardSkeleton } from '../../components/ui/Skeleton'
@@ -16,6 +17,7 @@ import { DocumentsSection } from './profile-sections/DocumentsSection'
 import { EducationSection } from './profile-sections/EducationSection'
 import { EmploymentInfoSection } from './profile-sections/EmploymentInfoSection'
 import { PersonalInfoSection } from './profile-sections/PersonalInfoSection'
+import { computeCompletion } from './profile-sections/requiredFields'
 import { SkillsSection } from './profile-sections/SkillsSection'
 
 const OCR_TOAST = {
@@ -119,6 +121,13 @@ export default function JobseekerProfile() {
     }
   }
 
+  // Recomputed from the live `form` on every keystroke — not just after a
+  // fetch/save round-trip — so the progress bar and checklist update instantly as
+  // the user edits. `form` is always set from the server response right after any
+  // fetch/upload/save, so this is automatically server-accurate at those points too.
+  const completion = useMemo(() => (form ? computeCompletion(form) : null), [form])
+  const missingKeys = useMemo(() => new Set((completion?.missingFields || []).map((f) => f.key)), [completion])
+
   if (isLoading || !form) return <CardSkeleton />
 
   return (
@@ -131,7 +140,7 @@ export default function JobseekerProfile() {
             <Button
               variant="secondary"
               size="sm"
-              disabled={form.profile_completion < 100}
+              disabled={completion.profileCompletion < 100}
               onClick={() => window.open(`${api.defaults.baseURL}/api/profile/application-pdf`, '_blank')}
             >
               <Download className="h-4 w-4" /> Download Application Profile (PDF)
@@ -143,20 +152,38 @@ export default function JobseekerProfile() {
         }
       />
 
-      <ProgressBar percent={form.profile_completion} />
+      <ProgressBar percent={completion.profileCompletion} />
+      <CompletionChecklist completion={completion} />
 
-      <PersonalInfoSection form={form} setForm={setForm} onUploadPicture={uploadPicture} uploadingPicture={uploadingPicture} />
-      <EducationSection form={form} setForm={setForm} />
-      <EmploymentInfoSection form={form} setForm={setForm} />
-      <SkillsSection form={form} setForm={setForm} />
-      <DocumentsSection
-        form={form}
-        onUploadResume={uploadResume}
-        uploadingResume={uploadingResume}
-        onUploadDocument={uploadDocument}
-        onDeleteDocument={deleteDocument}
-        uploadingDocType={uploadingDocType}
-      />
+      <div id="section-personal">
+        <PersonalInfoSection
+          form={form}
+          setForm={setForm}
+          onUploadPicture={uploadPicture}
+          uploadingPicture={uploadingPicture}
+          missingKeys={missingKeys}
+        />
+      </div>
+      <div id="section-education">
+        <EducationSection form={form} setForm={setForm} missingKeys={missingKeys} />
+      </div>
+      <div id="section-employment">
+        <EmploymentInfoSection form={form} setForm={setForm} missingKeys={missingKeys} />
+      </div>
+      <div id="section-skills">
+        <SkillsSection form={form} setForm={setForm} missingKeys={missingKeys} />
+      </div>
+      <div id="section-documents">
+        <DocumentsSection
+          form={form}
+          onUploadResume={uploadResume}
+          uploadingResume={uploadingResume}
+          onUploadDocument={uploadDocument}
+          onDeleteDocument={deleteDocument}
+          uploadingDocType={uploadingDocType}
+          missingKeys={missingKeys}
+        />
+      </div>
     </motion.div>
   )
 }

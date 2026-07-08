@@ -5,7 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui
 import { DocumentUploadSlot } from '../../../components/ui/DocumentUploadSlot'
 import { DOCUMENT_TYPES } from './options'
 
-export function DocumentsSection({ form, onUploadResume, uploadingResume, onUploadDocument, onDeleteDocument, uploadingDocType }) {
+export function DocumentsSection({
+  form, onUploadResume, uploadingResume, onUploadDocument, onDeleteDocument, uploadingDocType, missingKeys = new Set(),
+}) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: { 'image/*': [], 'application/pdf': [] },
     maxFiles: 1,
@@ -33,7 +35,7 @@ export function DocumentsSection({ form, onUploadResume, uploadingResume, onUplo
         <div>
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-medium text-slate-800">Resume / CV</span>
-            <span className="text-xs font-medium text-red-600">Required</span>
+            {missingKeys.has('resume_url') && <span className="text-xs font-medium text-red-600">Required</span>}
           </div>
           <div
             {...getRootProps()}

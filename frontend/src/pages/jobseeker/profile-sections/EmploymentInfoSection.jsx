@@ -3,9 +3,11 @@ import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '../../../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
 import { Input, Label, Select } from '../../../components/ui/Input'
+import { RequiredLabel } from '../../../components/ui/RequiredLabel'
+import { cn } from '../../../lib/utils'
 import { EMPLOYMENT_STATUSES, EMPLOYMENT_TYPES } from './options'
 
-export function EmploymentInfoSection({ form, setForm }) {
+export function EmploymentInfoSection({ form, setForm, missingKeys = new Set() }) {
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
 
   const addWorkExperience = () =>
@@ -22,8 +24,12 @@ export function EmploymentInfoSection({ form, setForm }) {
       <CardContent className="space-y-6">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <Label>Employment Status</Label>
-            <Select value={form.employment_status || ''} onChange={set('employment_status')}>
+            <Label><RequiredLabel label="Employment Status" missing={missingKeys.has('employment_status')} /></Label>
+            <Select
+              value={form.employment_status || ''}
+              onChange={set('employment_status')}
+              className={cn(missingKeys.has('employment_status') && 'border-red-300 focus:border-red-400')}
+            >
               <option value="">Select…</option>
               {EMPLOYMENT_STATUSES.map((s) => (
                 <option key={s} value={s}>{s}</option>
@@ -31,8 +37,12 @@ export function EmploymentInfoSection({ form, setForm }) {
             </Select>
           </div>
           <div>
-            <Label>Employment Type Preferred</Label>
-            <Select value={form.employment_type || ''} onChange={set('employment_type')}>
+            <Label><RequiredLabel label="Employment Type Preferred" missing={missingKeys.has('employment_type')} /></Label>
+            <Select
+              value={form.employment_type || ''}
+              onChange={set('employment_type')}
+              className={cn(missingKeys.has('employment_type') && 'border-red-300 focus:border-red-400')}
+            >
               <option value="">Select…</option>
               {EMPLOYMENT_TYPES.map((t) => (
                 <option key={t} value={t}>{t}</option>
@@ -40,16 +50,28 @@ export function EmploymentInfoSection({ form, setForm }) {
             </Select>
           </div>
           <div>
-            <Label>Preferred Job Position</Label>
-            <Input value={form.preferred_job_position || ''} onChange={set('preferred_job_position')} />
+            <Label><RequiredLabel label="Preferred Job Position" missing={missingKeys.has('preferred_job_position')} /></Label>
+            <Input
+              value={form.preferred_job_position || ''}
+              onChange={set('preferred_job_position')}
+              className={cn(missingKeys.has('preferred_job_position') && 'border-red-300 focus:border-red-400')}
+            />
           </div>
           <div>
-            <Label>Preferred Industry</Label>
-            <Input value={form.preferred_industry || ''} onChange={set('preferred_industry')} />
+            <Label><RequiredLabel label="Preferred Industry" missing={missingKeys.has('preferred_industry')} /></Label>
+            <Input
+              value={form.preferred_industry || ''}
+              onChange={set('preferred_industry')}
+              className={cn(missingKeys.has('preferred_industry') && 'border-red-300 focus:border-red-400')}
+            />
           </div>
           <div>
-            <Label>Preferred Work Location</Label>
-            <Input value={form.preferred_work_location || ''} onChange={set('preferred_work_location')} />
+            <Label><RequiredLabel label="Preferred Work Location" missing={missingKeys.has('preferred_work_location')} /></Label>
+            <Input
+              value={form.preferred_work_location || ''}
+              onChange={set('preferred_work_location')}
+              className={cn(missingKeys.has('preferred_work_location') && 'border-red-300 focus:border-red-400')}
+            />
           </div>
           <div>
             <Label>Expected Salary (Optional)</Label>

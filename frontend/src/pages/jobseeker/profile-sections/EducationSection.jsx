@@ -3,9 +3,10 @@ import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '../../../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
 import { Input, Select } from '../../../components/ui/Input'
+import { RequiredLabel } from '../../../components/ui/RequiredLabel'
 import { ATTAINMENT_LEVELS } from './options'
 
-export function EducationSection({ form, setForm }) {
+export function EducationSection({ form, setForm, missingKeys = new Set() }) {
   const addEducation = () =>
     setForm((f) => ({
       ...f,
@@ -18,12 +19,17 @@ export function EducationSection({ form, setForm }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Educational Background</CardTitle>
+        <CardTitle>
+          <RequiredLabel label="Educational Background" missing={missingKeys.has('educations')} />
+        </CardTitle>
         <Button variant="secondary" size="sm" onClick={addEducation}>
           <Plus className="h-4 w-4" /> Add
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
+        {missingKeys.has('educations') && (
+          <p className="text-xs text-red-600">Add at least one entry with a School Name and Highest Attainment selected.</p>
+        )}
         {(form.educations || []).map((e, idx) => (
           <div key={idx} className="grid grid-cols-1 gap-3 rounded-lg border border-slate-100 p-3 sm:grid-cols-2 lg:grid-cols-5">
             <Input placeholder="School Name" value={e.school} onChange={(ev) => updateEducation(idx, 'school', ev.target.value)} />

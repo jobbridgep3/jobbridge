@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import toast from 'react-hot-toast'
@@ -10,6 +11,7 @@ import { AuthLayout } from './AuthLayout'
 
 export default function CompleteProfile() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [uploading, setUploading] = useState(false)
   const [done, setDone] = useState(false)
 
@@ -23,6 +25,11 @@ export default function CompleteProfile() {
       fd.append('file', accepted[0])
       try {
         const res = await api.post('/api/profile/resume', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+        // Keep the ['profile'] cache (read by both this flow's eventual Dashboard
+        // landing and the Profile page) in sync with the freshly OCR-filled data,
+        // mirroring Profile.jsx's refreshFrom() — without this, a profile cached
+        // earlier in the session could still show stale pre-OCR data.
+        queryClient.setQueryData(['profile'], res.data.data)
         if (res.data.data.ocr_status === 'real') {
           toast.success('Resume processed! Your profile has been auto-filled.')
         } else {

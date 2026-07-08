@@ -77,47 +77,19 @@ class JobseekerProfile(BaseModel):
         dob = self.date_of_birth
         return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
-    def _completion_breakdown(self) -> dict:
-        personal = [
-            self.full_name, self.contact_number, self.date_of_birth, self.gender,
-            self.civil_status, self.nationality, self.barangay, self.municipality, self.province,
-        ]
-        personal_score = sum(1 for f in personal if f) / len(personal)
-
-        doc_types = {d.document_type for d in self.documents}
-        doc_checks = [bool(self.resume_url), "government_id" in doc_types]
-        documents_score = sum(doc_checks) / len(doc_checks)
-
-        employment = [
-            self.employment_status, self.preferred_job_position, self.preferred_industry,
-            self.preferred_work_location, self.expected_salary, self.employment_type,
-        ]
-        employment_score = sum(1 for f in employment if f) / len(employment)
-
-        education_score = 1.0 if any(e.school and e.attainment_level for e in self.educations) else 0.0
-        skills_score = sum([bool(self.technical_skills), bool(self.soft_skills)]) / 2
-
-        return {
-            "personal": personal_score,
-            "documents": documents_score,
-            "employment": employment_score,
-            "education": education_score,
-            "skills": skills_score,
-        }
-
     def profile_completion(self) -> int:
-        breakdown = self._completion_breakdown()
-        total = (
-            breakdown["personal"] * 25
-            + breakdown["documents"] * 25
-            + breakdown["employment"] * 20
-            + breakdown["education"] * 15
-            + breakdown["skills"] * 15
-        )
-        return round(total)
+        """Delegates to services.profile_completion_service — kept as a thin wrapper
+        so existing call sites (e.g. blueprints/staff.py's verification gate) don't
+        need to change."""
+        from services.profile_completion_service import compute_completion
+
+        return compute_completion(self)["profile_completion"]
 
     def to_dict(self, include_email=None):
+        from services.profile_completion_service import compute_completion
+
         derived_address = ", ".join(filter(None, [self.barangay, self.municipality, self.province])) or self.address
+        completion = compute_completion(self)
         return {
             "id": str(self.id),
             "user_id": str(self.user_id),
@@ -149,8 +121,10 @@ class JobseekerProfile(BaseModel):
             "tags": self.tags or [],
             "is_verified_by_staff": self.is_verified_by_staff,
             "verification_remarks": self.verification_remarks,
-            "profile_completion": self.profile_completion(),
-            "completion_breakdown": self._completion_breakdown(),
+            "profile_completion": completion["profile_completion"],
+            "completed_count": completion["completed_count"],
+            "total_count": completion["total_count"],
+            "missing_fields": completion["missing_fields"],
             "work_experiences": [w.to_dict() for w in self.work_experiences],
             "educations": [e.to_dict() for e in self.educations],
             "documents": [d.to_dict() for d in self.documents],

@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from flask import Blueprint, request, send_file
@@ -9,8 +10,9 @@ from models.jobseeker import Education, JobseekerProfile, WorkExperience
 from models.user import User
 from schemas.jobseeker_schemas import ProfileUpdateSchema
 from services.audit_service import log_audit
-from services.nlp_service import parse_resume_text
 from services.ocr_service import extract_text_from_resume
+from services.resume_parsing import parse_resume_text
+from services.resume_parsing.layout import reorder_blocks
 from services.pdf_service import generate_profile_report, generate_table_report, to_bytesio
 from services.profile_service import apply_document_upload, apply_profile_update, find_document
 from services.storage_service import upload_file, validate_upload_file
@@ -28,6 +30,24 @@ OCR_MESSAGES = {
 def _get_profile() -> JobseekerProfile:
     user_id = get_jwt_identity()
     return JobseekerProfile.query.filter_by(user_id=user_id).first()
+
+
+def _norm(value: str | None) -> str:
+    return (value or "").strip().lower()
+
+
+def _is_duplicate_work_experience(profile: JobseekerProfile, candidate: dict) -> bool:
+    return any(
+        _norm(w.company) == _norm(candidate.get("company")) and _norm(w.position) == _norm(candidate.get("position"))
+        for w in profile.work_experiences
+    )
+
+
+def _is_duplicate_education(profile: JobseekerProfile, candidate: dict) -> bool:
+    return any(
+        _norm(e.school) == _norm(candidate.get("school")) and _norm(e.degree) == _norm(candidate.get("degree"))
+        for e in profile.educations
+    )
 
 
 @profile_bp.get("")
@@ -155,7 +175,15 @@ def upload_resume():
 
     parsed = {}
     if ocr_mode == "real":
-        parsed = parse_resume_text(result["text"])
+        reordered = reorder_blocks(result["layout"])
+        try:
+            parsed = parse_resume_text(reordered)
+        except Exception:  # noqa: BLE001
+            # Field-mapping failing must never lose the already-uploaded file or the
+            # raw OCR text below — the same "still counts as processed" outcome as a
+            # resume with genuinely no confidently-extractable fields.
+            logging.getLogger(__name__).exception("Resume field-mapping failed for %s", file.filename)
+            parsed = {}
 
     profile = JobseekerProfile.query.get(profile_id)
     profile.resume_url = resume_url
@@ -168,12 +196,27 @@ def upload_resume():
         profile.full_name = parsed["full_name"]
     if parsed.get("contact_number") and not profile.contact_number:
         profile.contact_number = parsed["contact_number"]
-    if parsed.get("skills"):
-        profile.technical_skills = sorted(set(profile.technical_skills or []) | set(parsed["skills"]))
-    for line in parsed.get("work_experience_lines", [])[:5]:
-        db.session.add(WorkExperience(profile_id=profile.id, company="", position=line[:255]))
-    for line in parsed.get("education_lines", [])[:5]:
-        db.session.add(Education(profile_id=profile.id, school=line[:255]))
+    if parsed.get("date_of_birth") and not profile.date_of_birth:
+        profile.date_of_birth = parsed["date_of_birth"]
+    address = parsed.get("address")
+    if address and not (profile.barangay or profile.municipality or profile.province):
+        profile.barangay = address.get("barangay")
+        profile.municipality = address.get("municipality")
+        profile.province = address.get("province")
+    if parsed.get("technical_skills"):
+        profile.technical_skills = sorted(set(profile.technical_skills or []) | set(parsed["technical_skills"]))
+    if parsed.get("soft_skills"):
+        profile.soft_skills = sorted(set(profile.soft_skills or []) | set(parsed["soft_skills"]))
+    if parsed.get("languages_spoken"):
+        profile.languages_spoken = sorted(set(profile.languages_spoken or []) | set(parsed["languages_spoken"]))
+    if parsed.get("certifications"):
+        profile.certifications = sorted(set(profile.certifications or []) | set(parsed["certifications"]))
+    for entry in parsed.get("work_experiences", [])[:10]:
+        if not _is_duplicate_work_experience(profile, entry):
+            db.session.add(WorkExperience(profile_id=profile.id, **entry))
+    for entry in parsed.get("educations", [])[:10]:
+        if not _is_duplicate_education(profile, entry):
+            db.session.add(Education(profile_id=profile.id, **entry))
     # parsed["email"] is intentionally never written to the profile or User.email —
     # resume content shouldn't silently change a verified account's login identity. It's
     # surfaced below as read-only, informational-only data the user can apply themselves.

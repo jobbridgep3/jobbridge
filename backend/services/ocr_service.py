@@ -135,16 +135,80 @@ def is_vision_configured() -> bool:
     return _vision_configured
 
 
-def _run_ocr_image(client, file_bytes: bytes):
+def _block_text(block) -> str:
+    """Walks a block's paragraphs/words/symbols, honoring Vision's DetectedBreak types
+    to reconstruct that block's text with correct spacing/line breaks — scoped per
+    block so reorder_blocks() (services/resume_parsing/layout.py) never has to
+    re-split an already-flattened string."""
+    from google.cloud import vision
+
+    Break = vision.TextAnnotation.DetectedBreak.BreakType
+    parts = []
+    for paragraph in block.paragraphs:
+        for word in paragraph.words:
+            for symbol in word.symbols:
+                parts.append(symbol.text)
+                break_type = symbol.property.detected_break.type_
+                if break_type in (Break.SPACE, Break.SURE_SPACE):
+                    parts.append(" ")
+                elif break_type in (Break.EOL_SURE_SPACE, Break.LINE_BREAK):
+                    parts.append("\n")
+                elif break_type == Break.HYPHEN:
+                    parts.append("-")
+    return "".join(parts).strip()
+
+
+def _page_to_dict(full_text_annotation) -> dict:
+    """Converts one Vision full_text_annotation into a plain-dict layout structure —
+    must be a pure dict (not proto objects), since this crosses the eventlet.tpool
+    boundary and gets stored/reordered outside the proto's own runtime. TABLE/
+    PICTURE/RULER/BARCODE blocks are skipped (table-cell extraction is a deliberate
+    v1 scoping decision, not an oversight — see resume_parsing/layout.py)."""
+    from google.cloud import vision
+
+    pages = []
+    for page in full_text_annotation.pages:
+        blocks = []
+        for block in page.blocks:
+            if block.block_type != vision.Block.BlockType.TEXT:
+                continue
+            text = _block_text(block)
+            if not text:
+                continue
+
+            # document_text_detection() (images) populates pixel `vertices`;
+            # batch_annotate_files() (PDFs) instead only populates fractional
+            # `normalized_vertices` (0-1) — scale those by the page's pixel
+            # dimensions so both code paths produce comparable coordinates.
+            vertices = block.bounding_box.vertices
+            if vertices:
+                xs = [v.x for v in vertices]
+                ys = [v.y for v in vertices]
+            else:
+                xs = [v.x * page.width for v in block.bounding_box.normalized_vertices]
+                ys = [v.y * page.height for v in block.bounding_box.normalized_vertices]
+            if not xs or not ys:
+                continue
+
+            blocks.append({
+                "text": text,
+                "x0": min(xs), "y0": min(ys), "x1": max(xs), "y1": max(ys),
+                "confidence": block.confidence,
+            })
+        pages.append({"width": page.width, "height": page.height, "blocks": blocks})
+    return {"pages": pages, "full_text": full_text_annotation.text}
+
+
+def _run_ocr_image(client, file_bytes: bytes) -> dict:
     """Runs entirely inside eventlet.tpool's real OS thread — no Flask context access."""
     processed = _preprocess_image(file_bytes)
     response = client.document_text_detection(image={"content": processed}, timeout=25)
     if response.error.message:
         raise RuntimeError(response.error.message)
-    return response.full_text_annotation.text
+    return _page_to_dict(response.full_text_annotation)
 
 
-def _run_ocr_pdf(client, pdf_bytes: bytes):
+def _run_ocr_pdf(client, pdf_bytes: bytes) -> dict:
     """Runs entirely inside eventlet.tpool's real OS thread — no Flask context access.
 
     document_text_detection() is for single raster images only; PDFs require the
@@ -169,26 +233,35 @@ def _run_ocr_pdf(client, pdf_bytes: bytes):
     if file_response.error.message:
         raise RuntimeError(file_response.error.message)
 
+    all_pages = []
     page_texts = []
     page_errors = []
     for page_response in file_response.responses:
         if page_response.error.message:
             page_errors.append(page_response.error.message)
             continue
-        page_texts.append(page_response.full_text_annotation.text)
+        page_dict = _page_to_dict(page_response.full_text_annotation)
+        all_pages.extend(page_dict["pages"])
+        page_texts.append(page_dict["full_text"])
 
     if not page_texts:
         detail = "; ".join(page_errors) if page_errors else "no page responses were returned"
         raise RuntimeError(f"All pages failed OCR: {detail}")
 
-    return "\n".join(page_texts)
+    return {"pages": all_pages, "full_text": "\n".join(page_texts)}
 
 
 def extract_text_from_resume(file_bytes: bytes, filename: str) -> dict:
-    """Returns {"text": str|None, "mode": "real"|"error", "detail": str|None}."""
+    """Returns {"layout": dict|None, "text": str|None, "mode": "real"|"error", "detail": str|None}.
+
+    "layout" (per-page block geometry) is the primary input for field-mapping via
+    services/resume_parsing — it preserves enough structure to reconstruct correct
+    reading order for two-column resumes. "text" is the flattened fallback, kept for
+    `profile.resume_raw_text` storage and the staff "View OCR Text" dialog.
+    """
     if not is_vision_configured() or _vision_client is None:
         logger.warning("Google Vision not configured — cannot process %s", filename)
-        return {"text": None, "mode": "error", "detail": "OCR is not configured on this server."}
+        return {"layout": None, "text": None, "mode": "error", "detail": "OCR is not configured on this server."}
 
     import eventlet.tpool
     from flask import current_app
@@ -199,8 +272,8 @@ def extract_text_from_resume(file_bytes: bytes, filename: str) -> dict:
 
     for attempt in range(2):
         try:
-            text = eventlet.tpool.execute(run, _vision_client, file_bytes)
-            return {"text": text, "mode": "real", "detail": None}
+            layout = eventlet.tpool.execute(run, _vision_client, file_bytes)
+            return {"layout": layout, "text": layout["full_text"], "mode": "real", "detail": None}
         except (DeadlineExceeded, ServiceUnavailable) as exc:
             if attempt == 0:
                 # The long-lived singleton channel may have gone stale during an idle
@@ -210,7 +283,7 @@ def extract_text_from_resume(file_bytes: bytes, filename: str) -> dict:
                 _build_vision_client(current_app.config)
                 continue
             logger.error("Vision API extraction failed for %s after retry: %s", filename, exc)
-            return {"text": None, "mode": "error", "detail": str(exc)}
+            return {"layout": None, "text": None, "mode": "error", "detail": str(exc)}
         except Exception as exc:  # noqa: BLE001
             logger.error("Vision API extraction failed for %s: %s", filename, exc)
-            return {"text": None, "mode": "error", "detail": str(exc)}
+            return {"layout": None, "text": None, "mode": "error", "detail": str(exc)}

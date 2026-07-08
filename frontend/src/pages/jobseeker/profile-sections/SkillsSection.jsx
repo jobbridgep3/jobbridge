@@ -5,15 +5,16 @@ import { Badge } from '../../../components/ui/Badge'
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
 import { Button } from '../../../components/ui/Button'
 import { Input } from '../../../components/ui/Input'
+import { RequiredLabel } from '../../../components/ui/RequiredLabel'
 
 const GROUPS = [
-  { field: 'technical_skills', label: 'Technical Skills' },
-  { field: 'soft_skills', label: 'Soft Skills' },
+  { field: 'technical_skills', label: 'Technical Skills', requiredKey: 'technical_skills' },
+  { field: 'soft_skills', label: 'Soft Skills', requiredKey: 'soft_skills' },
   { field: 'languages_spoken', label: 'Languages Spoken' },
   { field: 'certifications', label: 'Certifications (TESDA, NC II, etc.)' },
 ]
 
-export function SkillsSection({ form, setForm }) {
+export function SkillsSection({ form, setForm, missingKeys = new Set() }) {
   const addItem = (field, value) => {
     if (!value.trim()) return
     setForm((f) => ({ ...f, [field]: [...new Set([...(f[field] || []), value.trim()])] }))
@@ -26,9 +27,11 @@ export function SkillsSection({ form, setForm }) {
         <CardTitle>Skills</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {GROUPS.map(({ field, label }) => (
+        {GROUPS.map(({ field, label, requiredKey }) => (
           <div key={field}>
-            <p className="mb-2 text-sm font-medium text-slate-700">{label}</p>
+            <p className="mb-2 text-sm font-medium text-slate-700">
+              <RequiredLabel label={label} missing={requiredKey ? missingKeys.has(requiredKey) : false} />
+            </p>
             <div className="mb-3 flex flex-wrap gap-2">
               {(form[field] || []).map((item) => (
                 <Badge key={item} variant="primary" className="gap-1">

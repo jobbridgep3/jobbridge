@@ -3,10 +3,11 @@ import { useDropzone } from 'react-dropzone'
 
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
 import { Input, Label, Select } from '../../../components/ui/Input'
-import { sanitizeDigits } from '../../../lib/utils'
+import { RequiredLabel } from '../../../components/ui/RequiredLabel'
+import { cn, sanitizeDigits } from '../../../lib/utils'
 import { CIVIL_STATUSES, GENDERS } from './options'
 
-export function PersonalInfoSection({ form, setForm, onUploadPicture, uploadingPicture }) {
+export function PersonalInfoSection({ form, setForm, onUploadPicture, uploadingPicture, missingKeys = new Set() }) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: { 'image/*': [] },
     maxFiles: 1,
@@ -47,32 +48,46 @@ export function PersonalInfoSection({ form, setForm, onUploadPicture, uploadingP
         </div>
 
         <div>
-          <Label>Full Name</Label>
-          <Input value={form.full_name || ''} onChange={set('full_name')} />
+          <Label><RequiredLabel label="Full Name" missing={missingKeys.has('full_name')} /></Label>
+          <Input
+            value={form.full_name || ''}
+            onChange={set('full_name')}
+            className={cn(missingKeys.has('full_name') && 'border-red-300 focus:border-red-400')}
+          />
         </div>
         <div>
           <Label>Email Address</Label>
           <Input value={form.email || ''} disabled />
         </div>
         <div>
-          <Label>Contact Number</Label>
+          <Label><RequiredLabel label="Contact Number" missing={missingKeys.has('contact_number')} /></Label>
           <Input
             value={form.contact_number || ''}
             inputMode="numeric"
             maxLength={15}
             onChange={(e) => setForm((f) => ({ ...f, contact_number: sanitizeDigits(e.target.value) }))}
+            className={cn(missingKeys.has('contact_number') && 'border-red-300 focus:border-red-400')}
           />
         </div>
         <div>
-          <Label>Date of Birth</Label>
+          <Label><RequiredLabel label="Date of Birth" missing={missingKeys.has('date_of_birth')} /></Label>
           <div className="flex items-center gap-2">
-            <Input type="date" value={form.date_of_birth || ''} onChange={set('date_of_birth')} />
+            <Input
+              type="date"
+              value={form.date_of_birth || ''}
+              onChange={set('date_of_birth')}
+              className={cn(missingKeys.has('date_of_birth') && 'border-red-300 focus:border-red-400')}
+            />
             {form.age != null && <span className="whitespace-nowrap text-xs text-slate-400">{form.age} yrs old</span>}
           </div>
         </div>
         <div>
-          <Label>Gender</Label>
-          <Select value={form.gender || ''} onChange={set('gender')}>
+          <Label><RequiredLabel label="Gender" missing={missingKeys.has('gender')} /></Label>
+          <Select
+            value={form.gender || ''}
+            onChange={set('gender')}
+            className={cn(missingKeys.has('gender') && 'border-red-300 focus:border-red-400')}
+          >
             <option value="">Select…</option>
             {GENDERS.map((g) => (
               <option key={g} value={g}>{g}</option>
@@ -80,8 +95,12 @@ export function PersonalInfoSection({ form, setForm, onUploadPicture, uploadingP
           </Select>
         </div>
         <div>
-          <Label>Civil Status</Label>
-          <Select value={form.civil_status || ''} onChange={set('civil_status')}>
+          <Label><RequiredLabel label="Civil Status" missing={missingKeys.has('civil_status')} /></Label>
+          <Select
+            value={form.civil_status || ''}
+            onChange={set('civil_status')}
+            className={cn(missingKeys.has('civil_status') && 'border-red-300 focus:border-red-400')}
+          >
             <option value="">Select…</option>
             {CIVIL_STATUSES.map((c) => (
               <option key={c} value={c}>{c}</option>
@@ -89,20 +108,36 @@ export function PersonalInfoSection({ form, setForm, onUploadPicture, uploadingP
           </Select>
         </div>
         <div>
-          <Label>Nationality</Label>
-          <Input value={form.nationality || ''} onChange={set('nationality')} />
+          <Label><RequiredLabel label="Nationality" missing={missingKeys.has('nationality')} /></Label>
+          <Input
+            value={form.nationality || ''}
+            onChange={set('nationality')}
+            className={cn(missingKeys.has('nationality') && 'border-red-300 focus:border-red-400')}
+          />
         </div>
         <div>
-          <Label>Barangay</Label>
-          <Input value={form.barangay || ''} onChange={set('barangay')} />
+          <Label><RequiredLabel label="Barangay" missing={missingKeys.has('barangay')} /></Label>
+          <Input
+            value={form.barangay || ''}
+            onChange={set('barangay')}
+            className={cn(missingKeys.has('barangay') && 'border-red-300 focus:border-red-400')}
+          />
         </div>
         <div>
-          <Label>Municipality</Label>
-          <Input value={form.municipality || ''} onChange={set('municipality')} />
+          <Label><RequiredLabel label="Municipality" missing={missingKeys.has('municipality')} /></Label>
+          <Input
+            value={form.municipality || ''}
+            onChange={set('municipality')}
+            className={cn(missingKeys.has('municipality') && 'border-red-300 focus:border-red-400')}
+          />
         </div>
         <div>
-          <Label>Province</Label>
-          <Input value={form.province || ''} onChange={set('province')} />
+          <Label><RequiredLabel label="Province" missing={missingKeys.has('province')} /></Label>
+          <Input
+            value={form.province || ''}
+            onChange={set('province')}
+            className={cn(missingKeys.has('province') && 'border-red-300 focus:border-red-400')}
+          />
         </div>
       </CardContent>
     </Card>
