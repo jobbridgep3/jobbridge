@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Ca
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { Input, Label } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
+import { PasswordInput } from '../../components/ui/PasswordInput'
 import { PasswordRequirements } from '../../components/ui/PasswordRequirements'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
@@ -77,16 +78,16 @@ export function SettingsPage({ showPrivacy = false, showDeactivate = false }) {
           <form onSubmit={changePassword} className="space-y-4">
             <div>
               <Label>Current Password</Label>
-              <Input type="password" value={pwForm.current_password} onChange={(e) => setPwForm({ ...pwForm, current_password: e.target.value })} required />
+              <PasswordInput value={pwForm.current_password} onChange={(e) => setPwForm({ ...pwForm, current_password: e.target.value })} required />
             </div>
             <div>
               <Label>New Password</Label>
-              <Input type="password" value={pwForm.new_password} onChange={(e) => setPwForm({ ...pwForm, new_password: e.target.value })} required minLength={8} />
+              <PasswordInput value={pwForm.new_password} onChange={(e) => setPwForm({ ...pwForm, new_password: e.target.value })} required minLength={8} />
               <PasswordRequirements password={pwForm.new_password} />
             </div>
             <div>
               <Label>Confirm New Password</Label>
-              <Input type="password" value={pwForm.confirm_password} onChange={(e) => setPwForm({ ...pwForm, confirm_password: e.target.value })} required minLength={8} />
+              <PasswordInput value={pwForm.confirm_password} onChange={(e) => setPwForm({ ...pwForm, confirm_password: e.target.value })} required minLength={8} />
             </div>
             <div className="flex justify-end">
               <Button type="submit" disabled={saving || !isStrongPassword(pwForm.new_password)}>

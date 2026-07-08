@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { Briefcase, CheckCircle2, FileText, Handshake, Percent, TrendingUp, Users } from 'lucide-react'
+import { AlertCircle, Briefcase, CheckCircle2, FileText, Handshake, Percent, TrendingUp, UserPlus, Users } from 'lucide-react'
 
 import { StatCard } from '../../../components/ui/StatCard'
 import api from '../../../lib/axios'
@@ -43,6 +43,8 @@ export function SummaryCards({ apiBase = '/api/admin' }) {
       icon: Percent,
       tone: 'success',
     },
+    { label: 'Pending Verifications', value: stats?.pending_verifications ?? '–', icon: AlertCircle, tone: 'warning' },
+    { label: 'New Registrations This Month', value: stats?.new_registrations_this_month ?? '–', icon: UserPlus, tone: 'primary' },
   ]
 
   return (

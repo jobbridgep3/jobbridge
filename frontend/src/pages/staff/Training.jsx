@@ -13,12 +13,25 @@ import { Input, Label, Textarea } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import api from '../../lib/axios'
+import { downloadFile, parseBlobError } from '../../lib/download'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
 
 export default function StaffTraining() {
   const queryClient = useQueryClient()
   const [createOpen, setCreateOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [form, setForm] = useState({ title: '', description: '', trainer: '', venue: '', schedule: '', max_slots: 30 })
+
+  const exportReport = async () => {
+    setExporting(true)
+    try {
+      await downloadFile('/api/staff/training/report', { filename: 'training_report.xlsx' })
+    } catch (err) {
+      toast.error(await parseBlobError(err))
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const { data: programs, isLoading } = useQuery({
     queryKey: ['training'],
@@ -64,7 +77,8 @@ export default function StaffTraining() {
                     size="sm"
                     variant="secondary"
                     className="mt-3"
-                    onClick={() => window.open(`${api.defaults.baseURL}/api/staff/training/report`, '_blank')}
+                    onClick={exportReport}
+                    disabled={exporting}
                   >
                     <Download className="h-3.5 w-3.5" /> Export Report
                   </Button>

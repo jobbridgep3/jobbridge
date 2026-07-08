@@ -107,4 +107,5 @@ def delete_announcement(announcement_id):
         return fail("Announcement not found.", 404)
     db.session.delete(announcement)
     db.session.commit()
+    log_audit(User.query.get(get_jwt_identity()), "Delete", "announcements", announcement_id)
     return ok(message="Announcement deleted.")

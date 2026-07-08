@@ -209,6 +209,7 @@ def close_vacancy(vacancy_id):
         return fail("Vacancy not found.", 404)
     vacancy.status = "closed"
     db.session.commit()
+    log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, "Closed")
     return ok(message="Vacancy closed.")
 
 

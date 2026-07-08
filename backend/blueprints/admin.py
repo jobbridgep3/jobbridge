@@ -13,8 +13,9 @@ from models.interview import Interview
 from models.jobseeker import JobseekerProfile
 from models.user import User
 from models.vacancy import Vacancy
+from services.audit_query_service import build_audit_query
 from services.audit_service import log_audit
-from services.dashboard_service import build_analytics, build_summary
+from services.dashboard_service import build_analytics, build_dashboard_excel, build_dashboard_pdf, build_summary
 from services.email_service import send_staff_credentials_email
 from services.excel_service import build_excel_report
 from services.pdf_service import generate_table_report, to_bytesio
@@ -54,7 +55,7 @@ def dashboard_summary():
 @role_required("admin")
 def dashboard_analytics():
     months = int(request.args.get("months", 6))
-    return ok(build_analytics(months))
+    return ok(build_analytics(months, request.args.get("date_from"), request.args.get("date_to")))
 
 
 @admin_bp.get("/dashboard/pending-actions")
@@ -72,6 +73,25 @@ def dashboard_pending_actions():
             + EmploymentRecord.query.filter_by(flagged_discrepancy=True).count()
         ),
     })
+
+
+@admin_bp.get("/dashboard/export/excel")
+@jwt_required()
+@role_required("admin")
+def export_dashboard_excel():
+    buf = build_dashboard_excel(request.args)
+    log_audit(User.query.get(get_jwt_identity()), "Export", "dashboard")
+    return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="dashboard_report.xlsx")
+
+
+@admin_bp.get("/dashboard/export/pdf")
+@jwt_required()
+@role_required("admin")
+def export_dashboard_pdf():
+    actor = User.query.get(get_jwt_identity())
+    pdf_bytes = build_dashboard_pdf(request.args, actor.email)
+    log_audit(User.query.get(get_jwt_identity()), "Export", "dashboard")
+    return send_file(to_bytesio(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name="dashboard_report.pdf")
 
 
 # ---------- Staff Management (Admin-exclusive) ----------
@@ -162,27 +182,24 @@ def deactivate_staff(staff_id):
 @jwt_required()
 @role_required("admin")
 def get_audit_trail():
-    query = AuditTrail.query
-    if request.args.get("user_role"):
-        query = query.filter_by(user_role=request.args["user_role"])
-    if request.args.get("action"):
-        query = query.filter_by(action=request.args["action"])
-    if request.args.get("module"):
-        query = query.filter_by(module=request.args["module"])
-    if request.args.get("q"):
-        like = f"%{request.args['q']}%"
-        query = query.filter(db.or_(AuditTrail.user_email.ilike(like), AuditTrail.details.ilike(like)))
-    entries = query.order_by(AuditTrail.created_at.desc()).limit(500).all()
-    return ok([e.to_dict() for e in entries])
+    sort_asc = request.args.get("sort") == "asc"
+    query = build_audit_query(request.args).order_by(
+        AuditTrail.created_at.asc() if sort_asc else AuditTrail.created_at.desc()
+    )
+    page = max(int(request.args.get("page", 1)), 1)
+    limit = min(int(request.args.get("limit", 50)), 200)
+    total = query.count()
+    entries = query.offset((page - 1) * limit).limit(limit).all()
+    return ok({"items": [e.to_dict() for e in entries], "total": total, "page": page, "limit": limit})
 
 
 @admin_bp.get("/audit/export/excel")
 @jwt_required()
 @role_required("admin")
 def export_audit_excel():
-    entries = AuditTrail.query.order_by(AuditTrail.created_at.desc()).limit(5000).all()
-    rows = [[e.created_at, e.user_email, e.user_role, e.action, e.module, e.record_id, e.ip_address] for e in entries]
-    buf = build_excel_report("Audit Trail", ["Timestamp", "User", "Role", "Action", "Module", "Record ID", "IP"], rows)
+    entries = build_audit_query(request.args).order_by(AuditTrail.created_at.desc()).limit(20000).all()
+    rows = [[e.created_at, e.user_email, e.user_role, e.action, e.module, e.record_id, e.ip_address, e.status] for e in entries]
+    buf = build_excel_report("Audit Trail", ["Timestamp", "User", "Role", "Action", "Module", "Record ID", "IP", "Status"], rows)
     log_audit(User.query.get(get_jwt_identity()), "Export", "audit_trail")
     return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="audit_trail.xlsx")
 
@@ -191,8 +208,8 @@ def export_audit_excel():
 @jwt_required()
 @role_required("admin")
 def export_audit_pdf():
-    entries = AuditTrail.query.order_by(AuditTrail.created_at.desc()).limit(1000).all()
-    rows = [[str(e.created_at), e.user_email, e.action, e.module] for e in entries]
-    pdf_bytes = generate_table_report("Audit Trail", ["Timestamp", "User", "Action", "Module"], rows, datetime.utcnow().strftime("%Y-%m-%d"))
+    entries = build_audit_query(request.args).order_by(AuditTrail.created_at.desc()).limit(20000).all()
+    rows = [[str(e.created_at), e.user_email, e.action, e.module, e.status] for e in entries]
+    pdf_bytes = generate_table_report("Audit Trail", ["Timestamp", "User", "Action", "Module", "Status"], rows, datetime.utcnow().strftime("%Y-%m-%d"))
     log_audit(User.query.get(get_jwt_identity()), "Export", "audit_trail")
     return send_file(to_bytesio(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name="audit_trail.pdf")

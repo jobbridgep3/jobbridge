@@ -10,6 +10,7 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { ProgressBar } from '../../components/ui/ProgressBar'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import api from '../../lib/axios'
+import { downloadFile, parseBlobError } from '../../lib/download'
 import { fadeIn } from '../../lib/motion'
 import { formatApiError } from '../../lib/utils'
 import { useAuthStore } from '../../store/authStore'
@@ -37,6 +38,7 @@ export default function JobseekerProfile() {
   const [uploadingPicture, setUploadingPicture] = useState(false)
   const [uploadingDocType, setUploadingDocType] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
 
   useEffect(() => {
     if (profile) setForm(profile)
@@ -121,6 +123,17 @@ export default function JobseekerProfile() {
     }
   }
 
+  const downloadApplicationPdf = async () => {
+    setDownloadingPdf(true)
+    try {
+      await downloadFile('/api/profile/application-pdf', { filename: 'jobbridge-application-profile.pdf' })
+    } catch (err) {
+      toast.error(await parseBlobError(err))
+    } finally {
+      setDownloadingPdf(false)
+    }
+  }
+
   // Recomputed from the live `form` on every keystroke — not just after a
   // fetch/save round-trip — so the progress bar and checklist update instantly as
   // the user edits. `form` is always set from the server response right after any
@@ -140,10 +153,10 @@ export default function JobseekerProfile() {
             <Button
               variant="secondary"
               size="sm"
-              disabled={completion.profileCompletion < 100}
-              onClick={() => window.open(`${api.defaults.baseURL}/api/profile/application-pdf`, '_blank')}
+              disabled={completion.profileCompletion < 100 || downloadingPdf}
+              onClick={downloadApplicationPdf}
             >
-              <Download className="h-4 w-4" /> Download Application Profile (PDF)
+              <Download className="h-4 w-4" /> {downloadingPdf ? 'Downloading…' : 'Download Application Profile (PDF)'}
             </Button>
             <Button size="sm" onClick={save} disabled={saving}>
               {saving ? 'Saving…' : 'Save Changes'}

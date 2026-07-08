@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { KeyRound, Plus, UserX } from 'lucide-react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { DataTable } from '../../components/ui/DataTable'
 import { PageHeader } from '../../components/ui/PageHeader'
 import api from '../../lib/axios'
@@ -13,6 +15,7 @@ import { fadeIn } from '../../lib/motion'
 
 export default function AdminStaff() {
   const queryClient = useQueryClient()
+  const [confirmTarget, setConfirmTarget] = useState(null) // { type: 'toggle' | 'reset', row }
   const { data: staff, isLoading } = useQuery({
     queryKey: ['admin', 'staff'],
     queryFn: async () => (await api.get('/api/admin/staff')).data.data,
@@ -22,6 +25,7 @@ export default function AdminStaff() {
     mutationFn: (id) => api.put(`/api/admin/staff/${id}/deactivate`),
     onSuccess: () => {
       toast.success('Staff account updated.')
+      setConfirmTarget(null)
       queryClient.invalidateQueries({ queryKey: ['admin', 'staff'] })
     },
   })
@@ -30,6 +34,7 @@ export default function AdminStaff() {
     mutationFn: (id) => api.put(`/api/admin/staff/${id}`, { reset_password: true }),
     onSuccess: () => {
       toast.success('New temporary password emailed to staff member.')
+      setConfirmTarget(null)
       queryClient.invalidateQueries({ queryKey: ['admin', 'staff'] })
     },
   })
@@ -48,10 +53,10 @@ export default function AdminStaff() {
       header: '',
       cell: ({ row }) => (
         <div className="flex justify-end gap-2">
-          <Button size="sm" variant="secondary" onClick={() => resetPassword.mutate(row.original.id)}>
+          <Button size="sm" variant="secondary" onClick={() => setConfirmTarget({ type: 'reset', row: row.original })}>
             <KeyRound className="h-3.5 w-3.5" /> Reset Password
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => toggleActive.mutate(row.original.id)}>
+          <Button size="sm" variant="ghost" onClick={() => setConfirmTarget({ type: 'toggle', row: row.original })}>
             <UserX className="h-3.5 w-3.5" /> {row.original.is_active ? 'Deactivate' : 'Reactivate'}
           </Button>
         </div>
@@ -73,6 +78,31 @@ export default function AdminStaff() {
         }
       />
       <DataTable columns={columns} data={staff} isLoading={isLoading} searchPlaceholder="Search staff…" emptyTitle="No PESO Staff accounts yet" />
+
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        onOpenChange={(open) => !open && setConfirmTarget(null)}
+        title={
+          confirmTarget?.type === 'reset'
+            ? 'Reset this staff member’s password?'
+            : confirmTarget?.row.is_active
+              ? 'Deactivate this staff account?'
+              : 'Reactivate this staff account?'
+        }
+        description={
+          confirmTarget?.type === 'reset'
+            ? 'A new temporary password will be generated and emailed to them.'
+            : confirmTarget?.row.is_active
+              ? 'They will immediately lose the ability to log in.'
+              : 'They will be able to log in again.'
+        }
+        confirmLabel={confirmTarget?.type === 'reset' ? 'Reset Password' : confirmTarget?.row.is_active ? 'Deactivate' : 'Reactivate'}
+        danger={confirmTarget?.type === 'toggle' && confirmTarget?.row.is_active}
+        onConfirm={() =>
+          confirmTarget?.type === 'reset' ? resetPassword.mutate(confirmTarget.row.id) : toggleActive.mutate(confirmTarget.row.id)
+        }
+        loading={resetPassword.isPending || toggleActive.isPending}
+      />
     </motion.div>
   )
 }

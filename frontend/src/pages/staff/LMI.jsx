@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { BarChart3, Download, TrendingUp, Users } from 'lucide-react'
+import { useState } from 'react'
+import toast from 'react-hot-toast'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 
 import { Badge } from '../../components/ui/Badge'
@@ -11,15 +13,28 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatCard } from '../../components/ui/StatCard'
 import api from '../../lib/axios'
+import { downloadFile, parseBlobError } from '../../lib/download'
 import { fadeIn } from '../../lib/motion'
 
 const COLORS = ['#1e3a8a', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe', '#eff6ff']
 
 export default function StaffLMI() {
+  const [exporting, setExporting] = useState(null)
   const { data: stats, isLoading } = useQuery({
     queryKey: ['staff', 'lmi', 'stats'],
     queryFn: async () => (await api.get('/api/staff/lmi/stats')).data.data,
   })
+
+  const handleExport = async (format) => {
+    setExporting(format)
+    try {
+      await downloadFile(`/api/staff/lmi/export/${format}`, { filename: `lmi_report.${format === 'excel' ? 'xlsx' : 'pdf'}` })
+    } catch (err) {
+      toast.error(await parseBlobError(err))
+    } finally {
+      setExporting(null)
+    }
+  }
 
   if (isLoading || !stats) return <CardSkeleton />
 
@@ -30,10 +45,10 @@ export default function StaffLMI() {
         description="Labor Market Information dashboard and government report generation."
         actions={
           <>
-            <Button variant="secondary" size="sm" onClick={() => window.open(`${api.defaults.baseURL}/api/staff/lmi/export/excel`, '_blank')}>
+            <Button variant="secondary" size="sm" onClick={() => handleExport('excel')} disabled={exporting === 'excel'}>
               <Download className="h-4 w-4" /> Excel
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => window.open(`${api.defaults.baseURL}/api/staff/lmi/export/pdf`, '_blank')}>
+            <Button variant="secondary" size="sm" onClick={() => handleExport('pdf')} disabled={exporting === 'pdf'}>
               <Download className="h-4 w-4" /> PDF
             </Button>
           </>

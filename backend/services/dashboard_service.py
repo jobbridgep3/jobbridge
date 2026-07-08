@@ -7,7 +7,7 @@ management and the full Audit Trail viewer are genuinely admin-exclusive, and th
 stay defined only in admin.py.
 """
 
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import func
 
@@ -18,7 +18,9 @@ from models.employment import EmploymentRecord
 from models.jobseeker import JobseekerProfile
 from models.user import User
 from models.vacancy import Vacancy
+from services.excel_service import build_multi_sheet_excel_report
 from services.nlp_service import SKILL_KEYWORDS
+from services.pdf_service import generate_dashboard_report
 from utils.timezone import now_manila
 
 
@@ -53,6 +55,11 @@ def build_summary() -> dict:
     placements_this_month = EmploymentRecord.query.filter(
         EmploymentRecord.start_date >= now_manila().date().replace(day=1)
     ).count()
+    pending_employer_verifications = EmployerCompany.query.filter_by(verification_status="unverified").count()
+    pending_jobseeker_verifications = JobseekerProfile.query.filter_by(is_verified_by_staff=False).count()
+    new_registrations_this_month = User.query.filter(
+        User.role.in_(("jobseeker", "employer")), User.created_at >= now_manila().date().replace(day=1)
+    ).count()
 
     return {
         "total_jobseekers": total_jobseekers,
@@ -67,19 +74,42 @@ def build_summary() -> dict:
         # Distinct from placement_success_rate: "of everyone registered, what fraction has
         # ever been placed" (program outcome) vs. "of placements made, what fraction held."
         "employment_rate": round(successful_placements / total_jobseekers * 100, 1) if total_jobseekers else 0,
+        "pending_verifications": pending_employer_verifications + pending_jobseeker_verifications,
+        "new_registrations_this_month": new_registrations_this_month,
     }
 
 
-def build_analytics(months: int) -> dict:
-    months = min(max(months, 1), 12)
-    buckets = _month_buckets(months)
+def build_analytics(months: int = 6, date_from: str | None = None, date_to: str | None = None) -> dict:
+    """`date_from`/`date_to` (ISO date strings), when both given, replace the default
+    "last N months ending now" window with an explicit range — used by the dashboard
+    export's "selected date range" option. `months` is ignored when a range is given."""
+    end_date = None
+    if date_from and date_to:
+        start_date = date.fromisoformat(date_from)
+        end_date = date.fromisoformat(date_to)
+        buckets = []
+        y, m = start_date.year, start_date.month
+        while (y, m) <= (end_date.year, end_date.month):
+            buckets.append((y, m))
+            m += 1
+            if m == 13:
+                m, y = 1, y + 1
+    else:
+        months = min(max(months, 1), 12)
+        buckets = _month_buckets(months)
+        start_date = date(buckets[0][0], buckets[0][1], 1)
     labels = [f"{y:04d}-{m:02d}" for y, m in buckets]
-    start_date = date(buckets[0][0], buckets[0][1], 1)
+
+    def _bounded(column):
+        conditions = [column >= start_date]
+        if end_date:
+            conditions.append(column <= end_date)
+        return conditions
 
     # Monthly User Registrations — grouped by role so the chart can show two series.
     reg_rows = (
         db.session.query(func.to_char(User.created_at, "YYYY-MM").label("month"), User.role, func.count(User.id))
-        .filter(User.created_at >= start_date, User.role.in_(("jobseeker", "employer")))
+        .filter(*_bounded(User.created_at), User.role.in_(("jobseeker", "employer")))
         .group_by("month", User.role)
         .all()
     )
@@ -94,7 +124,7 @@ def build_analytics(months: int) -> dict:
     # Monthly Job Applications
     app_rows = dict(
         db.session.query(func.to_char(Application.created_at, "YYYY-MM"), func.count(Application.id))
-        .filter(Application.created_at >= start_date)
+        .filter(*_bounded(Application.created_at))
         .group_by(func.to_char(Application.created_at, "YYYY-MM"))
         .all()
     )
@@ -103,7 +133,7 @@ def build_analytics(months: int) -> dict:
     # Employment Trends — new placements started per month
     emp_rows = dict(
         db.session.query(func.to_char(EmploymentRecord.start_date, "YYYY-MM"), func.count(EmploymentRecord.id))
-        .filter(EmploymentRecord.start_date >= start_date)
+        .filter(*_bounded(EmploymentRecord.start_date))
         .group_by(func.to_char(EmploymentRecord.start_date, "YYYY-MM"))
         .all()
     )
@@ -146,3 +176,41 @@ def build_analytics(months: int) -> dict:
         "job_category_distribution": job_category_distribution,
         "top_skills": top_skills,
     }
+
+
+def build_dashboard_excel(args):
+    """args: a request.args-like mapping with optional scope ('summary'|'analytics'|
+    'both', default 'both'), months, date_from, date_to."""
+    scope = args.get("scope", "both")
+    months = int(args.get("months", 6))
+    sheets = []
+
+    if scope in ("summary", "both"):
+        summary = build_summary()
+        sheets.append(("Summary", ["Metric", "Value"], [[k, v] for k, v in summary.items()]))
+
+    if scope in ("analytics", "both"):
+        analytics = build_analytics(months, args.get("date_from"), args.get("date_to"))
+        sheets.append(("Monthly Registrations", ["Month", "Jobseekers", "Employers"],
+                       [[r["month"], r["jobseekers"], r["employers"]] for r in analytics["monthly_registrations"]]))
+        sheets.append(("Monthly Applications", ["Month", "Applications"],
+                       [[r["month"], r["count"]] for r in analytics["monthly_applications"]]))
+        sheets.append(("Employment Trends", ["Month", "Placements"],
+                       [[r["month"], r["placements"]] for r in analytics["employment_trends"]]))
+        sheets.append(("Hiring Funnel", ["Status", "Count"],
+                       [[r["status"], r["count"]] for r in analytics["hiring_funnel"]]))
+        sheets.append(("Job Category Distribution", ["Category", "Count"],
+                       [[r["category"], r["count"]] for r in analytics["job_category_distribution"]]))
+        sheets.append(("Top Skills", ["Skill", "Count"],
+                       [[r["skill"], r["count"]] for r in analytics["top_skills"]]))
+
+    return build_multi_sheet_excel_report(sheets)
+
+
+def build_dashboard_pdf(args, generated_by: str) -> bytes:
+    scope = args.get("scope", "both")
+    months = int(args.get("months", 6))
+    summary = build_summary() if scope in ("summary", "both") else None
+    analytics = build_analytics(months, args.get("date_from"), args.get("date_to")) if scope in ("analytics", "both") else None
+    date_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    return generate_dashboard_report(summary, analytics, date_str, generated_by)

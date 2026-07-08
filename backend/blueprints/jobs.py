@@ -142,6 +142,7 @@ def cancel_application(application_id):
         return fail("This application can no longer be cancelled.", 400)
     application.status = "cancelled"
     db.session.commit()
+    log_audit(User.query.get(profile.user_id), "Update", "applications", application.id, "Cancelled by jobseeker")
     return ok(message="Application cancelled.")
 
 

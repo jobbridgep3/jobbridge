@@ -1,19 +1,28 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Trash2 } from 'lucide-react'
+import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
+import { useAuthStore } from '../../store/authStore'
 
 export default function StaffEmployerDetail({ basePath = '/staff' }) {
   const { id } = useParams()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const role = useAuthStore((s) => s.user?.role)
+  const [confirmVerify, setConfirmVerify] = useState(null) // true | false | null
+  const [confirmSuspend, setConfirmSuspend] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const { data: company, isLoading } = useQuery({
     queryKey: ['staff', 'employers', id],
@@ -24,6 +33,7 @@ export default function StaffEmployerDetail({ basePath = '/staff' }) {
     mutationFn: (approve) => api.put(`/api/staff/employers/${id}/verify`, { approve }),
     onSuccess: () => {
       toast.success('Employer verification updated.')
+      setConfirmVerify(null)
       queryClient.invalidateQueries({ queryKey: ['staff', 'employers', id] })
     },
   })
@@ -32,9 +42,25 @@ export default function StaffEmployerDetail({ basePath = '/staff' }) {
     mutationFn: () => api.put(`/api/staff/employers/${id}/suspend`),
     onSuccess: () => {
       toast.success('Employer suspended.')
+      setConfirmSuspend(false)
       queryClient.invalidateQueries({ queryKey: ['staff', 'employers', id] })
     },
   })
+
+  const deleteAccount = async () => {
+    setDeleting(true)
+    try {
+      await api.delete(`/api/staff/employers/${id}`)
+      toast.success('Employer account permanently deleted.')
+      queryClient.invalidateQueries({ queryKey: ['staff', 'employers'] })
+      navigate(`${basePath}/employers`)
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not delete this account.')
+    } finally {
+      setDeleting(false)
+      setConfirmDelete(false)
+    }
+  }
 
   if (isLoading || !company) return <CardSkeleton />
 
@@ -55,15 +81,20 @@ export default function StaffEmployerDetail({ basePath = '/staff' }) {
             </div>
           </div>
           <div className="flex flex-col gap-2">
-            <Button size="sm" onClick={() => verify.mutate(true)} disabled={company.verification_status === 'verified'}>
+            <Button size="sm" onClick={() => setConfirmVerify(true)} disabled={company.verification_status === 'verified'}>
               Approve Verification
             </Button>
-            <Button size="sm" variant="secondary" onClick={() => verify.mutate(false)}>
+            <Button size="sm" variant="secondary" onClick={() => setConfirmVerify(false)}>
               Reject Verification
             </Button>
-            <Button size="sm" variant="danger" onClick={() => suspend.mutate()}>
+            <Button size="sm" variant="danger" onClick={() => setConfirmSuspend(true)}>
               Suspend Account
             </Button>
+            {role === 'admin' && (
+              <Button size="sm" variant="danger" onClick={() => setConfirmDelete(true)}>
+                <Trash2 className="h-3.5 w-3.5" /> Delete Permanently
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -85,6 +116,43 @@ export default function StaffEmployerDetail({ basePath = '/staff' }) {
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={confirmVerify !== null}
+        onOpenChange={(open) => !open && setConfirmVerify(null)}
+        title={confirmVerify ? 'Approve this employer?' : 'Reject this employer?'}
+        description={
+          confirmVerify
+            ? 'The employer will be marked as verified and can post job vacancies.'
+            : 'The employer will be marked as unverified.'
+        }
+        confirmLabel={confirmVerify ? 'Approve' : 'Reject'}
+        danger={!confirmVerify}
+        onConfirm={() => verify.mutate(confirmVerify)}
+        loading={verify.isPending}
+      />
+
+      <ConfirmDialog
+        open={confirmSuspend}
+        onOpenChange={setConfirmSuspend}
+        title="Suspend this account?"
+        description="The employer will immediately lose the ability to log in or manage vacancies."
+        confirmLabel="Suspend"
+        danger
+        onConfirm={() => suspend.mutate()}
+        loading={suspend.isPending}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete Account"
+        description="Are you sure you want to permanently delete this account? This action cannot be undone."
+        confirmLabel="Delete Permanently"
+        danger
+        onConfirm={deleteAccount}
+        loading={deleting}
+      />
     </motion.div>
   )
 }

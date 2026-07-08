@@ -8,6 +8,7 @@ import { z } from 'zod'
 
 import { Button } from '../../components/ui/Button'
 import { FormError, Input, Label } from '../../components/ui/Input'
+import { PasswordInput } from '../../components/ui/PasswordInput'
 import { ROLE_DASHBOARD } from '../../config/navigation'
 import api from '../../lib/axios'
 import { useAuthStore } from '../../store/authStore'
@@ -80,7 +81,7 @@ export default function Login() {
               Forgot password?
             </Link>
           </div>
-          <Input id="password" type="password" placeholder="••••••••" {...register('password')} />
+          <PasswordInput id="password" placeholder="••••••••" {...register('password')} />
           <FormError>{errors.password?.message}</FormError>
         </div>
         <div>

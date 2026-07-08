@@ -16,13 +16,14 @@ from models.user import User
 from models.vacancy import Vacancy
 from schemas.jobseeker_schemas import ProfileUpdateSchema
 from services.audit_service import log_audit
-from services.dashboard_service import build_analytics, build_summary
+from services.dashboard_service import build_analytics, build_dashboard_excel, build_dashboard_pdf, build_summary
 from services.email_service import send_verification_status_email
 from services.excel_service import build_excel_report
 from services.notification_service import notify_role, notify_user
 from services.pdf_service import generate_referral_letter, generate_table_report, to_bytesio
 from services.profile_service import apply_document_upload, apply_profile_update, find_document
 from services.storage_service import upload_file
+from services.user_deletion_service import employer_dependent_counts, jobseeker_dependent_counts
 from sockets.events import emit_to_role
 from utils.decorators import role_required
 from utils.responses import fail, ok
@@ -58,7 +59,26 @@ def staff_dashboard_summary():
 @role_required("staff", "admin")
 def staff_dashboard_analytics():
     months = int(request.args.get("months", 6))
-    return ok(build_analytics(months))
+    return ok(build_analytics(months, request.args.get("date_from"), request.args.get("date_to")))
+
+
+@staff_bp.get("/dashboard/export/excel")
+@jwt_required()
+@role_required("staff", "admin")
+def staff_export_dashboard_excel():
+    buf = build_dashboard_excel(request.args)
+    log_audit(User.query.get(get_jwt_identity()), "Export", "dashboard")
+    return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="dashboard_report.xlsx")
+
+
+@staff_bp.get("/dashboard/export/pdf")
+@jwt_required()
+@role_required("staff", "admin")
+def staff_export_dashboard_pdf():
+    actor = User.query.get(get_jwt_identity())
+    pdf_bytes = build_dashboard_pdf(request.args, actor.email)
+    log_audit(actor, "Export", "dashboard")
+    return send_file(to_bytesio(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name="dashboard_report.pdf")
 
 
 @staff_bp.get("/pending-approvals")
@@ -149,6 +169,7 @@ def tag_jobseeker(profile_id):
     data = request.get_json(force=True) or {}
     profile.tags = data.get("tags", [])
     db.session.commit()
+    log_audit(User.query.get(get_jwt_identity()), "Update", "jobseekers", profile.id, f"Tags updated: {profile.tags}")
     return ok(profile.to_dict(), "Tags updated.")
 
 
@@ -167,6 +188,39 @@ def deactivate_jobseeker(profile_id):
     result["is_active"] = user.is_active
     message = "Account has been activated successfully." if user.is_active else "Account has been deactivated successfully."
     return ok(result, message)
+
+
+@staff_bp.delete("/jobseekers/<profile_id>")
+@jwt_required()
+@role_required("admin")
+def delete_jobseeker(profile_id):
+    """Permanently deletes a jobseeker account. Admin-only — the decorator above is
+    the actual security boundary, not a UI hide. Blocked when the account has any
+    real activity history (applications, employment, program/job-fair/training
+    records) — this is a government record-keeping system, so those records must be
+    preserved; deactivate the account instead in that case."""
+    profile = JobseekerProfile.query.get(profile_id)
+    if not profile:
+        return fail("Jobseeker not found.", 404)
+    user = User.query.get(profile.user_id)
+    if str(user.id) == get_jwt_identity():
+        return fail("You cannot delete your own account.", 403)
+
+    dependent_counts = jobseeker_dependent_counts(profile.id)
+    if any(dependent_counts.values()):
+        return fail(
+            "This jobseeker has existing activity records (applications, employment, "
+            "program applications, job fair, or training history) and cannot be "
+            "permanently deleted. Deactivate the account instead to preserve required records.",
+            409, dependent_counts,
+        )
+
+    email = user.email
+    db.session.delete(user)  # cascades to JobseekerProfile via User's "all, delete-orphan" relationship
+    db.session.commit()
+    log_audit(User.query.get(get_jwt_identity()), "Delete", "jobseekers", profile_id,
+              f"Permanently deleted jobseeker account {email}")
+    return ok(message="Jobseeker account permanently deleted.")
 
 
 @staff_bp.get("/jobseekers/export/excel")
@@ -373,6 +427,37 @@ def suspend_employer(company_id):
     return ok(company.to_dict(), "Employer suspended.")
 
 
+@staff_bp.delete("/employers/<company_id>")
+@jwt_required()
+@role_required("admin")
+def delete_employer(company_id):
+    """Permanently deletes an employer account. Admin-only, same rules as
+    delete_jobseeker above — blocked if the account has any job postings,
+    employment records, or job-fair booth history."""
+    company = EmployerCompany.query.get(company_id)
+    if not company:
+        return fail("Employer not found.", 404)
+    user = User.query.get(company.user_id)
+    if str(user.id) == get_jwt_identity():
+        return fail("You cannot delete your own account.", 403)
+
+    dependent_counts = employer_dependent_counts(company.id)
+    if any(dependent_counts.values()):
+        return fail(
+            "This employer has existing activity records (job postings, employment, "
+            "or job fair history) and cannot be permanently deleted. Deactivate/suspend "
+            "the account instead to preserve required records.",
+            409, dependent_counts,
+        )
+
+    email = user.email
+    db.session.delete(user)  # cascades to EmployerCompany via User's "all, delete-orphan" relationship
+    db.session.commit()
+    log_audit(User.query.get(get_jwt_identity()), "Delete", "employers", company_id,
+              f"Permanently deleted employer account {email}")
+    return ok(message="Employer account permanently deleted.")
+
+
 # ---------- Job Vacancy Management ----------
 
 @staff_bp.get("/vacancies")
@@ -451,6 +536,7 @@ def staff_create_vacancy():
     )
     db.session.add(vacancy)
     db.session.commit()
+    log_audit(User.query.get(get_jwt_identity()), "Create", "vacancies", vacancy.id, "Manual walk-in vacancy entry")
     return ok(vacancy.to_dict(), "Vacancy added.", 201)
 
 
@@ -471,6 +557,7 @@ def interview_report():
     interviews = Interview.query.all()
     rows = [[i.application.jobseeker_profile.full_name, i.application.vacancy.title, i.status, str(i.scheduled_date)] for i in interviews]
     buf = build_excel_report("Interview Report", ["Jobseeker", "Position", "Status", "Date"], rows)
+    log_audit(User.query.get(get_jwt_identity()), "Export", "interviews")
     return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="interview_report.xlsx")
 
 
@@ -499,6 +586,7 @@ def staff_update_employment(record_id):
         if field in data:
             setattr(record, field, data[field])
     db.session.commit()
+    log_audit(User.query.get(get_jwt_identity()), "Update", "employment", record.id)
     return ok(record.to_dict(), "Employment record updated.")
 
 
@@ -515,6 +603,7 @@ def staff_create_employment():
     )
     db.session.add(record)
     db.session.commit()
+    log_audit(User.query.get(get_jwt_identity()), "Create", "employment", record.id, "Manual walk-in placement entry")
     return ok(record.to_dict(), "Employment record created.", 201)
 
 
@@ -525,6 +614,7 @@ def employment_report():
     records = EmploymentRecord.query.all()
     rows = [[r.jobseeker_profile.full_name, r.employer_company.company_name, r.position, r.status, str(r.start_date)] for r in records]
     fmt = request.args.get("format", "excel")
+    log_audit(User.query.get(get_jwt_identity()), "Export", "employment")
     if fmt == "pdf":
         pdf_bytes = generate_table_report("Employment Report", ["Jobseeker", "Employer", "Position", "Status", "Start Date"], rows, datetime.utcnow().strftime("%Y-%m-%d"))
         return send_file(to_bytesio(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name="employment_report.pdf")

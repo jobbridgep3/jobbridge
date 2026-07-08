@@ -15,6 +15,7 @@ import { Input, Label, Textarea } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import api from '../../lib/axios'
+import { downloadFile, parseBlobError } from '../../lib/download'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
 
 export default function StaffJobFair({ basePath = '/staff' }) {
@@ -36,6 +37,14 @@ export default function StaffJobFair({ basePath = '/staff' }) {
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Could not create job fair.'),
   })
+
+  const downloadAttendanceReport = async (fairId) => {
+    try {
+      await downloadFile(`/api/staff/jobfair/${fairId}/attendance-report`, { filename: 'jobfair_attendance.xlsx' })
+    } catch (err) {
+      toast.error(await parseBlobError(err))
+    }
+  }
 
   return (
     <motion.div {...fadeIn} className="space-y-4">
@@ -75,7 +84,7 @@ export default function StaffJobFair({ basePath = '/staff' }) {
                     <Button
                       size="sm"
                       variant="secondary"
-                      onClick={() => window.open(`${api.defaults.baseURL}/api/staff/jobfair/${fair.id}/attendance-report`, '_blank')}
+                      onClick={() => downloadAttendanceReport(fair.id)}
                     >
                       <Download className="h-3.5 w-3.5" /> Attendance Report
                     </Button>

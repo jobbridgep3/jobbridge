@@ -6,6 +6,7 @@ import { z } from 'zod'
 
 import { Button } from '../../components/ui/Button'
 import { FormError, Input, Label } from '../../components/ui/Input'
+import { PasswordInput } from '../../components/ui/PasswordInput'
 import { PasswordRequirements } from '../../components/ui/PasswordRequirements'
 import { isStrongPassword } from '../../lib/passwordPolicy'
 import api from '../../lib/axios'
@@ -120,13 +121,13 @@ export default function Register() {
         </div>
         <div>
           <Label htmlFor="password">Password</Label>
-          <Input id="password" type="password" placeholder="••••••••" {...register('password')} />
+          <PasswordInput id="password" placeholder="••••••••" {...register('password')} />
           <PasswordRequirements password={passwordValue} />
           <FormError>{errors.password?.message}</FormError>
         </div>
         <div>
           <Label htmlFor="confirm_password">Confirm Password</Label>
-          <Input id="confirm_password" type="password" placeholder="••••••••" {...register('confirm_password')} />
+          <PasswordInput id="confirm_password" placeholder="••••••••" {...register('confirm_password')} />
           <FormError>{errors.confirm_password?.message}</FormError>
         </div>
         <div>

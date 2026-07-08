@@ -17,6 +17,7 @@ class AuditTrail(BaseModel):
     record_id = db.Column(db.String(100), nullable=True)
     ip_address = db.Column(db.String(64), nullable=True)
     details = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(20), nullable=False, default="success")  # "success" | "failed"
 
     def to_dict(self):
         return {
@@ -29,5 +30,6 @@ class AuditTrail(BaseModel):
             "record_id": self.record_id,
             "ip_address": self.ip_address,
             "details": self.details,
+            "status": self.status,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

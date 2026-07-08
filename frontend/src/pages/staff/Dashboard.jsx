@@ -9,6 +9,7 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
 import { AnalyticsCharts } from '../admin/dashboard/AnalyticsCharts'
+import { DashboardExportDialog } from '../admin/dashboard/DashboardExportDialog'
 import { SummaryCards } from '../admin/dashboard/SummaryCards'
 
 export default function StaffDashboard() {
@@ -23,7 +24,11 @@ export default function StaffDashboard() {
 
   return (
     <motion.div {...fadeIn} className="space-y-6">
-      <PageHeader title="PESO Staff Command Center" description="Full operational overview of JobBridge." />
+      <PageHeader
+        title="PESO Staff Command Center"
+        description="Full operational overview of JobBridge."
+        actions={<DashboardExportDialog apiBase="/api/staff" />}
+      />
 
       <SummaryCards apiBase="/api/staff" />
       <AnalyticsCharts apiBase="/api/staff" />

@@ -15,6 +15,7 @@ import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
+import { downloadFile, parseBlobError } from '../../lib/download'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
 
 /** Shared Staff/Admin review UI for SPES / DILP / OWWA — mirrors the shared backend model. */
@@ -22,6 +23,18 @@ export function StaffProgramPage({ programType, title, description }) {
   const queryClient = useQueryClient()
   const [reviewTarget, setReviewTarget] = useState(null)
   const [remarks, setRemarks] = useState('')
+  const [exporting, setExporting] = useState(false)
+
+  const exportReport = async () => {
+    setExporting(true)
+    try {
+      await downloadFile(`/api/staff/${programType}/report`, { filename: `${programType}_report.xlsx` })
+    } catch (err) {
+      toast.error(await parseBlobError(err))
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const { data: applications, isLoading } = useQuery({
     queryKey: ['staff', programType],
@@ -56,7 +69,7 @@ export function StaffProgramPage({ programType, title, description }) {
         title={title}
         description={description}
         actions={
-          <Button variant="secondary" size="sm" onClick={() => window.open(`${api.defaults.baseURL}/api/staff/${programType}/report`, '_blank')}>
+          <Button variant="secondary" size="sm" onClick={exportReport} disabled={exporting}>
             <Download className="h-4 w-4" /> Export Report
           </Button>
         }

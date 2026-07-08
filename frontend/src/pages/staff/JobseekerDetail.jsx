@@ -1,13 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { ArrowLeft, FileText, Pencil, ShieldCheck, ShieldX, UserRound, X } from 'lucide-react'
+import { ArrowLeft, FileText, Pencil, ShieldCheck, ShieldX, Trash2, UserRound, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { Dialog, DialogContent } from '../../components/ui/Dialog'
 import { DocumentUploadSlot } from '../../components/ui/DocumentUploadSlot'
 import { Label, Textarea } from '../../components/ui/Input'
@@ -17,6 +18,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
 import { formatApiError } from '../../lib/utils'
+import { useAuthStore } from '../../store/authStore'
 import { EducationSection } from '../jobseeker/profile-sections/EducationSection'
 import { EmploymentInfoSection } from '../jobseeker/profile-sections/EmploymentInfoSection'
 import { DOCUMENT_TYPES } from '../jobseeker/profile-sections/options'
@@ -34,7 +36,9 @@ function row(label, value) {
 
 export default function StaffJobseekerDetail({ basePath = '/staff' }) {
   const { id } = useParams()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const role = useAuthStore((s) => s.user?.role)
   const [rejectOpen, setRejectOpen] = useState(false)
   const [remarks, setRemarks] = useState('')
   const [ocrOpen, setOcrOpen] = useState(false)
@@ -42,6 +46,10 @@ export default function StaffJobseekerDetail({ basePath = '/staff' }) {
   const [editForm, setEditForm] = useState(null)
   const [saving, setSaving] = useState(false)
   const [uploadingDocType, setUploadingDocType] = useState(null)
+  const [confirmVerify, setConfirmVerify] = useState(false)
+  const [confirmToggleActive, setConfirmToggleActive] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ['staff', 'jobseekers', id],
@@ -59,6 +67,7 @@ export default function StaffJobseekerDetail({ basePath = '/staff' }) {
     onSuccess: (res) => {
       toast.success(res.data.message)
       setRejectOpen(false)
+      setConfirmVerify(false)
       setRemarks('')
       invalidate()
     },
@@ -69,6 +78,7 @@ export default function StaffJobseekerDetail({ basePath = '/staff' }) {
     mutationFn: () => api.put(`/api/staff/jobseekers/${id}/deactivate`),
     onSuccess: (res) => {
       toast.success(res.data.message)
+      setConfirmToggleActive(false)
       invalidate()
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Could not update account status.'),
@@ -111,6 +121,21 @@ export default function StaffJobseekerDetail({ basePath = '/staff' }) {
       queryClient.setQueryData(['staff', 'jobseekers', id], (prev) => ({ ...prev, ...res.data.data }))
     } catch {
       toast.error('Could not remove document.')
+    }
+  }
+
+  const deleteAccount = async () => {
+    setDeleting(true)
+    try {
+      await api.delete(`/api/staff/jobseekers/${id}`)
+      toast.success('Jobseeker account permanently deleted.')
+      queryClient.invalidateQueries({ queryKey: ['staff', 'jobseekers'] })
+      navigate(`${basePath}/jobseekers`)
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not delete this account.')
+    } finally {
+      setDeleting(false)
+      setConfirmDelete(false)
     }
   }
 
@@ -178,7 +203,7 @@ export default function StaffJobseekerDetail({ basePath = '/staff' }) {
               </div>
             </div>
             <div className="flex flex-col gap-2">
-              <Button size="sm" disabled={!canVerify} onClick={() => verify.mutate({ approve: true })}>
+              <Button size="sm" disabled={!canVerify} onClick={() => setConfirmVerify(true)}>
                 <ShieldCheck className="h-3.5 w-3.5" /> Verify Account
               </Button>
               {!profile.is_verified_by_staff && (
@@ -186,9 +211,14 @@ export default function StaffJobseekerDetail({ basePath = '/staff' }) {
                   <ShieldX className="h-3.5 w-3.5" /> Not Verified
                 </Button>
               )}
-              <Button size="sm" variant="secondary" onClick={() => toggleActive.mutate()}>
+              <Button size="sm" variant="secondary" onClick={() => setConfirmToggleActive(true)}>
                 {profile.is_active ? 'Deactivate Account' : 'Activate Account'}
               </Button>
+              {role === 'admin' && (
+                <Button size="sm" variant="danger" onClick={() => setConfirmDelete(true)}>
+                  <Trash2 className="h-3.5 w-3.5" /> Delete Permanently
+                </Button>
+              )}
               {profile.resume_url && (
                 <Button size="sm" variant="secondary" onClick={() => window.open(profile.resume_url, '_blank')}>
                   <FileText className="h-3.5 w-3.5" /> Resume
@@ -391,6 +421,42 @@ export default function StaffJobseekerDetail({ basePath = '/staff' }) {
           </pre>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmVerify}
+        onOpenChange={setConfirmVerify}
+        title="Verify this account?"
+        description="The jobseeker will be marked as verified by staff."
+        confirmLabel="Verify Account"
+        onConfirm={() => verify.mutate({ approve: true })}
+        loading={verify.isPending}
+      />
+
+      <ConfirmDialog
+        open={confirmToggleActive}
+        onOpenChange={setConfirmToggleActive}
+        title={profile.is_active ? 'Deactivate this account?' : 'Activate this account?'}
+        description={
+          profile.is_active
+            ? 'The jobseeker will immediately lose the ability to log in.'
+            : 'The jobseeker will be able to log in again.'
+        }
+        confirmLabel={profile.is_active ? 'Deactivate' : 'Activate'}
+        danger={profile.is_active}
+        onConfirm={() => toggleActive.mutate()}
+        loading={toggleActive.isPending}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete Account"
+        description="Are you sure you want to permanently delete this account? This action cannot be undone."
+        confirmLabel="Delete Permanently"
+        danger
+        onConfirm={deleteAccount}
+        loading={deleting}
+      />
     </motion.div>
   )
 }

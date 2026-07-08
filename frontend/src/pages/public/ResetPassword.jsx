@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 
 import { Button } from '../../components/ui/Button'
 import { Input, Label } from '../../components/ui/Input'
+import { PasswordInput } from '../../components/ui/PasswordInput'
 import { PasswordRequirements } from '../../components/ui/PasswordRequirements'
 import { formatCountdown, useCountdown } from '../../hooks/useCountdown'
 import api from '../../lib/axios'
@@ -78,9 +79,8 @@ export default function ResetPassword() {
         </div>
         <div>
           <Label htmlFor="new_password">New Password</Label>
-          <Input
+          <PasswordInput
             id="new_password"
-            type="password"
             value={form.new_password}
             onChange={(e) => setForm({ ...form, new_password: e.target.value })}
           />
@@ -88,9 +88,8 @@ export default function ResetPassword() {
         </div>
         <div>
           <Label htmlFor="confirm_password">Confirm New Password</Label>
-          <Input
+          <PasswordInput
             id="confirm_password"
-            type="password"
             value={form.confirm_password}
             onChange={(e) => setForm({ ...form, confirm_password: e.target.value })}
           />

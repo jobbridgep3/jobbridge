@@ -5,10 +5,11 @@ from models.audit import AuditTrail
 from utils.client_ip import get_client_ip
 
 
-def log_audit(user, action: str, module: str, record_id=None, details: str = None):
+def log_audit(user, action: str, module: str, record_id=None, details: str = None, status: str = "success"):
     """Append-only audit entry. Call from every significant mutating route.
 
     user: a User instance, or None for unauthenticated events (e.g. failed login).
+    status: "success" (default) or "failed".
     """
     try:
         entry = AuditTrail(
@@ -20,6 +21,7 @@ def log_audit(user, action: str, module: str, record_id=None, details: str = Non
             record_id=str(record_id) if record_id else None,
             ip_address=get_client_ip() if request else None,
             details=details,
+            status=status,
         )
         db.session.add(entry)
         db.session.commit()

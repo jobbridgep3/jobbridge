@@ -192,7 +192,7 @@ def login():
 
     user = User.query.filter_by(email=payload["email"]).first()
     if not user or not user.check_password(payload["password"]):
-        log_audit(None, "Login", "auth", None, f"Failed login attempt for {payload['email']}")
+        log_audit(None, "Login", "auth", None, f"Failed login attempt for {payload['email']}", status="failed")
         return fail("Invalid email or password.", 401)
     if not user.is_active:
         return fail("This account has been deactivated. Contact PESO staff.", 403)
