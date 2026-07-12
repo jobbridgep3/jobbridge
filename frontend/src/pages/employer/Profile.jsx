@@ -1,97 +1,137 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Link } from 'react-router-dom'
 
-import { Badge } from '../../components/ui/Badge'
+import { AddressCard } from '../../components/ui/AddressCard'
 import { Button } from '../../components/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
-import { Input, Label } from '../../components/ui/Input'
+import { CompletionChecklist } from '../../components/ui/CompletionChecklist'
 import { PageHeader } from '../../components/ui/PageHeader'
+import { ProgressBar } from '../../components/ui/ProgressBar'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
-import { sanitizeDigits } from '../../lib/utils'
+import { formatApiError } from '../../lib/utils'
+import { useAuthStore } from '../../store/authStore'
+import { ContactSection } from './hr-sections/ContactSection'
+import { DocumentsSection } from './hr-sections/DocumentsSection'
+import { EmergencyContactSection } from './hr-sections/EmergencyContactSection'
+import { EmploymentSection } from './hr-sections/EmploymentSection'
+import { PersonalSection } from './hr-sections/PersonalSection'
+import { computeCompletion, SECTION_LABELS } from './hr-sections/requiredFields'
 
 export default function EmployerProfile() {
   const queryClient = useQueryClient()
   const { data: profile, isLoading } = useQuery({
-    queryKey: ['employer', 'profile'],
+    queryKey: ['employer-profile'],
     queryFn: async () => (await api.get('/api/employer/profile')).data.data,
   })
-  const { data: company } = useQuery({
-    queryKey: ['company'],
-    queryFn: async () => (await api.get('/api/company')).data.data,
-  })
+
   const [form, setForm] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [uploadingPicture, setUploadingPicture] = useState(false)
+  const [uploadingDocType, setUploadingDocType] = useState(null)
 
   useEffect(() => {
     if (profile) setForm(profile)
   }, [profile])
 
+  const refreshFrom = (data) => {
+    setForm(data)
+    queryClient.setQueryData(['employer-profile'], data)
+  }
+
   const save = async () => {
     setSaving(true)
     try {
-      await api.put('/api/employer/profile', form)
+      const res = await api.put('/api/employer/profile', form)
       toast.success('Profile updated.')
-      queryClient.invalidateQueries({ queryKey: ['employer', 'profile'] })
+      refreshFrom(res.data.data)
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Could not save profile.')
+      toast.error(formatApiError(err, 'Could not save profile.'))
     } finally {
       setSaving(false)
     }
   }
 
+  const uploadPicture = async (file) => {
+    setUploadingPicture(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const res = await api.post('/api/employer/profile/picture', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      toast.success('Profile picture updated.')
+      refreshFrom(res.data.data)
+      useAuthStore.getState().updateUser({ profile_picture_url: res.data.data.profile_picture_url })
+    } catch {
+      toast.error('Could not upload profile picture.')
+    } finally {
+      setUploadingPicture(false)
+    }
+  }
+
+  const uploadDocument = async (documentType, file) => {
+    setUploadingDocType(documentType)
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('document_type', documentType)
+    try {
+      const res = await api.post('/api/employer/profile/documents', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      toast.success('Document uploaded for PESO Staff review.')
+      refreshFrom(res.data.data)
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not upload document.')
+    } finally {
+      setUploadingDocType(null)
+    }
+  }
+
+  const deleteDocument = async (documentId) => {
+    try {
+      const res = await api.delete(`/api/employer/profile/documents/${documentId}`)
+      toast.success('Document removed.')
+      refreshFrom(res.data.data)
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not remove document.')
+    }
+  }
+
+  const completion = useMemo(() => (form ? computeCompletion(form) : null), [form])
+  const missingKeys = useMemo(() => new Set((completion?.missingFields || []).map((f) => f.key)), [completion])
+
   if (isLoading || !form) return <CardSkeleton />
 
   return (
-    <motion.div {...fadeIn} className="mx-auto max-w-2xl space-y-4">
-      <PageHeader title="My Profile" description="HR contact person account settings." />
-      <Card>
-        <CardHeader>
-          <CardTitle>Contact Details</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label>HR Contact Name</Label>
-            <Input value={form.hr_contact_name || ''} onChange={(e) => setForm({ ...form, hr_contact_name: e.target.value })} />
-          </div>
-          <div>
-            <Label>Contact Number</Label>
-            <Input
-              value={form.contact_number || ''}
-              inputMode="numeric"
-              maxLength={15}
-              onChange={(e) => setForm({ ...form, contact_number: sanitizeDigits(e.target.value) })}
-            />
-          </div>
-          <div>
-            <Label>Email</Label>
-            <Input value={form.email || ''} disabled />
-          </div>
-          <div className="flex justify-end">
-            <Button onClick={save} disabled={saving}>
-              {saving ? 'Saving…' : 'Save Changes'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-slate-800">{company?.company_name || 'Company Profile'}</p>
-            <Badge variant={company?.verification_status === 'verified' ? 'success' : 'default'} className="mt-1 capitalize">
-              {company?.verification_status}
-            </Badge>
-          </div>
-          <Button variant="secondary" size="sm" asChild>
-            <Link to="/employer/company">Manage Company Profile</Link>
+    <motion.div {...fadeIn} className="space-y-6">
+      <PageHeader
+        title="My Profile"
+        description="Your own HR/employer account details — separate from the Company Profile."
+        actions={
+          <Button size="sm" onClick={save} disabled={saving}>
+            {saving ? 'Saving…' : 'Save Changes'}
           </Button>
-        </CardContent>
-      </Card>
+        }
+      />
+
+      <ProgressBar percent={completion.profileCompletion} />
+      <CompletionChecklist completion={completion} sectionLabels={SECTION_LABELS} />
+
+      <div id="section-personal">
+        <PersonalSection form={form} setForm={setForm} onUploadPicture={uploadPicture} uploadingPicture={uploadingPicture} missingKeys={missingKeys} />
+      </div>
+      <div id="section-contact">
+        <ContactSection form={form} setForm={setForm} companyEmail={form.email} missingKeys={missingKeys} />
+      </div>
+      <div id="section-employment">
+        <EmploymentSection form={form} setForm={setForm} missingKeys={missingKeys} />
+      </div>
+      <div id="section-address">
+        <AddressCard title="Address" form={form} setForm={setForm} missingKeys={missingKeys} />
+      </div>
+      <EmergencyContactSection form={form} setForm={setForm} />
+      <div id="section-documents">
+        <DocumentsSection form={form} onUploadDocument={uploadDocument} onDeleteDocument={deleteDocument} uploadingDocType={uploadingDocType} />
+      </div>
     </motion.div>
   )
 }

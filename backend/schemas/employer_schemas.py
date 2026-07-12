@@ -3,8 +3,11 @@ from datetime import date
 from marshmallow import Schema, ValidationError, fields, pre_load, validate, validates_schema
 
 from models.employer import BUSINESS_TYPES, COMPANY_SIZES, EMPLOYMENT_TYPES_OFFERED, HIRING_STATUSES, WORK_SETUPS
+from models.employer_hr import CIVIL_STATUSES, EMPLOYMENT_STATUSES, HR_ROLES
 from services import psgc_service
 from utils.validators import validate_contact_number
+
+GENDERS = ("Male", "Female", "Prefer not to say")
 
 URL_RE = validate.Regexp(r"^https?://", error="Must be a valid URL starting with http:// or https://")
 
@@ -84,6 +87,61 @@ class CompanyProfileSchema(Schema):
             data, "year_established", "num_employees", "company_size", "business_type", "hiring_status",
             "website", "facebook_url", "linkedin_url", "instagram_url", "x_url",
         )
+
+    @validates_schema
+    def _validate_address_codes(self, data, **kwargs):
+        if not psgc_service.validate_address(
+            region_code=data.get("region_code"), province_code=data.get("province_code"),
+            city_municipality_code=data.get("city_municipality_code"), barangay_code=data.get("barangay_code"),
+        ):
+            raise ValidationError("One or more address codes are not recognized PSGC codes.", field_name="region_code")
+
+
+class HRProfileSchema(Schema):
+    """Loaded with partial=True (PUT /api/employer/profile)."""
+
+    class Meta:
+        unknown = "exclude"
+
+    # Personal
+    full_name = fields.String(allow_none=True, validate=validate.Length(max=255))
+    gender = fields.String(allow_none=True, validate=validate.OneOf(GENDERS))
+    date_of_birth = fields.Date(allow_none=True)
+    civil_status = fields.String(allow_none=True, validate=validate.OneOf(CIVIL_STATUSES))
+    nationality = fields.String(allow_none=True, validate=validate.Length(max=100))
+
+    # Contact
+    personal_email = fields.Email(allow_none=True)
+    mobile_number = fields.String(allow_none=True, validate=validate_contact_number)
+    telephone_number = fields.String(allow_none=True, validate=validate_contact_number)
+
+    # Employment
+    employee_id = fields.String(allow_none=True, validate=validate.Length(max=50))
+    department = fields.String(allow_none=True, validate=validate.Length(max=150))
+    position = fields.String(allow_none=True, validate=validate.Length(max=150))
+    employment_status = fields.String(allow_none=True, validate=validate.OneOf(EMPLOYMENT_STATUSES))
+    hr_role = fields.String(allow_none=True, validate=validate.OneOf(HR_ROLES))
+
+    # Address
+    region_code = fields.String(allow_none=True)
+    region_name = fields.String(allow_none=True)
+    province_code = fields.String(allow_none=True)
+    province_name = fields.String(allow_none=True)
+    city_municipality_code = fields.String(allow_none=True)
+    city_municipality_name = fields.String(allow_none=True)
+    barangay_code = fields.String(allow_none=True)
+    barangay_name = fields.String(allow_none=True)
+    street_address = fields.String(allow_none=True, validate=validate.Length(max=255))
+    zip_code = fields.String(allow_none=True, validate=validate.Length(max=10))
+
+    # Emergency Contact (optional)
+    emergency_contact_name = fields.String(allow_none=True, validate=validate.Length(max=255))
+    emergency_contact_relationship = fields.String(allow_none=True, validate=validate.Length(max=100))
+    emergency_contact_number = fields.String(allow_none=True, validate=validate_contact_number)
+
+    @pre_load
+    def _clean(self, data, **kwargs):
+        return _blanks_to_none(data, "date_of_birth", "gender", "civil_status", "employment_status", "hr_role")
 
     @validates_schema
     def _validate_address_codes(self, data, **kwargs):

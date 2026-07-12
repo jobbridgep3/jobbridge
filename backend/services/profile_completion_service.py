@@ -89,6 +89,35 @@ COMPANY_REQUIRED_FIELDS = [
 ]
 
 
+def _hr_doc_types(profile):
+    return {d.document_type for d in profile.documents}
+
+
+# Mirrors frontend/src/pages/employer/hr-sections/requiredFields.js — keep in sync.
+HR_REQUIRED_FIELDS = [
+    ("full_name", "personal", "Full Name", lambda p: bool(p.full_name)),
+    ("gender", "personal", "Gender", lambda p: bool(p.gender)),
+    ("date_of_birth", "personal", "Birthday", lambda p: bool(p.date_of_birth)),
+    ("civil_status", "personal", "Civil Status", lambda p: bool(p.civil_status)),
+    ("nationality", "personal", "Nationality", lambda p: bool(p.nationality)),
+    ("personal_email", "contact", "Personal Email", lambda p: bool(p.personal_email)),
+    ("mobile_number", "contact", "Mobile Number", lambda p: bool(p.mobile_number)),
+    ("employee_id", "employment", "Employee ID", lambda p: bool(p.employee_id)),
+    ("department", "employment", "Department", lambda p: bool(p.department)),
+    ("position", "employment", "Position", lambda p: bool(p.position)),
+    ("employment_status", "employment", "Employment Status", lambda p: bool(p.employment_status)),
+    ("hr_role", "employment", "HR Role", lambda p: bool(p.hr_role)),
+    ("region_code", "address", "Region", lambda p: bool(p.region_code)),
+    ("province_code", "address", "Province", lambda p: bool(p.province_code)),
+    ("city_municipality_code", "address", "City / Municipality", lambda p: bool(p.city_municipality_code)),
+    ("barangay_code", "address", "Barangay", lambda p: bool(p.barangay_code)),
+    ("street_address", "address", "Street Address", lambda p: bool(p.street_address)),
+    ("government_id", "documents", "Government ID", lambda p: "government_id" in _hr_doc_types(p)),
+    ("company_id", "documents", "Company ID", lambda p: "company_id" in _hr_doc_types(p)),
+    ("authorization_letter", "documents", "Authorization Letter", lambda p: "authorization_letter" in _hr_doc_types(p)),
+]
+
+
 def compute_completion(profile, required_fields=None) -> dict:
     """Returns {"profile_completion": int, "completed_count": int, "total_count": int,
     "missing_fields": [{"key","section","label"}, ...]}.

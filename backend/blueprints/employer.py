@@ -5,18 +5,18 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 from extensions import db
 from models.application import Application
 from models.employer import COMPANY_DOCUMENT_TYPES, COMPANY_MANDATORY_DOCUMENT_TYPES, EmployerCompany, EmployerCompanyDocument
+from models.employer_hr import HR_DOCUMENT_TYPES, EmployerHRDocument, EmployerHRProfile
 from models.interview import Interview
 from models.jobseeker import JobseekerProfile
 from models.user import User
 from models.vacancy import Vacancy
-from schemas.employer_schemas import CompanyProfileSchema
+from schemas.employer_schemas import CompanyProfileSchema, HRProfileSchema
 from services.audit_service import log_audit
 from services.matching_service import rank_jobseekers_for_vacancy
 from services.notification_service import notify_role, notify_user
-from services.profile_completion_service import COMPANY_REQUIRED_FIELDS, compute_completion
+from services.profile_completion_service import COMPANY_REQUIRED_FIELDS, HR_REQUIRED_FIELDS, compute_completion
 from utils.decorators import role_required
 from utils.responses import fail, ok
-from utils.validators import CONTACT_NUMBER_RE
 
 employer_bp = Blueprint("employer", __name__, url_prefix="/api/employer")
 company_bp = Blueprint("company", __name__, url_prefix="/api/company")
@@ -26,6 +26,10 @@ applicants_bp = Blueprint("applicants", __name__, url_prefix="/api/applicants")
 
 def _company() -> EmployerCompany:
     return EmployerCompany.query.filter_by(user_id=get_jwt_identity()).first()
+
+
+def _hr_profile() -> EmployerHRProfile:
+    return EmployerHRProfile.query.filter_by(user_id=get_jwt_identity()).first()
 
 
 # ---------- Dashboard / Profile ----------
@@ -51,27 +55,109 @@ def dashboard_stats():
 @jwt_required()
 @role_required("employer")
 def get_employer_profile():
-    company = _company()
-    if not company:
-        return fail("Company profile not found.", 404)
-    return ok(company.to_dict(include_email=User.query.get(company.user_id).email))
+    profile = _hr_profile()
+    if not profile:
+        return fail("HR profile not found.", 404)
+    return ok(profile.to_dict(include_email=User.query.get(profile.user_id).email))
 
 
 @employer_bp.put("/profile")
 @jwt_required()
 @role_required("employer")
 def update_employer_profile():
-    company = _company()
-    if not company:
-        return fail("Company profile not found.", 404)
-    data = request.get_json(force=True) or {}
-    if data.get("contact_number") and not CONTACT_NUMBER_RE.match(data["contact_number"]):
-        return fail("Contact number must contain digits only (7-15 digits).", 400)
-    for field in ("hr_contact_name", "contact_number"):
-        if field in data:
-            setattr(company, field, data[field])
+    profile = _hr_profile()
+    if not profile:
+        return fail("HR profile not found.", 404)
+    try:
+        data = HRProfileSchema().load(request.get_json(force=True) or {}, partial=True)
+    except ValidationError as err:
+        return fail("Invalid profile data.", 400, err.messages)
+
+    before = {field: getattr(profile, field) for field in data}
+    for field, value in data.items():
+        setattr(profile, field, value)
+    after = {field: getattr(profile, field) for field in data}
     db.session.commit()
-    return ok(company.to_dict(), "Profile updated.")
+    log_audit(User.query.get(profile.user_id), "Update", "employer_profile", profile.id, before=before, after=after)
+    return ok(profile.to_dict(), "Profile updated.")
+
+
+@employer_bp.post("/profile/picture")
+@jwt_required()
+@role_required("employer")
+def upload_hr_picture():
+    from services.storage_service import upload_file, validate_upload_file
+
+    profile = _hr_profile()
+    if not profile:
+        return fail("HR profile not found.", 404)
+    if "file" not in request.files:
+        return fail("No file uploaded.", 400)
+    file = request.files["file"]
+    file_bytes = file.read()
+    error = validate_upload_file(file_bytes, file.filename)
+    if error:
+        return fail(error, 400)
+
+    profile.profile_picture_url = upload_file(
+        file_bytes, file.filename, folder=f"hr-profile-pictures/{profile.id}", content_type=file.mimetype
+    )
+    db.session.commit()
+    log_audit(User.query.get(profile.user_id), "Update", "employer_profile", profile.id, "Profile picture uploaded")
+    return ok(profile.to_dict(), "Profile picture updated.")
+
+
+@employer_bp.post("/profile/documents")
+@jwt_required()
+@role_required("employer")
+def upload_hr_document():
+    from services.storage_service import upload_file, validate_upload_file
+
+    profile = _hr_profile()
+    if not profile:
+        return fail("HR profile not found.", 404)
+    if "file" not in request.files:
+        return fail("No file uploaded.", 400)
+
+    document_type = request.form.get("document_type")
+    if document_type not in HR_DOCUMENT_TYPES:
+        return fail("Invalid document type.", 400)
+
+    file = request.files["file"]
+    file_bytes = file.read()
+    error = validate_upload_file(file_bytes, file.filename)
+    if error:
+        return fail(error, 400)
+
+    file_url = upload_file(
+        file_bytes, file.filename, folder=f"hr-docs/{profile.id}/{document_type}", content_type=file.mimetype
+    )
+    EmployerHRDocument.query.filter_by(employer_hr_profile_id=profile.id, document_type=document_type).delete()
+    db.session.add(EmployerHRDocument(
+        employer_hr_profile_id=profile.id, document_type=document_type, file_url=file_url,
+        original_filename=file.filename, status="pending_review",
+    ))
+    db.session.commit()
+    log_audit(User.query.get(profile.user_id), "Update", "employer_profile", profile.id, f"Document uploaded: {document_type}")
+    return ok(profile.to_dict(), "Document uploaded for PESO Staff review.")
+
+
+@employer_bp.delete("/profile/documents/<document_id>")
+@jwt_required()
+@role_required("employer")
+def delete_hr_document(document_id):
+    profile = _hr_profile()
+    if not profile:
+        return fail("HR profile not found.", 404)
+    document = EmployerHRDocument.query.filter_by(id=document_id, employer_hr_profile_id=profile.id).first()
+    if not document:
+        return fail("Document not found.", 404)
+
+    document_type = document.document_type
+    db.session.delete(document)
+    db.session.commit()
+    log_audit(User.query.get(profile.user_id), "Update", "employer_profile", profile.id, f"Document removed: {document_type}")
+    return ok(profile.to_dict(), "Document removed.")
 
 
 # ---------- Company Profile ----------

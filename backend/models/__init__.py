@@ -4,6 +4,7 @@ from models.announcement import Announcement
 from models.application import Application
 from models.audit import AuditTrail
 from models.employer import EmployerCompany, EmployerCompanyDocument
+from models.employer_hr import EmployerHRDocument, EmployerHRProfile
 from models.employment import EmploymentRecord
 from models.interview import Interview
 from models.jobfair import JobFair, JobFairBooth, JobFairRegistration
@@ -26,6 +27,8 @@ __all__ = [
     "JobseekerDocument",
     "EmployerCompany",
     "EmployerCompanyDocument",
+    "EmployerHRProfile",
+    "EmployerHRDocument",
     "Vacancy",
     "Application",
     "Interview",

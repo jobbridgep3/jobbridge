@@ -50,8 +50,6 @@ class EmployerCompany(BaseModel):
     __tablename__ = "employer_companies"
 
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), unique=True, nullable=False)
-    hr_contact_name = db.Column(db.String(255), nullable=False, default="")
-    contact_number = db.Column(db.String(30), nullable=True)
 
     # Basic Information
     company_name = db.Column(db.String(255), nullable=True)
@@ -65,6 +63,7 @@ class EmployerCompany(BaseModel):
     company_size = db.Column(db.String(20), nullable=True)
     website = db.Column(db.String(255), nullable=True)
     company_email = db.Column(db.String(255), nullable=True)
+    contact_number = db.Column(db.String(30), nullable=True)
     alt_contact_number = db.Column(db.String(30), nullable=True)
     logo_url = db.Column(db.String(1000), nullable=True)
 
@@ -144,8 +143,6 @@ class EmployerCompany(BaseModel):
             "id": str(self.id),
             "user_id": str(self.user_id),
             "email": include_email,
-            "hr_contact_name": self.hr_contact_name,
-            "contact_number": self.contact_number,
             "company_name": self.company_name,
             "trade_name": self.trade_name,
             "business_type": self.business_type,
@@ -157,6 +154,7 @@ class EmployerCompany(BaseModel):
             "company_size": self.company_size,
             "website": self.website,
             "company_email": self.company_email,
+            "contact_number": self.contact_number,
             "alt_contact_number": self.alt_contact_number,
             "logo_url": self.logo_url,
             "business_permit_no": self.business_permit_no,

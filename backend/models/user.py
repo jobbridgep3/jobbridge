@@ -23,6 +23,9 @@ class User(BaseModel):
     employer_company = db.relationship(
         "EmployerCompany", back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
+    employer_hr_profile = db.relationship(
+        "EmployerHRProfile", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
 
     __table_args__ = (db.CheckConstraint(f"role IN {ROLES}", name="ck_users_role"),)
 
@@ -40,5 +43,9 @@ class User(BaseModel):
             "is_verified": self.is_verified,
             "is_active": self.is_active,
             "must_change_password": self.must_change_password,
-            "profile_picture_url": self.jobseeker_profile.profile_picture_url if self.jobseeker_profile else None,
+            "profile_picture_url": (
+                self.jobseeker_profile.profile_picture_url if self.jobseeker_profile
+                else self.employer_hr_profile.profile_picture_url if self.employer_hr_profile
+                else None
+            ),
         }

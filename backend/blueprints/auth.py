@@ -8,6 +8,7 @@ from marshmallow import ValidationError
 
 from extensions import db, limiter
 from models.employer import EmployerCompany
+from models.employer_hr import EmployerHRProfile
 from models.jobseeker import JobseekerProfile
 from models.otp import OtpCode
 from models.user import User
@@ -109,12 +110,16 @@ def register():
         )
         db.session.add(profile)
     else:
-        company = EmployerCompany(
-            user_id=user.id,
-            hr_contact_name=payload.get("hr_contact_name") or payload["full_name"],
-            contact_number=payload.get("contact_number") or "",
-        )
+        company = EmployerCompany(user_id=user.id)
         db.session.add(company)
+        db.session.flush()
+        hr_profile = EmployerHRProfile(
+            user_id=user.id,
+            employer_company_id=company.id,
+            full_name=payload.get("hr_contact_name") or payload["full_name"],
+            mobile_number=payload.get("contact_number") or "",
+        )
+        db.session.add(hr_profile)
 
     db.session.commit()
     ttl_seconds = _issue_otp(user, "register")

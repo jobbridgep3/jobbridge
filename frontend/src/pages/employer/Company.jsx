@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 
+import { AddressCard } from '../../components/ui/AddressCard'
 import { Button } from '../../components/ui/Button'
 import { CompletionChecklist } from '../../components/ui/CompletionChecklist'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
@@ -13,7 +14,6 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
 import { formatApiError } from '../../lib/utils'
-import { AddressSection } from './company-sections/AddressSection'
 import { BasicInfoSection } from './company-sections/BasicInfoSection'
 import { BusinessRegistrationSection } from './company-sections/BusinessRegistrationSection'
 import { DocumentsSection } from './company-sections/DocumentsSection'
@@ -178,7 +178,7 @@ export default function EmployerCompany() {
         <BusinessRegistrationSection form={form} setForm={setForm} missingKeys={missingKeys} />
       </div>
       <div id="section-address">
-        <AddressSection form={form} setForm={setForm} missingKeys={missingKeys} />
+        <AddressCard title="Company Address" form={form} setForm={setForm} missingKeys={missingKeys} />
       </div>
       <div id="section-representative">
         <RepresentativeSection form={form} setForm={setForm} onUploadSignature={uploadSignature} uploadingSignature={uploadingSignature} missingKeys={missingKeys} />
