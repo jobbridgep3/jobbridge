@@ -9,14 +9,17 @@ from models.employer_hr import HR_DOCUMENT_TYPES, EmployerHRDocument, EmployerHR
 from models.interview import Interview
 from models.jobseeker import JobseekerProfile
 from models.user import User
-from models.vacancy import Vacancy
+from models.vacancy import Vacancy, VacancyCategory, VacancyScreeningQuestion
 from schemas.employer_schemas import CompanyProfileSchema, HRProfileSchema
+from schemas.vacancy_schemas import VacancyWriteSchema
 from services.audit_service import log_audit
 from services.matching_service import rank_jobseekers_for_vacancy
 from services.notification_service import notify_role, notify_user
 from services.profile_completion_service import COMPANY_REQUIRED_FIELDS, HR_REQUIRED_FIELDS, compute_completion
+from services.vacancy_state_service import can_transition
 from utils.decorators import role_required
 from utils.responses import fail, ok
+from utils.timezone import now_manila
 
 employer_bp = Blueprint("employer", __name__, url_prefix="/api/employer")
 company_bp = Blueprint("company", __name__, url_prefix="/api/company")
@@ -43,7 +46,7 @@ def dashboard_stats():
     if not company:
         return fail("Company profile not found.", 404)
     vacancy_ids = [v.id for v in Vacancy.query.filter_by(employer_company_id=company.id).all()]
-    active_count = Vacancy.query.filter_by(employer_company_id=company.id, status="active").count()
+    active_count = Vacancy.query.filter_by(employer_company_id=company.id, status="published").count()
     applicant_count = Application.query.filter(Application.vacancy_id.in_(vacancy_ids)).count() if vacancy_ids else 0
     return ok({
         "active_vacancies": active_count,
@@ -442,6 +445,60 @@ def submit_accreditation():
 
 # ---------- Vacancy Management ----------
 
+# Fields whose change on an approved/published vacancy is significant enough to
+# force a re-review — everything else (contact person, additional info, screening
+# questions) can be edited freely post-approval with no status change.
+CORE_VACANCY_FIELDS = (
+    "title", "summary", "responsibilities", "daily_tasks", "description", "requirements",
+    "required_skills", "education_level", "min_experience_years", "salary_min", "salary_max", "num_slots",
+)
+
+
+def _apply_vacancy_fields(vacancy, data):
+    from utils.html_sanitizer import sanitize_html
+
+    for field in (
+        "title", "category_id", "industry", "department", "vacancy_no", "num_slots", "job_type",
+        "work_arrangement", "schedule", "education_level", "course", "min_experience_years", "fresh_grad_ok",
+        "required_skills", "required_certifications", "salary_min", "salary_max", "hide_salary", "benefits",
+        "work_location", "region_code", "region_name", "province_code", "province_name",
+        "city_municipality_code", "city_municipality_name", "barangay_code", "barangay_name",
+        "street_address", "zip_code", "posting_date", "application_deadline", "expected_start_date",
+        "pref_age_min", "pref_age_max", "pref_gender", "pref_civil_status", "pref_languages",
+        "fresh_grad_friendly", "pwd_friendly", "senior_citizen_friendly", "ofw_friendly",
+        "required_applicant_documents", "contact_name", "contact_email", "contact_number",
+        "culture_description", "career_growth_description", "additional_notes", "description", "requirements",
+    ):
+        if field in data:
+            setattr(vacancy, field, data[field])
+
+    for field in ("summary", "responsibilities", "daily_tasks"):
+        if field in data:
+            setattr(vacancy, field, sanitize_html(data[field]))
+
+    if "required_skills" in data:
+        vacancy.skills_required = ", ".join(data["required_skills"] or [])
+
+    if "screening_questions" in data:
+        VacancyScreeningQuestion.query.filter_by(vacancy_id=vacancy.id).delete()
+        for i, q in enumerate(data["screening_questions"] or []):
+            db.session.add(VacancyScreeningQuestion(
+                vacancy_id=vacancy.id, question_text=q["question_text"], question_type=q.get("question_type", "text"),
+                options=q.get("options"), is_required=q.get("is_required", True), display_order=q.get("display_order", i),
+            ))
+
+
+@vacancies_bp.get("/<vacancy_id>")
+@jwt_required()
+@role_required("employer")
+def get_my_vacancy(vacancy_id):
+    company = _company()
+    vacancy = Vacancy.query.get(vacancy_id)
+    if not vacancy or not company or vacancy.employer_company_id != company.id or vacancy.deleted_at:
+        return fail("Vacancy not found.", 404)
+    return ok(vacancy.to_dict())
+
+
 @vacancies_bp.get("/my")
 @jwt_required()
 @role_required("employer")
@@ -449,42 +506,66 @@ def my_vacancies():
     company = _company()
     if not company:
         return ok([])
-    vacancies = Vacancy.query.filter_by(employer_company_id=company.id).order_by(Vacancy.created_at.desc()).all()
+    vacancies = (
+        Vacancy.query.filter_by(employer_company_id=company.id, is_template=False)
+        .filter(Vacancy.deleted_at.is_(None))
+        .order_by(Vacancy.created_at.desc()).all()
+    )
     return ok([v.to_dict() for v in vacancies])
+
+
+@vacancies_bp.get("/templates")
+@jwt_required()
+@role_required("employer")
+def list_vacancy_templates():
+    company = _company()
+    if not company:
+        return ok([])
+    templates = Vacancy.query.filter_by(employer_company_id=company.id, is_template=True).order_by(Vacancy.created_at.desc()).all()
+    return ok([v.to_dict() for v in templates])
+
+
+@vacancies_bp.get("/categories")
+@jwt_required()
+def list_vacancy_categories():
+    categories = VacancyCategory.query.filter_by(is_active=True).order_by(VacancyCategory.name).all()
+    return ok([c.to_dict() for c in categories])
+
+
+@vacancies_bp.post("/suggest-skills")
+@jwt_required()
+@role_required("employer")
+def suggest_skills():
+    from services.nlp_service import SKILL_KEYWORDS
+
+    data = request.get_json(force=True) or {}
+    text = " ".join(filter(None, [data.get("description", ""), data.get("summary", ""), data.get("responsibilities", "")])).lower()
+    matched = [kw.title() for kw in SKILL_KEYWORDS if kw in text]
+    return ok({"suggested_skills": matched})
 
 
 @vacancies_bp.post("")
 @jwt_required()
 @role_required("employer")
 def create_vacancy():
+    """Save Draft — no accreditation gate here; only Submit for Approval requires
+    the company to be accredited (drafting is allowed while awaiting review)."""
     company = _company()
     if not company:
         return fail("Complete your company profile before posting a vacancy.", 400)
-    if company.accreditation_status != "accredited":
-        return fail("Your company must be accredited by PESO/Admin before posting vacancies.", 403)
-    data = request.get_json(force=True) or {}
-    if not data.get("title"):
-        return fail("Job title is required.", 400)
 
-    vacancy = Vacancy(
-        employer_company_id=company.id,
-        title=data["title"],
-        description=data.get("description", ""),
-        requirements=data.get("requirements"),
-        skills_required=data.get("skills_required"),
-        salary_min=data.get("salary_min"),
-        salary_max=data.get("salary_max"),
-        job_type=data.get("job_type"),
-        industry=data.get("industry"),
-        num_slots=data.get("num_slots", 1),
-        work_location=data.get("work_location"),
-        status="pending",
-    )
+    try:
+        data = VacancyWriteSchema().load(request.get_json(force=True) or {}, partial=True)
+    except ValidationError as err:
+        return fail("Invalid vacancy data.", 400, err.messages)
+
+    vacancy = Vacancy(employer_company_id=company.id, title=data.get("title") or "", status="draft")
     db.session.add(vacancy)
+    db.session.flush()
+    _apply_vacancy_fields(vacancy, data)
     db.session.commit()
-    log_audit(User.query.get(company.user_id), "Create", "vacancies", vacancy.id)
-    notify_role("staff", "vacancy:submitted", {"vacancy_id": str(vacancy.id), "title": vacancy.title})
-    return ok(vacancy.to_dict(), "Vacancy submitted for PESO Staff approval.", 201)
+    log_audit(User.query.get(company.user_id), "Create", "vacancies", vacancy.id, "Draft saved")
+    return ok(vacancy.to_dict(), "Draft saved.", 201)
 
 
 @vacancies_bp.put("/<vacancy_id>")
@@ -493,32 +574,198 @@ def create_vacancy():
 def update_vacancy(vacancy_id):
     company = _company()
     vacancy = Vacancy.query.get(vacancy_id)
-    if not vacancy or not company or vacancy.employer_company_id != company.id:
+    if not vacancy or not company or vacancy.employer_company_id != company.id or vacancy.deleted_at:
         return fail("Vacancy not found.", 404)
-    if vacancy.status not in ("pending", "active"):
-        return fail("This vacancy can no longer be edited.", 400)
+    if vacancy.status in ("closed", "filled", "suspended"):
+        return fail(f"This vacancy can no longer be edited (status: {vacancy.status}).", 400)
 
-    data = request.get_json(force=True) or {}
-    for field in ("title", "description", "requirements", "skills_required", "salary_min", "salary_max",
-                  "job_type", "industry", "num_slots", "work_location"):
-        if field in data:
-            setattr(vacancy, field, data[field])
+    try:
+        data = VacancyWriteSchema().load(request.get_json(force=True) or {}, partial=True)
+    except ValidationError as err:
+        return fail("Invalid vacancy data.", 400, err.messages)
+
+    before = {"status": vacancy.status}
+    core_field_changed = any(
+        field in data and str(getattr(vacancy, field)) != str(data[field]) for field in CORE_VACANCY_FIELDS
+    )
+    _apply_vacancy_fields(vacancy, data)
+
+    reverted_to_pending = False
+    if core_field_changed and vacancy.status in ("approved", "published"):
+        vacancy.status = "pending"
+        reverted_to_pending = True
+
     db.session.commit()
-    return ok(vacancy.to_dict(), "Vacancy updated.")
+    if reverted_to_pending:
+        notify_role("staff", "vacancy:submitted", {"vacancy_id": str(vacancy.id), "title": vacancy.title})
+    log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, before=before, after={"status": vacancy.status})
+    message = "Vacancy updated. Core changes require re-approval." if reverted_to_pending else "Vacancy updated."
+    return ok(vacancy.to_dict(), message)
 
 
-@vacancies_bp.delete("/<vacancy_id>")
+@vacancies_bp.post("/<vacancy_id>/submit")
+@jwt_required()
+@role_required("employer")
+def submit_vacancy(vacancy_id):
+    company = _company()
+    vacancy = Vacancy.query.get(vacancy_id)
+    if not vacancy or not company or vacancy.employer_company_id != company.id or vacancy.deleted_at:
+        return fail("Vacancy not found.", 404)
+    if not can_transition(vacancy.status, "pending", "employer"):
+        return fail(f"Cannot submit a vacancy from status '{vacancy.status}'.", 400)
+    if company.accreditation_status != "accredited":
+        return fail("Your company must be accredited by PESO/Admin before submitting vacancies for approval.", 403)
+    if not vacancy.title:
+        return fail("Job title is required before submitting.", 400)
+
+    before = {"status": vacancy.status}
+    vacancy.status = "pending"
+    vacancy.submitted_at = now_manila()
+    db.session.commit()
+    notify_role("staff", "vacancy:submitted", {"vacancy_id": str(vacancy.id), "title": vacancy.title})
+    log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, "Submitted for approval", before=before, after={"status": vacancy.status})
+    return ok(vacancy.to_dict(), "Vacancy submitted for PESO Staff approval.")
+
+
+@vacancies_bp.post("/<vacancy_id>/publish")
+@jwt_required()
+@role_required("employer")
+def publish_vacancy(vacancy_id):
+    company = _company()
+    vacancy = Vacancy.query.get(vacancy_id)
+    if not vacancy or not company or vacancy.employer_company_id != company.id or vacancy.deleted_at:
+        return fail("Vacancy not found.", 404)
+    if not can_transition(vacancy.status, "published", "employer"):
+        return fail(f"Cannot publish a vacancy from status '{vacancy.status}'.", 400)
+
+    before = {"status": vacancy.status}
+    vacancy.status = "published"
+    vacancy.published_at = now_manila()
+    db.session.commit()
+    log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, "Published", before=before, after={"status": vacancy.status})
+    return ok(vacancy.to_dict(), "Vacancy published.")
+
+
+@vacancies_bp.post("/<vacancy_id>/close")
 @jwt_required()
 @role_required("employer")
 def close_vacancy(vacancy_id):
     company = _company()
     vacancy = Vacancy.query.get(vacancy_id)
-    if not vacancy or not company or vacancy.employer_company_id != company.id:
+    if not vacancy or not company or vacancy.employer_company_id != company.id or vacancy.deleted_at:
         return fail("Vacancy not found.", 404)
+    if not can_transition(vacancy.status, "closed", "employer"):
+        return fail(f"Cannot close a vacancy from status '{vacancy.status}'.", 400)
+
+    before = {"status": vacancy.status}
     vacancy.status = "closed"
     db.session.commit()
-    log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, "Closed")
-    return ok(message="Vacancy closed.")
+    log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, "Closed", before=before, after={"status": vacancy.status})
+    return ok(vacancy.to_dict(), "Vacancy closed.")
+
+
+@vacancies_bp.post("/<vacancy_id>/reopen")
+@jwt_required()
+@role_required("employer")
+def reopen_vacancy(vacancy_id):
+    company = _company()
+    vacancy = Vacancy.query.get(vacancy_id)
+    if not vacancy or not company or vacancy.employer_company_id != company.id or vacancy.deleted_at:
+        return fail("Vacancy not found.", 404)
+    if not can_transition(vacancy.status, "published", "employer"):
+        return fail(f"Cannot reopen a vacancy from status '{vacancy.status}'.", 400)
+    if company.accreditation_status != "accredited":
+        return fail("Your company must be accredited by PESO/Admin to reopen vacancies.", 403)
+
+    before = {"status": vacancy.status}
+    vacancy.status = "published"
+    db.session.commit()
+    log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, "Reopened", before=before, after={"status": vacancy.status})
+    return ok(vacancy.to_dict(), "Vacancy reopened.")
+
+
+@vacancies_bp.post("/<vacancy_id>/mark-filled")
+@jwt_required()
+@role_required("employer")
+def mark_vacancy_filled(vacancy_id):
+    company = _company()
+    vacancy = Vacancy.query.get(vacancy_id)
+    if not vacancy or not company or vacancy.employer_company_id != company.id or vacancy.deleted_at:
+        return fail("Vacancy not found.", 404)
+    if not can_transition(vacancy.status, "filled", "employer"):
+        return fail(f"Cannot mark a vacancy filled from status '{vacancy.status}'.", 400)
+
+    before = {"status": vacancy.status}
+    vacancy.status = "filled"
+    vacancy.filled_at = now_manila()
+    db.session.commit()
+    log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, "Marked filled", before=before, after={"status": vacancy.status})
+    return ok(vacancy.to_dict(), "Vacancy marked as filled.")
+
+
+@vacancies_bp.delete("/<vacancy_id>")
+@jwt_required()
+@role_required("employer")
+def delete_vacancy(vacancy_id):
+    company = _company()
+    vacancy = Vacancy.query.get(vacancy_id)
+    if not vacancy or not company or vacancy.employer_company_id != company.id or vacancy.deleted_at:
+        return fail("Vacancy not found.", 404)
+    if vacancy.status != "draft":
+        return fail("Only draft vacancies can be deleted. Close a published vacancy instead.", 400)
+    if Application.query.filter_by(vacancy_id=vacancy.id).count() > 0:
+        return fail("This vacancy already has applicants and cannot be deleted.", 400)
+
+    db.session.delete(vacancy)
+    db.session.commit()
+    log_audit(User.query.get(company.user_id), "Delete", "vacancies", vacancy_id, "Draft deleted")
+    return ok(message="Draft vacancy deleted.")
+
+
+@vacancies_bp.post("/<vacancy_id>/duplicate")
+@jwt_required()
+@role_required("employer")
+def duplicate_vacancy(vacancy_id):
+    company = _company()
+    original = Vacancy.query.get(vacancy_id)
+    if not original or not company or original.employer_company_id != company.id:
+        return fail("Vacancy not found.", 404)
+
+    copy_fields = {c.name: getattr(original, c.name) for c in Vacancy.__table__.columns if c.name not in (
+        "id", "created_at", "updated_at", "status", "title", "approved_by", "approved_at", "published_at", "filled_at",
+        "submitted_at", "deleted_at", "rejection_remarks", "suspended_reason", "is_template", "template_name",
+        "duplicated_from_id",
+    )}
+    duplicate = Vacancy(**copy_fields, status="draft", title=f"{original.title} (Copy)", duplicated_from_id=original.id)
+    db.session.add(duplicate)
+    db.session.commit()
+    log_audit(User.query.get(company.user_id), "Create", "vacancies", duplicate.id, f"Duplicated from {original.id}")
+    return ok(duplicate.to_dict(), "Vacancy duplicated as a new draft.", 201)
+
+
+@vacancies_bp.post("/<vacancy_id>/save-template")
+@jwt_required()
+@role_required("employer")
+def save_vacancy_template(vacancy_id):
+    company = _company()
+    original = Vacancy.query.get(vacancy_id)
+    if not original or not company or original.employer_company_id != company.id:
+        return fail("Vacancy not found.", 404)
+    data = request.get_json(force=True) or {}
+    template_name = data.get("template_name")
+    if not template_name:
+        return fail("A template name is required.", 400)
+
+    copy_fields = {c.name: getattr(original, c.name) for c in Vacancy.__table__.columns if c.name not in (
+        "id", "created_at", "updated_at", "status", "approved_by", "approved_at", "published_at", "filled_at",
+        "submitted_at", "deleted_at", "rejection_remarks", "suspended_reason", "is_template", "template_name",
+        "duplicated_from_id",
+    )}
+    template = Vacancy(**copy_fields, status="draft", is_template=True, template_name=template_name)
+    db.session.add(template)
+    db.session.commit()
+    log_audit(User.query.get(company.user_id), "Create", "vacancies", template.id, f"Saved as template: {template_name}")
+    return ok(template.to_dict(), "Saved as template.", 201)
 
 
 @vacancies_bp.get("/<vacancy_id>/matched-jobseekers")

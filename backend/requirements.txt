@@ -32,3 +32,4 @@ google-cloud-vision==3.7.4
 google-cloud-dialogflow==2.32.0
 phonenumbers==9.0.34
 dateparser==1.4.1
+bleach==6.4.0

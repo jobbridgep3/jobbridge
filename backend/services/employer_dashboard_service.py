@@ -63,7 +63,7 @@ def build_summary(company) -> dict:
     )
 
     return {
-        "active_vacancies": Vacancy.query.filter_by(employer_company_id=company.id, status="active").count(),
+        "active_vacancies": Vacancy.query.filter_by(employer_company_id=company.id, status="published").count(),
         "total_applicants": total_applicants,
         "new_applicants_today": new_applicants_today,
         "scheduled_interviews": scheduled_interviews,

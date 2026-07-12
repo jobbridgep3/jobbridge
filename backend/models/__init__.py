@@ -16,7 +16,7 @@ from models.referral import ReferralLetter
 from models.settings import SystemSetting
 from models.training import TrainingEnrollment, TrainingProgram
 from models.user import User
-from models.vacancy import Vacancy
+from models.vacancy import Vacancy, VacancyCategory, VacancyScreeningQuestion
 
 __all__ = [
     "User",
@@ -30,6 +30,8 @@ __all__ = [
     "EmployerHRProfile",
     "EmployerHRDocument",
     "Vacancy",
+    "VacancyCategory",
+    "VacancyScreeningQuestion",
     "Application",
     "Interview",
     "EmploymentRecord",

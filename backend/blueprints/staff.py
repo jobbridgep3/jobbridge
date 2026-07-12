@@ -26,6 +26,7 @@ from services.pdf_service import generate_referral_letter, generate_table_report
 from services.profile_service import apply_document_upload, apply_profile_update, find_document
 from services.storage_service import upload_file
 from services.user_deletion_service import employer_dependent_counts, jobseeker_dependent_counts
+from services.vacancy_state_service import can_transition
 from sockets.events import emit_to_role
 from utils.decorators import role_required
 from utils.pagination import paginate
@@ -44,7 +45,7 @@ def dashboard_stats():
     return ok({
         "total_jobseekers": JobseekerProfile.query.count(),
         "total_employers": EmployerCompany.query.count(),
-        "active_vacancies": Vacancy.query.filter_by(status="active").count(),
+        "active_vacancies": Vacancy.query.filter_by(status="published").count(),
         "placements_this_month": EmploymentRecord.query.filter(
             EmploymentRecord.start_date >= datetime.utcnow().replace(day=1).date()
         ).count(),
@@ -608,14 +609,19 @@ def approve_vacancy(vacancy_id):
     vacancy = Vacancy.query.get(vacancy_id)
     if not vacancy:
         return fail("Vacancy not found.", 404)
-    vacancy.status = "active"
+    if not can_transition(vacancy.status, "approved", "staff"):
+        return fail(f"Cannot approve a vacancy from status '{vacancy.status}'.", 400)
+
+    before = {"status": vacancy.status}
+    vacancy.status = "approved"
     vacancy.approved_by = get_jwt_identity()
-    vacancy.approved_at = datetime.utcnow()
+    vacancy.approved_at = now_manila()
+    after = {"status": vacancy.status}
     db.session.commit()
     notify_user(vacancy.employer_company.user_id, "vacancy_approved", "Vacancy Approved",
-                f"{vacancy.title} is now live.", socket_event="vacancy:approved",
+                f"{vacancy.title} has been approved. Publish it to make it visible to jobseekers.", socket_event="vacancy:approved",
                 socket_payload={"vacancy_id": str(vacancy.id)})
-    log_audit(User.query.get(get_jwt_identity()), "Approve", "vacancies", vacancy.id)
+    log_audit(User.query.get(get_jwt_identity()), "Approve", "vacancies", vacancy.id, before=before, after=after)
     return ok(vacancy.to_dict(), "Vacancy approved.")
 
 
@@ -626,14 +632,19 @@ def reject_vacancy(vacancy_id):
     vacancy = Vacancy.query.get(vacancy_id)
     if not vacancy:
         return fail("Vacancy not found.", 404)
+    if not can_transition(vacancy.status, "rejected", "staff"):
+        return fail(f"Cannot reject a vacancy from status '{vacancy.status}'.", 400)
+
     data = request.get_json(force=True) or {}
+    before = {"status": vacancy.status}
     vacancy.status = "rejected"
     vacancy.rejection_remarks = data.get("remarks", "")
+    after = {"status": vacancy.status}
     db.session.commit()
     notify_user(vacancy.employer_company.user_id, "vacancy_rejected", "Vacancy Returned",
                 vacancy.rejection_remarks, socket_event="vacancy:rejected",
                 socket_payload={"vacancy_id": str(vacancy.id), "remarks": vacancy.rejection_remarks})
-    log_audit(User.query.get(get_jwt_identity()), "Reject", "vacancies", vacancy.id)
+    log_audit(User.query.get(get_jwt_identity()), "Reject", "vacancies", vacancy.id, before=before, after=after)
     return ok(vacancy.to_dict(), "Vacancy rejected.")
 
 
@@ -641,16 +652,19 @@ def reject_vacancy(vacancy_id):
 @jwt_required()
 @role_required("staff", "admin")
 def staff_create_vacancy():
-    """Manual add for walk-in employer without a system account."""
+    """Manual add for walk-in employer without a system account — auto-published,
+    same as before (walk-ins skip the draft/approval steps since staff is directly
+    vouching for the posting)."""
     data = request.get_json(force=True) or {}
     company_id = data.get("employer_company_id")
     if not company_id:
         return fail("employer_company_id is required.", 400)
+    now = now_manila()
     vacancy = Vacancy(
         employer_company_id=company_id, title=data.get("title", ""), description=data.get("description", ""),
         requirements=data.get("requirements"), skills_required=data.get("skills_required"),
         job_type=data.get("job_type"), num_slots=data.get("num_slots", 1), work_location=data.get("work_location"),
-        status="active", is_manual_entry=True, approved_by=get_jwt_identity(), approved_at=datetime.utcnow(),
+        status="published", is_manual_entry=True, approved_by=get_jwt_identity(), approved_at=now, published_at=now,
     )
     db.session.add(vacancy)
     db.session.commit()

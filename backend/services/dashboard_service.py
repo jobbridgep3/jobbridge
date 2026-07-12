@@ -46,7 +46,7 @@ def build_summary() -> dict:
         .filter(EmployerCompany.accreditation_status == "accredited", User.is_active.is_(True))
         .count()
     )
-    active_vacancies = Vacancy.query.filter_by(status="active").count()
+    active_vacancies = Vacancy.query.filter_by(status="published").count()
     total_applications = Application.query.count()
     total_placements = EmploymentRecord.query.count()
     successful_placements = EmploymentRecord.query.filter(
@@ -147,7 +147,7 @@ def build_analytics(months: int = 6, date_from: str | None = None, date_to: str 
     # Job Category Distribution — active vacancies by industry (top 8)
     category_rows = (
         db.session.query(Vacancy.industry, func.count(Vacancy.id))
-        .filter(Vacancy.status == "active")
+        .filter(Vacancy.status == "published")
         .group_by(Vacancy.industry)
         .order_by(func.count(Vacancy.id).desc())
         .all()
@@ -159,7 +159,7 @@ def build_analytics(months: int = 6, date_from: str | None = None, date_to: str 
     # taxonomy already used to parse jobseeker resumes, matched against active vacancies
     # only (small N at municipal-PESO scale, unlike LMI's unbounded full-table loops).
     skill_counts = {}
-    for v in Vacancy.query.filter_by(status="active").all():
+    for v in Vacancy.query.filter_by(status="published").all():
         text = (v.skills_required or "").lower()
         for kw in SKILL_KEYWORDS:
             if kw in text:

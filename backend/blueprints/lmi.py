@@ -50,7 +50,7 @@ def lmi_stats():
         "success_rate": round((active + completed) / total_placements * 100, 1) if total_placements else 0,
         "top_industries": [{"industry": k, "count": v} for k, v in sorted(industries.items(), key=lambda x: -x[1])[:8]],
         "program_beneficiaries": program_counts,
-        "active_vacancies": Vacancy.query.filter_by(status="active").count(),
+        "active_vacancies": Vacancy.query.filter_by(status="published").count(),
     })
 
 

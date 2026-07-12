@@ -19,7 +19,7 @@ jobs_bp = Blueprint("jobs", __name__, url_prefix="/api")
 @jobs_bp.get("/jobs")
 @jwt_required(optional=True)
 def list_jobs():
-    query = Vacancy.query.filter_by(status="active")
+    query = Vacancy.query.filter_by(status="published")
 
     keyword = request.args.get("q")
     if keyword:
@@ -52,7 +52,7 @@ def recommended_jobs():
     profile = JobseekerProfile.query.filter_by(user_id=get_jwt_identity()).first()
     if not profile:
         return fail("Profile not found.", 404)
-    vacancies = Vacancy.query.filter_by(status="active").all()
+    vacancies = Vacancy.query.filter_by(status="published").all()
     ranked = rank_vacancies_for_jobseeker(profile, vacancies)[:5]
     return ok([v.to_dict(match_score=score) for v, score in ranked])
 
@@ -80,7 +80,7 @@ def apply_to_job():
     data = request.get_json(force=True) or {}
     vacancy_id = data.get("vacancy_id")
     vacancy = Vacancy.query.get(vacancy_id) if vacancy_id else None
-    if not vacancy or vacancy.status != "active":
+    if not vacancy or vacancy.status != "published":
         return fail("This job is not currently accepting applications.", 400)
 
     profile = JobseekerProfile.query.filter_by(user_id=get_jwt_identity()).first()

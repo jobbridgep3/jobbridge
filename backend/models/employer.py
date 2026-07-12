@@ -129,7 +129,7 @@ class EmployerCompany(BaseModel):
     def active_vacancies_count(self) -> int:
         from models.vacancy import Vacancy
 
-        return Vacancy.query.filter_by(employer_company_id=self.id, status="active").count()
+        return Vacancy.query.filter_by(employer_company_id=self.id, status="published").count()
 
     def registration_number_field(self):
         """Which of sec_number/dti_number/cda_number applies to this company's business_type."""

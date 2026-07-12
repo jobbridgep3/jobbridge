@@ -12,7 +12,10 @@ export default defineConfig({
       // service worker activates immediately rather than waiting for every open tab
       // to close, so a deployed fix reaches users on their next navigation instead of
       // being stuck behind a stale cached bundle indefinitely.
-      workbox: { skipWaiting: true, clientsClaim: true },
+      // maximumFileSizeToCacheInBytes: the default 2 MiB cap started rejecting the
+      // main bundle once Tiptap's rich-text editor was added (~2.3 MiB) — raised
+      // just enough to cover it rather than leaving the whole bundle uncached.
+      workbox: { skipWaiting: true, clientsClaim: true, maximumFileSizeToCacheInBytes: 4 * 1024 * 1024 },
       includeAssets: ['peso-logo.png'],
       manifest: {
         name: 'JobBridge — PESO Pila, Laguna',
