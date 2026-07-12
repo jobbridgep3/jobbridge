@@ -44,6 +44,51 @@ REQUIRED_FIELDS = [
 ]
 
 
+def _company_doc_types(company):
+    return {d.document_type for d in company.documents}
+
+
+def _company_registration_number_ok(company) -> bool:
+    field = company.registration_number_field()
+    return bool(getattr(company, field, None)) if field else False
+
+
+# Mirrors frontend/src/pages/employer/company-sections/requiredFields.js — keep in sync.
+COMPANY_REQUIRED_FIELDS = [
+    ("company_name", "basic", "Company Name", lambda c: bool(c.company_name)),
+    ("business_type", "basic", "Business Type", lambda c: bool(c.business_type)),
+    ("industry", "basic", "Industry", lambda c: bool(c.industry)),
+    ("description", "basic", "About Company", lambda c: bool(c.description)),
+    ("company_email", "basic", "Company Email", lambda c: bool(c.company_email)),
+    ("contact_number", "basic", "Contact Number", lambda c: bool(c.contact_number)),
+    ("year_established", "basic", "Year Established", lambda c: bool(c.year_established)),
+    ("num_employees", "basic", "Number of Employees", lambda c: bool(c.num_employees)),
+    ("company_size", "basic", "Company Size", lambda c: bool(c.company_size)),
+    ("region_code", "address", "Region", lambda c: bool(c.region_code)),
+    ("province_code", "address", "Province", lambda c: bool(c.province_code)),
+    ("city_municipality_code", "address", "City / Municipality", lambda c: bool(c.city_municipality_code)),
+    ("barangay_code", "address", "Barangay", lambda c: bool(c.barangay_code)),
+    ("street_address", "address", "Street Address", lambda c: bool(c.street_address)),
+    ("business_permit_no", "business_registration", "Business Permit Number", lambda c: bool(c.business_permit_no)),
+    ("bir_tin", "business_registration", "BIR TIN", lambda c: bool(c.bir_tin)),
+    ("registration_number", "business_registration", "SEC/DTI/CDA Number", _company_registration_number_ok),
+    ("rep_name", "representative", "Representative Name", lambda c: bool(c.rep_name)),
+    ("rep_position", "representative", "Representative Position", lambda c: bool(c.rep_position)),
+    ("rep_email", "representative", "Representative Email", lambda c: bool(c.rep_email)),
+    ("rep_contact_number", "representative", "Representative Contact Number", lambda c: bool(c.rep_contact_number)),
+    ("hiring_status", "employment", "Hiring Status", lambda c: bool(c.hiring_status)),
+    ("work_setup", "employment", "Work Setup", lambda c: bool(c.work_setup)),
+    ("employment_types_offered", "employment", "Employment Types Offered", lambda c: bool(c.employment_types_offered)),
+    ("business_permit", "documents", "Business Permit", lambda c: "business_permit" in _company_doc_types(c)),
+    (
+        "business_registration_certificate", "documents", "SEC/DTI/CDA Certificate",
+        lambda c: "business_registration_certificate" in _company_doc_types(c),
+    ),
+    ("bir_registration", "documents", "BIR Registration", lambda c: "bir_registration" in _company_doc_types(c)),
+    ("company_logo", "documents", "Company Logo", lambda c: "company_logo" in _company_doc_types(c)),
+]
+
+
 def compute_completion(profile, required_fields=None) -> dict:
     """Returns {"profile_completion": int, "completed_count": int, "total_count": int,
     "missing_fields": [{"key","section","label"}, ...]}.

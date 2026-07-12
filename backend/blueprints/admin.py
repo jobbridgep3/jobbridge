@@ -63,7 +63,7 @@ def dashboard_analytics():
 @role_required("admin")
 def dashboard_pending_actions():
     return ok({
-        "pending_employer_verifications": EmployerCompany.query.filter_by(verification_status="unverified").count(),
+        "pending_employer_verifications": EmployerCompany.query.filter_by(accreditation_status="pending_review").count(),
         "pending_job_approvals": Vacancy.query.filter_by(status="pending").count(),
         "pending_interviews": Interview.query.filter_by(status="pending").count(),
         # No report-submission workflow exists in the schema — this is a proxy for

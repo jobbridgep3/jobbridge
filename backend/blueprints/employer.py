@@ -1,16 +1,19 @@
+from marshmallow import ValidationError
 from flask import Blueprint, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from extensions import db
 from models.application import Application
-from models.employer import EmployerCompany
+from models.employer import COMPANY_DOCUMENT_TYPES, COMPANY_MANDATORY_DOCUMENT_TYPES, EmployerCompany, EmployerCompanyDocument
 from models.interview import Interview
 from models.jobseeker import JobseekerProfile
 from models.user import User
 from models.vacancy import Vacancy
+from schemas.employer_schemas import CompanyProfileSchema
 from services.audit_service import log_audit
 from services.matching_service import rank_jobseekers_for_vacancy
 from services.notification_service import notify_role, notify_user
+from services.profile_completion_service import COMPANY_REQUIRED_FIELDS, compute_completion
 from utils.decorators import role_required
 from utils.responses import fail, ok
 from utils.validators import CONTACT_NUMBER_RE
@@ -40,7 +43,7 @@ def dashboard_stats():
     return ok({
         "active_vacancies": active_count,
         "total_applicants": applicant_count,
-        "company_verification_status": company.verification_status,
+        "company_verification_status": company.accreditation_status,
     })
 
 
@@ -73,6 +76,12 @@ def update_employer_profile():
 
 # ---------- Company Profile ----------
 
+# All company document types are single-instance (re-uploading replaces the prior
+# row, same convention as jobseeker's SINGLE_INSTANCE_DOCUMENT_TYPES) — none of them
+# are a "may have several" case like jobseeker training certificates.
+GENERIC_COMPANY_DOCUMENT_TYPES = tuple(t for t in COMPANY_DOCUMENT_TYPES if t != "company_logo")
+
+
 @company_bp.get("")
 @jwt_required()
 @role_required("employer")
@@ -90,12 +99,17 @@ def update_company():
     company = _company()
     if not company:
         return fail("Company profile not found.", 404)
-    data = request.get_json(force=True) or {}
-    for field in ("company_name", "address", "industry", "business_permit_no", "description", "website"):
-        if field in data:
-            setattr(company, field, data[field])
+    try:
+        data = CompanyProfileSchema().load(request.get_json(force=True) or {}, partial=True)
+    except ValidationError as err:
+        return fail("Invalid company profile data.", 400, err.messages)
+
+    before = {field: getattr(company, field) for field in data}
+    for field, value in data.items():
+        setattr(company, field, value)
+    after = {field: getattr(company, field) for field in data}
     db.session.commit()
-    log_audit(User.query.get(company.user_id), "Update", "company", company.id)
+    log_audit(User.query.get(company.user_id), "Update", "company", company.id, before=before, after=after)
     return ok(company.to_dict(), "Company profile updated.")
 
 
@@ -103,7 +117,7 @@ def update_company():
 @jwt_required()
 @role_required("employer")
 def upload_logo():
-    from services.storage_service import upload_file
+    from services.storage_service import upload_file, validate_upload_file
 
     company = _company()
     if not company:
@@ -111,27 +125,129 @@ def upload_logo():
     if "file" not in request.files:
         return fail("No file uploaded.", 400)
     file = request.files["file"]
-    company.logo_url = upload_file(file.read(), file.filename, folder=f"logos/{company.id}", content_type=file.mimetype)
+    file_bytes = file.read()
+    error = validate_upload_file(file_bytes, file.filename)
+    if error:
+        return fail(error, 400)
+
+    company.logo_url = upload_file(file_bytes, file.filename, folder=f"logos/{company.id}", content_type=file.mimetype)
+
+    # The logo doubles as the mandatory "Company Logo" document (req. 2 lists it in
+    # both Basic Information and Required Documents) — one upload satisfies both, no
+    # separate re-upload through the generic document dropzone. It's a cosmetic asset,
+    # not a compliance document, so it's auto-verified rather than queued for staff review.
+    EmployerCompanyDocument.query.filter_by(employer_company_id=company.id, document_type="company_logo").delete()
+    db.session.add(EmployerCompanyDocument(
+        employer_company_id=company.id, document_type="company_logo", file_url=company.logo_url,
+        original_filename=file.filename, status="verified",
+    ))
     db.session.commit()
+    log_audit(User.query.get(company.user_id), "Update", "company", company.id, "Logo uploaded")
     return ok(company.to_dict(), "Logo uploaded.")
+
+
+@company_bp.post("/signature")
+@jwt_required()
+@role_required("employer")
+def upload_signature():
+    from services.storage_service import upload_file, validate_upload_file
+
+    company = _company()
+    if not company:
+        return fail("Company profile not found.", 404)
+    if "file" not in request.files:
+        return fail("No file uploaded.", 400)
+    file = request.files["file"]
+    file_bytes = file.read()
+    error = validate_upload_file(file_bytes, file.filename)
+    if error:
+        return fail(error, 400)
+
+    company.rep_signature_url = upload_file(
+        file_bytes, file.filename, folder=f"signatures/{company.id}", content_type=file.mimetype
+    )
+    db.session.commit()
+    log_audit(User.query.get(company.user_id), "Update", "company", company.id, "Representative signature uploaded")
+    return ok(company.to_dict(), "Signature uploaded.")
 
 
 @company_bp.post("/documents")
 @jwt_required()
 @role_required("employer")
 def upload_documents():
-    from services.storage_service import upload_file
+    from services.storage_service import upload_file, validate_upload_file
 
     company = _company()
     if not company:
         return fail("Company profile not found.", 404)
     if "file" not in request.files:
         return fail("No file uploaded.", 400)
+
+    document_type = request.form.get("document_type")
+    if document_type not in GENERIC_COMPANY_DOCUMENT_TYPES:
+        return fail("Invalid document type.", 400)
+
     file = request.files["file"]
-    url = upload_file(file.read(), file.filename, folder=f"company-docs/{company.id}", content_type=file.mimetype)
-    company.document_urls = [*(company.document_urls or []), url]
+    file_bytes = file.read()
+    error = validate_upload_file(file_bytes, file.filename)
+    if error:
+        return fail(error, 400)
+
+    file_url = upload_file(
+        file_bytes, file.filename, folder=f"company-docs/{company.id}/{document_type}", content_type=file.mimetype
+    )
+    EmployerCompanyDocument.query.filter_by(employer_company_id=company.id, document_type=document_type).delete()
+    db.session.add(EmployerCompanyDocument(
+        employer_company_id=company.id, document_type=document_type, file_url=file_url,
+        original_filename=file.filename, status="pending_review",
+    ))
     db.session.commit()
-    return ok(company.to_dict(), "Document uploaded.")
+    log_audit(User.query.get(company.user_id), "Update", "company", company.id, f"Document uploaded: {document_type}")
+    return ok(company.to_dict(), "Document uploaded for PESO Staff review.")
+
+
+@company_bp.delete("/documents/<document_id>")
+@jwt_required()
+@role_required("employer")
+def delete_company_document(document_id):
+    company = _company()
+    if not company:
+        return fail("Company profile not found.", 404)
+    document = EmployerCompanyDocument.query.filter_by(id=document_id, employer_company_id=company.id).first()
+    if not document:
+        return fail("Document not found.", 404)
+    if company.accreditation_status == "pending_review":
+        return fail("Cannot remove a document while accreditation is under review. Replace it instead.", 400)
+
+    document_type = document.document_type
+    db.session.delete(document)
+    db.session.commit()
+    log_audit(User.query.get(company.user_id), "Update", "company", company.id, f"Document removed: {document_type}")
+    return ok(company.to_dict(), "Document removed.")
+
+
+@company_bp.post("/submit-accreditation")
+@jwt_required()
+@role_required("employer")
+def submit_accreditation():
+    company = _company()
+    if not company:
+        return fail("Company profile not found.", 404)
+    if company.accreditation_status not in ("not_submitted", "rejected"):
+        return fail(f"Accreditation cannot be submitted from status '{company.accreditation_status}'.", 400)
+
+    completion = compute_completion(company, COMPANY_REQUIRED_FIELDS)
+    if completion["profile_completion"] < 100:
+        return fail(
+            "Complete every required field and document before submitting for accreditation.",
+            400, {"missing_fields": completion["missing_fields"]},
+        )
+
+    company.accreditation_status = "pending_review"
+    db.session.commit()
+    notify_role("staff", "employer:accreditation_submitted", {"employer_id": str(company.id), "company_name": company.company_name})
+    log_audit(User.query.get(company.user_id), "Update", "employers", company.id, "Submitted for accreditation")
+    return ok(company.to_dict(), "Submitted for PESO/Admin accreditation review.")
 
 
 # ---------- Vacancy Management ----------

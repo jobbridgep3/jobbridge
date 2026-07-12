@@ -19,10 +19,25 @@ def _load(filename):
         return json.load(f)
 
 
-_REGIONS = _load("regions.json")
-_PROVINCES = _load("provinces.json")
-_CITIES = _load("cities_municipalities.json")
-_BARANGAYS = _load("barangays.json")
+def _dedupe_by_code(items, code_key):
+    """The upstream dataset carries one legacy duplicate (province_code 1339 listed
+    twice, under an old and a current NCR district name) — keep the first-listed
+    entry per code so cascading-dropdown <option> keys/values are always unique."""
+    seen = set()
+    deduped = []
+    for item in items:
+        code = item[code_key]
+        if code in seen:
+            continue
+        seen.add(code)
+        deduped.append(item)
+    return deduped
+
+
+_REGIONS = _dedupe_by_code(_load("regions.json"), "region_code")
+_PROVINCES = _dedupe_by_code(_load("provinces.json"), "province_code")
+_CITIES = _dedupe_by_code(_load("cities_municipalities.json"), "city_municipality_code")
+_BARANGAYS = _dedupe_by_code(_load("barangays.json"), "barangay_code")
 
 _PROVINCES_BY_REGION = {}
 for _p in _PROVINCES:

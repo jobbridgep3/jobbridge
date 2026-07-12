@@ -43,7 +43,7 @@ def build_summary() -> dict:
     active_employers = (
         db.session.query(EmployerCompany)
         .join(User, EmployerCompany.user_id == User.id)
-        .filter(EmployerCompany.verification_status == "verified", User.is_active.is_(True))
+        .filter(EmployerCompany.accreditation_status == "accredited", User.is_active.is_(True))
         .count()
     )
     active_vacancies = Vacancy.query.filter_by(status="active").count()
@@ -55,7 +55,7 @@ def build_summary() -> dict:
     placements_this_month = EmploymentRecord.query.filter(
         EmploymentRecord.start_date >= now_manila().date().replace(day=1)
     ).count()
-    pending_employer_verifications = EmployerCompany.query.filter_by(verification_status="unverified").count()
+    pending_employer_verifications = EmployerCompany.query.filter_by(accreditation_status="pending_review").count()
     pending_jobseeker_verifications = JobseekerProfile.query.filter_by(is_verified_by_staff=False).count()
     new_registrations_this_month = User.query.filter(
         User.role.in_(("jobseeker", "employer")), User.created_at >= now_manila().date().replace(day=1)

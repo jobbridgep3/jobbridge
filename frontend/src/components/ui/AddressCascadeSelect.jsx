@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 
 import api from '../../lib/axios'
+import { cn } from '../../lib/utils'
 import { Input, Label, Select } from './Input'
 
 /** Region -> Province -> City/Municipality -> Barangay cascading picker, backed by
@@ -14,7 +15,8 @@ import { Input, Label, Select } from './Input'
  *
  * `value`/`onChange` follow the standard controlled-component contract so this drops
  * straight into any react-hook-form field via Controller, same as any other input. */
-export function AddressCascadeSelect({ value = {}, onChange, disabled }) {
+export function AddressCascadeSelect({ value = {}, onChange, disabled, missingKeys = new Set() }) {
+  const err = (key) => cn(missingKeys.has(key) && 'border-red-300 focus:border-red-400')
   const regionsQuery = useQuery({
     queryKey: ['lookups', 'psgc', 'regions'],
     queryFn: async () => (await api.get('/api/lookups/psgc/regions')).data.data,
@@ -75,7 +77,7 @@ export function AddressCascadeSelect({ value = {}, onChange, disabled }) {
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div>
         <Label>Region</Label>
-        <Select value={value.region_code || ''} onChange={onRegionChange} disabled={disabled || regionsQuery.isLoading}>
+        <Select value={value.region_code || ''} onChange={onRegionChange} disabled={disabled || regionsQuery.isLoading} className={err('region_code')}>
           <option value="">Select region…</option>
           {(regionsQuery.data || []).map((r) => (
             <option key={r.region_code} value={r.region_code}>{r.region_name}</option>
@@ -84,7 +86,7 @@ export function AddressCascadeSelect({ value = {}, onChange, disabled }) {
       </div>
       <div>
         <Label>Province</Label>
-        <Select value={value.province_code || ''} onChange={onProvinceChange} disabled={disabled || !value.region_code || provincesQuery.isLoading}>
+        <Select value={value.province_code || ''} onChange={onProvinceChange} disabled={disabled || !value.region_code || provincesQuery.isLoading} className={err('province_code')}>
           <option value="">Select province…</option>
           {(provincesQuery.data || []).map((p) => (
             <option key={p.province_code} value={p.province_code}>{p.province_name}</option>
@@ -93,7 +95,7 @@ export function AddressCascadeSelect({ value = {}, onChange, disabled }) {
       </div>
       <div>
         <Label>City / Municipality</Label>
-        <Select value={value.city_municipality_code || ''} onChange={onCityChange} disabled={disabled || !value.province_code || citiesQuery.isLoading}>
+        <Select value={value.city_municipality_code || ''} onChange={onCityChange} disabled={disabled || !value.province_code || citiesQuery.isLoading} className={err('city_municipality_code')}>
           <option value="">Select city/municipality…</option>
           {(citiesQuery.data || []).map((c) => (
             <option key={c.city_municipality_code} value={c.city_municipality_code}>{c.city_municipality_name}</option>
@@ -102,7 +104,7 @@ export function AddressCascadeSelect({ value = {}, onChange, disabled }) {
       </div>
       <div>
         <Label>Barangay</Label>
-        <Select value={value.barangay_code || ''} onChange={onBarangayChange} disabled={disabled || !value.city_municipality_code || barangaysQuery.isLoading}>
+        <Select value={value.barangay_code || ''} onChange={onBarangayChange} disabled={disabled || !value.city_municipality_code || barangaysQuery.isLoading} className={err('barangay_code')}>
           <option value="">Select barangay…</option>
           {(barangaysQuery.data || []).map((b) => (
             <option key={b.barangay_code} value={b.barangay_code}>{b.barangay_name}</option>
@@ -116,6 +118,7 @@ export function AddressCascadeSelect({ value = {}, onChange, disabled }) {
           onChange={(e) => set({ street_address: e.target.value })}
           placeholder="House/unit no., building, street"
           disabled={disabled}
+          className={err('street_address')}
         />
       </div>
       <div>

@@ -87,7 +87,7 @@ def staff_export_dashboard_pdf():
 def pending_approvals():
     return ok({
         "vacancies_pending": Vacancy.query.filter_by(status="pending").count(),
-        "employers_pending": EmployerCompany.query.filter_by(verification_status="unverified").count(),
+        "employers_pending": EmployerCompany.query.filter_by(accreditation_status="pending_review").count(),
         "spes_pending": ProgramApplication.query.filter_by(program_type="spes", status="submitted").count(),
         "dilp_pending": ProgramApplication.query.filter_by(program_type="dilp", status="submitted").count(),
         "owwa_pending": ProgramApplication.query.filter_by(program_type="owwa", status="submitted").count(),
@@ -398,18 +398,31 @@ def verify_employer(company_id):
     company = EmployerCompany.query.get(company_id)
     if not company:
         return fail("Employer not found.", 404)
+    if company.accreditation_status != "pending_review":
+        return fail(f"Cannot approve/reject from status '{company.accreditation_status}'. Employer must submit for accreditation first.", 400)
+
     data = request.get_json(force=True) or {}
-    if data.get("approve", True):
-        company.verification_status = "verified"
+    before = {"accreditation_status": company.accreditation_status}
+    approve = data.get("approve", True)
+    if approve:
+        company.accreditation_status = "accredited"
+        company.accreditation_remarks = None
     else:
-        company.verification_status = "unverified"
-        company.verification_remarks = data.get("remarks")
+        if not data.get("remarks"):
+            return fail("Remarks are required when rejecting accreditation.", 400)
+        company.accreditation_status = "rejected"
+        company.accreditation_remarks = data.get("remarks")
+    after = {"accreditation_status": company.accreditation_status}
     db.session.commit()
-    notify_user(company.user_id, "account_verified", "Company Verification Update",
-                f"Your company is now {company.verification_status}.", socket_event="account:verified",
-                socket_payload={"employer_id": str(company.id), "status": company.verification_status})
-    log_audit(User.query.get(get_jwt_identity()), "Approve", "employers", company.id)
-    return ok(company.to_dict(), "Employer verification updated.")
+    notify_user(
+        company.user_id, "account_verified", "Accreditation Update",
+        f"Your company accreditation is now {company.accreditation_status.replace('_', ' ')}."
+        + (f" Reason: {company.accreditation_remarks}" if not approve else ""),
+        link="/employer/company", socket_event="account:verified",
+        socket_payload={"employer_id": str(company.id), "status": company.accreditation_status},
+    )
+    log_audit(User.query.get(get_jwt_identity()), "Approve" if approve else "Reject", "employers", company.id, before=before, after=after)
+    return ok(company.to_dict(), "Employer accreditation updated.")
 
 
 @staff_bp.put("/employers/<company_id>/suspend")
@@ -419,12 +432,38 @@ def suspend_employer(company_id):
     company = EmployerCompany.query.get(company_id)
     if not company:
         return fail("Employer not found.", 404)
-    company.verification_status = "suspended"
+    if company.accreditation_status != "accredited":
+        return fail(f"Only an accredited employer can be suspended (current status: '{company.accreditation_status}').", 400)
+
+    before = {"accreditation_status": company.accreditation_status}
+    company.accreditation_status = "suspended"
+    after = {"accreditation_status": company.accreditation_status}
     db.session.commit()
     notify_user(company.user_id, "account_suspended", "Account Suspended", "Your company account has been suspended.",
-                socket_event="account:suspended", socket_payload={"employer_id": str(company.id)})
-    log_audit(User.query.get(get_jwt_identity()), "Update", "employers", company.id, "Suspended")
+                link="/employer/company", socket_event="account:suspended", socket_payload={"employer_id": str(company.id)})
+    log_audit(User.query.get(get_jwt_identity()), "Update", "employers", company.id, "Suspended", before=before, after=after)
     return ok(company.to_dict(), "Employer suspended.")
+
+
+@staff_bp.put("/employers/<company_id>/reinstate")
+@jwt_required()
+@role_required("admin")
+def reinstate_employer(company_id):
+    company = EmployerCompany.query.get(company_id)
+    if not company:
+        return fail("Employer not found.", 404)
+    if company.accreditation_status != "suspended":
+        return fail(f"Only a suspended employer can be reinstated (current status: '{company.accreditation_status}').", 400)
+
+    before = {"accreditation_status": company.accreditation_status}
+    company.accreditation_status = "accredited"
+    after = {"accreditation_status": company.accreditation_status}
+    db.session.commit()
+    notify_user(company.user_id, "account_verified", "Account Reinstated", "Your company account has been reinstated and is accredited again.",
+                link="/employer/company", socket_event="account:verified",
+                socket_payload={"employer_id": str(company.id), "status": company.accreditation_status})
+    log_audit(User.query.get(get_jwt_identity()), "Update", "employers", company.id, "Reinstated", before=before, after=after)
+    return ok(company.to_dict(), "Employer reinstated.")
 
 
 @staff_bp.delete("/employers/<company_id>")

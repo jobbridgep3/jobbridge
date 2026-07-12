@@ -1,18 +1,26 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { Upload } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { useDropzone } from 'react-dropzone'
+import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 
-import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
-import { Input, Label, Textarea } from '../../components/ui/Input'
+import { CompletionChecklist } from '../../components/ui/CompletionChecklist'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { PageHeader } from '../../components/ui/PageHeader'
+import { ProgressBar } from '../../components/ui/ProgressBar'
 import { CardSkeleton } from '../../components/ui/Skeleton'
+import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
+import { formatApiError } from '../../lib/utils'
+import { AddressSection } from './company-sections/AddressSection'
+import { BasicInfoSection } from './company-sections/BasicInfoSection'
+import { BusinessRegistrationSection } from './company-sections/BusinessRegistrationSection'
+import { DocumentsSection } from './company-sections/DocumentsSection'
+import { EmploymentInfoSection } from './company-sections/EmploymentInfoSection'
+import { RepresentativeSection } from './company-sections/RepresentativeSection'
+import { computeCompletion, SECTION_LABELS } from './company-sections/requiredFields'
+import { SocialMediaSection } from './company-sections/SocialMediaSection'
 
 export default function EmployerCompany() {
   const queryClient = useQueryClient()
@@ -20,135 +28,178 @@ export default function EmployerCompany() {
     queryKey: ['company'],
     queryFn: async () => (await api.get('/api/company')).data.data,
   })
+
   const [form, setForm] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [uploadingSignature, setUploadingSignature] = useState(false)
+  const [uploadingDocType, setUploadingDocType] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [confirmSubmit, setConfirmSubmit] = useState(false)
 
   useEffect(() => {
     if (company) setForm(company)
   }, [company])
 
-  const { getRootProps: getLogoProps, getInputProps: getLogoInputProps } = useDropzone({
-    accept: { 'image/*': [] },
-    maxFiles: 1,
-    onDrop: async (accepted) => {
-      if (!accepted.length) return
-      const fd = new FormData()
-      fd.append('file', accepted[0])
-      try {
-        await api.post('/api/company/logo', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-        toast.success('Logo uploaded.')
-        queryClient.invalidateQueries({ queryKey: ['company'] })
-      } catch {
-        toast.error('Upload failed.')
-      }
-    },
-  })
-
-  const { getRootProps: getDocProps, getInputProps: getDocInputProps } = useDropzone({
-    onDrop: async (accepted) => {
-      if (!accepted.length) return
-      const fd = new FormData()
-      fd.append('file', accepted[0])
-      try {
-        await api.post('/api/company/documents', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-        toast.success('Document uploaded for PESO Staff review.')
-        queryClient.invalidateQueries({ queryKey: ['company'] })
-      } catch {
-        toast.error('Upload failed.')
-      }
-    },
-  })
+  const refreshFrom = (data) => {
+    setForm(data)
+    queryClient.setQueryData(['company'], data)
+  }
 
   const save = async () => {
     setSaving(true)
     try {
-      await api.put('/api/company', form)
+      const res = await api.put('/api/company', form)
       toast.success('Company profile updated.')
-      queryClient.invalidateQueries({ queryKey: ['company'] })
+      refreshFrom(res.data.data)
+    } catch (err) {
+      toast.error(formatApiError(err, 'Could not save company profile.'))
     } finally {
       setSaving(false)
     }
   }
 
+  const uploadLogo = async (file) => {
+    setUploadingLogo(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const res = await api.post('/api/company/logo', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      toast.success('Logo uploaded.')
+      refreshFrom(res.data.data)
+    } catch {
+      toast.error('Could not upload logo.')
+    } finally {
+      setUploadingLogo(false)
+    }
+  }
+
+  const uploadSignature = async (file) => {
+    setUploadingSignature(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const res = await api.post('/api/company/signature', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      toast.success('Signature uploaded.')
+      refreshFrom(res.data.data)
+    } catch {
+      toast.error('Could not upload signature.')
+    } finally {
+      setUploadingSignature(false)
+    }
+  }
+
+  const uploadDocument = async (documentType, file) => {
+    setUploadingDocType(documentType)
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('document_type', documentType)
+    try {
+      const res = await api.post('/api/company/documents', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      toast.success('Document uploaded for PESO Staff review.')
+      refreshFrom(res.data.data)
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not upload document.')
+    } finally {
+      setUploadingDocType(null)
+    }
+  }
+
+  const deleteDocument = async (documentId) => {
+    try {
+      const res = await api.delete(`/api/company/documents/${documentId}`)
+      toast.success('Document removed.')
+      refreshFrom(res.data.data)
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not remove document.')
+    }
+  }
+
+  const submitAccreditation = async () => {
+    setConfirmSubmit(false)
+    setSubmitting(true)
+    try {
+      const res = await api.post('/api/company/submit-accreditation')
+      toast.success('Submitted for PESO/Admin accreditation review.')
+      refreshFrom(res.data.data)
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not submit for accreditation.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const completion = useMemo(() => (form ? computeCompletion(form) : null), [form])
+  const missingKeys = useMemo(() => new Set((completion?.missingFields || []).map((f) => f.key)), [completion])
+
   if (isLoading || !form) return <CardSkeleton />
+
+  const canSubmitAccreditation = ['not_submitted', 'rejected'].includes(form.accreditation_status)
 
   return (
     <motion.div {...fadeIn} className="space-y-6">
       <PageHeader
         title="Company Profile"
-        description="Official company listing used by PESO Staff to verify legitimacy."
+        description="Official company listing used by PESO Staff/Admin for accreditation."
         actions={
-          <Badge variant={form.verification_status === 'verified' ? 'success' : form.verification_status === 'suspended' ? 'danger' : 'default'} className="capitalize">
-            {form.verification_status}
-          </Badge>
+          <>
+            <StatusBadge status={form.accreditation_status} />
+            <Button size="sm" onClick={save} disabled={saving}>
+              {saving ? 'Saving…' : 'Save Changes'}
+            </Button>
+            {canSubmitAccreditation && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setConfirmSubmit(true)}
+                disabled={completion.profileCompletion < 100 || submitting}
+              >
+                {submitting ? 'Submitting…' : 'Submit for Accreditation'}
+              </Button>
+            )}
+          </>
         }
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Company Details</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <Label>Company Name</Label>
-            <Input value={form.company_name || ''} onChange={(e) => setForm({ ...form, company_name: e.target.value })} />
-          </div>
-          <div>
-            <Label>Industry / Sector</Label>
-            <Input value={form.industry || ''} onChange={(e) => setForm({ ...form, industry: e.target.value })} />
-          </div>
-          <div className="sm:col-span-2">
-            <Label>Complete Address</Label>
-            <Input value={form.address || ''} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-          </div>
-          <div>
-            <Label>Business Permit / DTI-SEC Registration No.</Label>
-            <Input value={form.business_permit_no || ''} onChange={(e) => setForm({ ...form, business_permit_no: e.target.value })} />
-          </div>
-          <div>
-            <Label>Website</Label>
-            <Input value={form.website || ''} onChange={(e) => setForm({ ...form, website: e.target.value })} />
-          </div>
-          <div className="sm:col-span-2">
-            <Label>Company Description</Label>
-            <Textarea rows={4} value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-          </div>
-          <div className="sm:col-span-2 flex justify-end">
-            <Button onClick={save} disabled={saving}>
-              {saving ? 'Saving…' : 'Save Changes'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {form.accreditation_status === 'rejected' && form.accreditation_remarks && (
+        <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">Accreditation rejected: {form.accreditation_remarks}</p>
+      )}
+      {form.accreditation_status === 'pending_review' && (
+        <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">Your accreditation is under PESO/Admin review.</p>
+      )}
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Logo</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {form.logo_url && <img src={form.logo_url} alt="Company logo" className="mb-3 h-16 w-16 rounded-lg object-cover" />}
-            <div {...getLogoProps()} className="cursor-pointer rounded-lg border border-dashed border-slate-200 p-4 text-center hover:border-primary-300">
-              <input {...getLogoInputProps()} />
-              <Upload className="mx-auto mb-1 h-5 w-5 text-slate-400" />
-              <p className="text-xs text-slate-500">Upload logo</p>
-            </div>
-          </CardContent>
-        </Card>
+      <ProgressBar percent={completion.profileCompletion} />
+      <CompletionChecklist completion={completion} sectionLabels={SECTION_LABELS} />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Business Registration Documents</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div {...getDocProps()} className="cursor-pointer rounded-lg border border-dashed border-slate-200 p-4 text-center hover:border-primary-300">
-              <input {...getDocInputProps()} />
-              <Upload className="mx-auto mb-1 h-5 w-5 text-slate-400" />
-              <p className="text-xs text-slate-500">Upload document ({form.document_urls?.length || 0} on file)</p>
-            </div>
-          </CardContent>
-        </Card>
+      <div id="section-basic">
+        <BasicInfoSection form={form} setForm={setForm} onUploadLogo={uploadLogo} uploadingLogo={uploadingLogo} missingKeys={missingKeys} />
       </div>
+      <div id="section-business_registration">
+        <BusinessRegistrationSection form={form} setForm={setForm} missingKeys={missingKeys} />
+      </div>
+      <div id="section-address">
+        <AddressSection form={form} setForm={setForm} missingKeys={missingKeys} />
+      </div>
+      <div id="section-representative">
+        <RepresentativeSection form={form} setForm={setForm} onUploadSignature={uploadSignature} uploadingSignature={uploadingSignature} missingKeys={missingKeys} />
+      </div>
+      <div id="section-employment">
+        <EmploymentInfoSection form={form} setForm={setForm} missingKeys={missingKeys} />
+      </div>
+      <SocialMediaSection form={form} setForm={setForm} />
+      <div id="section-documents">
+        <DocumentsSection form={form} onUploadDocument={uploadDocument} onDeleteDocument={deleteDocument} uploadingDocType={uploadingDocType} />
+      </div>
+
+      <ConfirmDialog
+        open={confirmSubmit}
+        onOpenChange={setConfirmSubmit}
+        onConfirm={submitAccreditation}
+        title="Submit for Accreditation?"
+        description="Your company profile and documents will be sent to PESO/Admin for review. You won't be able to edit most fields while the review is pending."
+        confirmLabel="Submit"
+        loading={submitting}
+      />
     </motion.div>
   )
 }
