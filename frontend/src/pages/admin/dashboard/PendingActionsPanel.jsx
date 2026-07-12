@@ -21,7 +21,7 @@ export function PendingActionsPanel() {
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-3">
-        <Link to="/admin/employers?status=unverified">
+        <Link to="/admin/employers?accreditation_status=pending_review">
           <Badge variant="warning" className="px-3 py-1.5">
             {pending?.pending_employer_verifications ?? 0} Employer Verifications
           </Badge>

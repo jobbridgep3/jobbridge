@@ -6,7 +6,8 @@ from marshmallow import ValidationError
 
 from extensions import db
 from models.application import Application
-from models.employer import EmployerCompany
+from models.audit import AuditTrail
+from models.employer import EmployerCompany, EmployerCompanyDocument
 from models.employment import EmploymentRecord
 from models.interview import Interview
 from models.jobseeker import JobseekerProfile
@@ -18,6 +19,7 @@ from schemas.jobseeker_schemas import ProfileUpdateSchema
 from services.audit_service import log_audit
 from services.dashboard_service import build_analytics, build_dashboard_excel, build_dashboard_pdf, build_summary
 from services.email_service import send_verification_status_email
+from services.employer_query_service import build_employer_query
 from services.excel_service import build_excel_report
 from services.notification_service import notify_role, notify_user
 from services.pdf_service import generate_referral_letter, generate_table_report, to_bytesio
@@ -26,7 +28,9 @@ from services.storage_service import upload_file
 from services.user_deletion_service import employer_dependent_counts, jobseeker_dependent_counts
 from sockets.events import emit_to_role
 from utils.decorators import role_required
+from utils.pagination import paginate
 from utils.responses import fail, ok
+from utils.timezone import now_manila
 
 staff_bp = Blueprint("staff", __name__, url_prefix="/api/staff")
 
@@ -375,8 +379,39 @@ def generate_referral(application_id):
 @jwt_required()
 @role_required("staff", "admin")
 def list_employers():
-    companies = EmployerCompany.query.order_by(EmployerCompany.created_at.desc()).all()
-    return ok([c.to_dict() for c in companies])
+    query = build_employer_query(request.args).order_by(EmployerCompany.created_at.desc())
+    result = paginate(query, request.args)
+    return ok({
+        "items": [c.to_dict() for c in result["items"]],
+        "total": result["total"], "page": result["page"], "limit": result["limit"],
+    })
+
+
+@staff_bp.get("/employers/export/excel")
+@jwt_required()
+@role_required("staff", "admin")
+def export_employers_excel():
+    companies = build_employer_query(request.args).order_by(EmployerCompany.created_at.desc()).limit(20000).all()
+    rows = [
+        [
+            c.company_name or "", (c.business_type or "").replace("_", " ").title(), c.industry or "",
+            c.region_name or "", c.province_name or "", c.city_municipality_name or "",
+            c.accreditation_status.replace("_", " ").title(), c.created_at.strftime("%Y-%m-%d"),
+            c.active_vacancies_count(), c.rep_name or "", c.rep_email or "",
+        ]
+        for c in companies
+    ]
+    buf = build_excel_report(
+        "Employers",
+        ["Company Name", "Business Type", "Industry", "Region", "Province", "City/Municipality",
+         "Accreditation Status", "Registered Date", "Active Vacancies", "Representative", "Rep. Email"],
+        rows,
+    )
+    log_audit(User.query.get(get_jwt_identity()), "Export", "employers")
+    return send_file(
+        buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True, download_name=f"employers_export_{now_manila().strftime('%Y%m%d_%H%M%S')}.xlsx",
+    )
 
 
 @staff_bp.get("/employers/<company_id>")
@@ -388,7 +423,51 @@ def get_employer(company_id):
         return fail("Employer not found.", 404)
     result = company.to_dict(include_email=User.query.get(company.user_id).email)
     result["vacancies"] = [v.to_dict() for v in Vacancy.query.filter_by(employer_company_id=company.id).all()]
+    result["accreditation_history"] = [
+        e.to_dict() for e in AuditTrail.query.filter_by(module="employers", record_id=str(company.id))
+        .order_by(AuditTrail.created_at.desc()).all()
+    ]
     return ok(result)
+
+
+@staff_bp.put("/employers/<company_id>/documents/<document_id>/review")
+@jwt_required()
+@role_required("staff", "admin")
+def review_company_document(company_id, document_id):
+    company = EmployerCompany.query.get(company_id)
+    if not company:
+        return fail("Employer not found.", 404)
+    document = EmployerCompanyDocument.query.filter_by(id=document_id, employer_company_id=company.id).first()
+    if not document:
+        return fail("Document not found.", 404)
+
+    data = request.get_json(force=True) or {}
+    status = data.get("status")
+    if status not in ("verified", "rejected"):
+        return fail("Status must be 'verified' or 'rejected'.", 400)
+    if status == "rejected" and not data.get("rejection_reason"):
+        return fail("A rejection reason is required.", 400)
+
+    before = {"status": document.status, "rejection_reason": document.rejection_reason}
+    document.status = status
+    document.rejection_reason = data.get("rejection_reason") if status == "rejected" else None
+    document.reviewed_by = get_jwt_identity()
+    document.reviewed_at = now_manila()
+    after = {"status": document.status, "rejection_reason": document.rejection_reason}
+    db.session.commit()
+
+    doc_label = document.document_type.replace("_", " ").title()
+    notify_user(
+        company.user_id, "document_reviewed", f"Document {status.title()}",
+        f"Your {doc_label} was {status}." + (f" Reason: {document.rejection_reason}" if status == "rejected" else ""),
+        link="/employer/company", socket_event="document:verified" if status == "verified" else "document:rejected",
+        socket_payload={"employer_id": str(company.id), "document_type": document.document_type, "status": status},
+    )
+    log_audit(
+        User.query.get(get_jwt_identity()), "Approve" if status == "verified" else "Reject", "employers", company.id,
+        f"{doc_label} document {status}", before=before, after=after,
+    )
+    return ok(company.to_dict(), "Document review updated.")
 
 
 @staff_bp.put("/employers/<company_id>/verify")
