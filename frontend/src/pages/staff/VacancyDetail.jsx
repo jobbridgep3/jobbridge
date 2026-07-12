@@ -1,48 +1,95 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Download, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
+import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { Textarea } from '../../components/ui/Input'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/axios'
+import { downloadFile, parseBlobError } from '../../lib/download'
 import { fadeIn } from '../../lib/motion'
+import { formatSalaryRange } from '../../lib/salaryFormat'
+import { canTransition } from '../../lib/vacancyStateMachine'
+import { useAuthStore } from '../../store/authStore'
 
 export default function StaffVacancyDetail({ basePath = '/staff' }) {
   const { id } = useParams()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const role = useAuthStore((s) => s.user?.role)
   const [remarks, setRemarks] = useState('')
+  const [confirmSuspend, setConfirmSuspend] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [downloading, setDownloading] = useState(false)
 
   const { data: vacancy, isLoading } = useQuery({
     queryKey: ['staff', 'vacancies', id],
     queryFn: async () => (await api.get(`/api/staff/vacancies/${id}`)).data.data,
   })
 
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['staff', 'vacancies', id] })
+
   const approve = useMutation({
     mutationFn: () => api.put(`/api/staff/vacancies/${id}/approve`),
-    onSuccess: () => {
-      toast.success('Vacancy approved.')
-      queryClient.invalidateQueries({ queryKey: ['staff', 'vacancies', id] })
-    },
+    onSuccess: () => { toast.success('Vacancy approved.'); invalidate() },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not approve.'),
   })
-
   const reject = useMutation({
     mutationFn: () => api.put(`/api/staff/vacancies/${id}/reject`, { remarks }),
-    onSuccess: () => {
-      toast.success('Vacancy returned to employer.')
-      queryClient.invalidateQueries({ queryKey: ['staff', 'vacancies', id] })
-    },
+    onSuccess: () => { toast.success('Vacancy returned to employer.'); invalidate() },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not reject.'),
   })
+  const suspend = useMutation({
+    mutationFn: () => api.put(`/api/staff/vacancies/${id}/suspend`, { reason: remarks }),
+    onSuccess: () => { toast.success('Vacancy suspended.'); setConfirmSuspend(false); invalidate() },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not suspend.'),
+  })
+  const reactivate = useMutation({
+    mutationFn: () => api.put(`/api/staff/vacancies/${id}/reactivate`),
+    onSuccess: () => { toast.success('Vacancy reactivated.'); invalidate() },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not reactivate.'),
+  })
+  const close = useMutation({
+    mutationFn: () => api.put(`/api/staff/vacancies/${id}/close`),
+    onSuccess: () => { toast.success('Vacancy closed.'); invalidate() },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not close.'),
+  })
+
+  const deleteVacancy = async () => {
+    try {
+      await api.delete(`/api/staff/vacancies/${id}`)
+      toast.success('Vacancy deleted. It can be restored from the Admin panel.')
+      queryClient.invalidateQueries({ queryKey: ['staff', 'vacancies'] })
+      navigate(`${basePath}/vacancies`)
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not delete vacancy.')
+    } finally {
+      setConfirmDelete(false)
+    }
+  }
+
+  const downloadDetails = async () => {
+    setDownloading(true)
+    try {
+      await downloadFile(`/api/staff/vacancies/${id}/applicants/export/excel`, { filename: `vacancy_${id}_applicants.xlsx` })
+    } catch (err) {
+      toast.error(await parseBlobError(err))
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   if (isLoading || !vacancy) return <CardSkeleton />
 
   return (
-    <motion.div {...fadeIn} className="mx-auto max-w-3xl space-y-4">
+    <motion.div {...fadeIn} className="mx-auto max-w-4xl space-y-4">
       <Link to={`${basePath}/vacancies`} className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-primary-700">
         <ArrowLeft className="h-4 w-4" /> Back to Vacancies
       </Link>
@@ -52,38 +99,96 @@ export default function StaffVacancyDetail({ basePath = '/staff' }) {
           <div className="flex items-start justify-between">
             <div>
               <h1 className="text-lg font-semibold text-slate-900">{vacancy.title}</h1>
-              <p className="text-sm text-slate-500">{vacancy.company_name}</p>
+              <p className="text-sm text-slate-500">{vacancy.company_name} • {vacancy.industry || 'No industry specified'}</p>
+              <p className="mt-1 text-sm font-medium text-slate-700">{formatSalaryRange(vacancy.salary_min, vacancy.salary_max, vacancy.hide_salary)}</p>
             </div>
             <StatusBadge status={vacancy.status} />
           </div>
-          <p className="mt-4 whitespace-pre-line text-sm text-slate-600">{vacancy.description}</p>
-          {vacancy.requirements && <p className="mt-3 whitespace-pre-line text-sm text-slate-600">{vacancy.requirements}</p>}
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {canTransition(vacancy.status, 'approved', role) && (
+              <Button size="sm" onClick={() => approve.mutate()} disabled={approve.isPending}>Approve</Button>
+            )}
+            {canTransition(vacancy.status, 'rejected', role) && (
+              <Button size="sm" variant="danger" onClick={() => reject.mutate()} disabled={reject.isPending || !remarks}>Reject</Button>
+            )}
+            {canTransition(vacancy.status, 'suspended', role) && (
+              <Button size="sm" variant="secondary" onClick={() => setConfirmSuspend(true)}>Suspend</Button>
+            )}
+            {vacancy.status === 'suspended' && role === 'admin' && (
+              <Button size="sm" onClick={() => reactivate.mutate()} disabled={reactivate.isPending}>Reactivate</Button>
+            )}
+            {canTransition(vacancy.status, 'closed', role) && (
+              <Button size="sm" variant="secondary" onClick={() => close.mutate()} disabled={close.isPending}>Close</Button>
+            )}
+            <Button size="sm" variant="secondary" onClick={downloadDetails} disabled={downloading}>
+              <Download className="h-3.5 w-3.5" /> Export Applicants
+            </Button>
+            {role === 'admin' && (
+              <Button size="sm" variant="danger" onClick={() => setConfirmDelete(true)}>
+                <Trash2 className="h-3.5 w-3.5" /> Delete
+              </Button>
+            )}
+          </div>
+
+          {(vacancy.status === 'pending' || canTransition(vacancy.status, 'suspended', role)) && (
+            <div className="mt-3">
+              <Textarea placeholder="Remarks (required to reject/suspend)" value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={2} />
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {vacancy.status === 'pending' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Review Decision</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Textarea placeholder="Remarks (required if rejecting)" value={remarks} onChange={(e) => setRemarks(e.target.value)} />
-            <div className="flex gap-2">
-              <Button onClick={() => approve.mutate()} disabled={approve.isPending}>
-                Approve
-              </Button>
-              <Button variant="danger" onClick={() => reject.mutate()} disabled={reject.isPending || !remarks}>
-                Reject
-              </Button>
+      <Card>
+        <CardHeader><CardTitle>Job Details</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          {vacancy.summary && <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: vacancy.summary }} />}
+          {vacancy.responsibilities && (
+            <div>
+              <h4 className="text-sm font-semibold text-slate-700">Responsibilities</h4>
+              <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: vacancy.responsibilities }} />
             </div>
+          )}
+          {!vacancy.summary && !vacancy.responsibilities && vacancy.description && (
+            <p className="whitespace-pre-line text-sm text-slate-600">{vacancy.description}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Qualifications</CardTitle></CardHeader>
+        <CardContent className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+          <div><span className="text-slate-400">Education:</span> {vacancy.education_level || '—'}</div>
+          <div><span className="text-slate-400">Min. Experience:</span> {vacancy.min_experience_years ?? '—'} yrs</div>
+          <div><span className="text-slate-400">Fresh Grad OK:</span> {vacancy.fresh_grad_ok ? 'Yes' : 'No'}</div>
+          <div className="col-span-2 sm:col-span-3">
+            <span className="text-slate-400">Skills:</span>{' '}
+            {vacancy.required_skills?.length ? vacancy.required_skills.map((s) => <Badge key={s} className="mr-1">{s}</Badge>) : '—'}
+          </div>
+        </CardContent>
+      </Card>
+
+      {vacancy.benefits?.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Benefits</CardTitle></CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            {vacancy.benefits.map((b) => <Badge key={b}>{b}</Badge>)}
           </CardContent>
         </Card>
       )}
 
       <Card>
-        <CardHeader>
-          <CardTitle>Applicants ({vacancy.applicants?.length || 0})</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Hiring & Applicant Statistics</CardTitle></CardHeader>
+        <CardContent className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+          <div><span className="text-slate-400">Total Applicants:</span> {vacancy.hiring_stats?.total_applicants ?? 0}</div>
+          <div><span className="text-slate-400">Hired:</span> {vacancy.hiring_stats?.hired ?? 0}</div>
+          <div><span className="text-slate-400">Days Posted:</span> {vacancy.hiring_stats?.days_since_posted ?? '—'}</div>
+          <div><span className="text-slate-400">Openings:</span> {vacancy.num_slots}</div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Applicants ({vacancy.applicants?.length || 0})</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           {!vacancy.applicants?.length ? (
             <p className="text-sm text-slate-400">No applicants yet.</p>
@@ -97,6 +202,51 @@ export default function StaffVacancyDetail({ basePath = '/staff' }) {
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Audit History</CardTitle></CardHeader>
+        <CardContent className="space-y-2">
+          {!vacancy.audit_history?.length ? (
+            <p className="text-sm text-slate-400">No history yet.</p>
+          ) : (
+            vacancy.audit_history.map((h) => (
+              <div key={h.id} className="border-b border-slate-100 py-2 text-sm last:border-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-700"><span className="font-medium">{h.action}</span> by {h.user_email || 'System'} {h.details ? `— ${h.details}` : ''}</span>
+                  <span className="shrink-0 text-xs text-slate-400">{new Date(h.created_at).toLocaleString()}</span>
+                </div>
+                {(h.before_state || h.after_state) && (
+                  <p className="mt-1 text-xs text-slate-400">
+                    {h.before_state && `Before: ${JSON.stringify(h.before_state)} `}
+                    {h.after_state && `After: ${JSON.stringify(h.after_state)}`}
+                  </p>
+                )}
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <ConfirmDialog
+        open={confirmSuspend}
+        onOpenChange={setConfirmSuspend}
+        title="Suspend this vacancy?"
+        description="It will be hidden from the public job listing until reactivated by an Admin."
+        confirmLabel="Suspend"
+        danger
+        onConfirm={() => suspend.mutate()}
+        loading={suspend.isPending}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete this vacancy?"
+        description="It will be hidden from all listings. An Admin can restore it later."
+        confirmLabel="Delete"
+        danger
+        onConfirm={deleteVacancy}
+      />
     </motion.div>
   )
 }

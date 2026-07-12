@@ -12,7 +12,7 @@ from models.employment import EmploymentRecord
 from models.interview import Interview
 from models.jobseeker import JobseekerProfile
 from models.user import User
-from models.vacancy import Vacancy
+from models.vacancy import Vacancy, VacancyCategory
 from services.audit_query_service import build_audit_query
 from services.audit_service import log_audit
 from services.dashboard_service import build_analytics, build_dashboard_excel, build_dashboard_pdf, build_summary
@@ -213,3 +213,64 @@ def export_audit_pdf():
     pdf_bytes = generate_table_report("Audit Trail", ["Timestamp", "User", "Action", "Module", "Status"], rows, datetime.utcnow().strftime("%Y-%m-%d"))
     log_audit(User.query.get(get_jwt_identity()), "Export", "audit_trail")
     return send_file(to_bytesio(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name="audit_trail.pdf")
+
+
+# ---------- Vacancy Categories (Admin-exclusive management) ----------
+
+@admin_bp.get("/vacancy-categories")
+@jwt_required()
+@role_required("admin")
+def admin_list_vacancy_categories():
+    categories = VacancyCategory.query.order_by(VacancyCategory.name).all()
+    return ok([c.to_dict() for c in categories])
+
+
+@admin_bp.post("/vacancy-categories")
+@jwt_required()
+@role_required("admin")
+def create_vacancy_category():
+    data = request.get_json(force=True) or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return fail("Category name is required.", 400)
+    if VacancyCategory.query.filter_by(name=name).first():
+        return fail("A category with this name already exists.", 409)
+
+    category = VacancyCategory(name=name)
+    db.session.add(category)
+    db.session.commit()
+    log_audit(User.query.get(get_jwt_identity()), "Create", "vacancy_categories", category.id, name)
+    return ok(category.to_dict(), "Category created.", 201)
+
+
+@admin_bp.put("/vacancy-categories/<category_id>")
+@jwt_required()
+@role_required("admin")
+def update_vacancy_category(category_id):
+    category = VacancyCategory.query.get(category_id)
+    if not category:
+        return fail("Category not found.", 404)
+    data = request.get_json(force=True) or {}
+    if "name" in data and data["name"].strip():
+        category.name = data["name"].strip()
+    if "is_active" in data:
+        category.is_active = bool(data["is_active"])
+    db.session.commit()
+    log_audit(User.query.get(get_jwt_identity()), "Update", "vacancy_categories", category.id)
+    return ok(category.to_dict(), "Category updated.")
+
+
+@admin_bp.delete("/vacancy-categories/<category_id>")
+@jwt_required()
+@role_required("admin")
+def delete_vacancy_category(category_id):
+    category = VacancyCategory.query.get(category_id)
+    if not category:
+        return fail("Category not found.", 404)
+    if Vacancy.query.filter_by(category_id=category.id).count() > 0:
+        return fail("This category is in use by existing vacancies and cannot be deleted. Deactivate it instead.", 409)
+
+    db.session.delete(category)
+    db.session.commit()
+    log_audit(User.query.get(get_jwt_identity()), "Delete", "vacancy_categories", category_id)
+    return ok(message="Category deleted.")

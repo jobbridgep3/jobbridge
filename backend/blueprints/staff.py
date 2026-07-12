@@ -1,7 +1,8 @@
+import uuid
 from datetime import datetime, timedelta
 
 from flask import Blueprint, request, send_file
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from marshmallow import ValidationError
 
 from extensions import db
@@ -17,7 +18,13 @@ from models.user import User
 from models.vacancy import Vacancy
 from schemas.jobseeker_schemas import ProfileUpdateSchema
 from services.audit_service import log_audit
-from services.dashboard_service import build_analytics, build_dashboard_excel, build_dashboard_pdf, build_summary
+from services.dashboard_service import (
+    build_analytics,
+    build_dashboard_excel,
+    build_dashboard_pdf,
+    build_summary,
+    build_vacancy_analytics,
+)
 from services.email_service import send_verification_status_email
 from services.employer_query_service import build_employer_query
 from services.excel_service import build_excel_report
@@ -26,6 +33,7 @@ from services.pdf_service import generate_referral_letter, generate_table_report
 from services.profile_service import apply_document_upload, apply_profile_update, find_document
 from services.storage_service import upload_file
 from services.user_deletion_service import employer_dependent_counts, jobseeker_dependent_counts
+from services.vacancy_query_service import build_vacancy_query
 from services.vacancy_state_service import can_transition
 from sockets.events import emit_to_role
 from utils.decorators import role_required
@@ -583,11 +591,73 @@ def delete_employer(company_id):
 @jwt_required()
 @role_required("staff", "admin")
 def staff_list_vacancies():
-    query = Vacancy.query
-    if request.args.get("status"):
-        query = query.filter_by(status=request.args["status"])
-    vacancies = query.order_by(Vacancy.created_at.desc()).all()
-    return ok([v.to_dict() for v in vacancies])
+    query = build_vacancy_query(request.args).order_by(Vacancy.created_at.desc())
+    result = paginate(query, request.args)
+    return ok({
+        "items": [v.to_dict() for v in result["items"]],
+        "total": result["total"], "page": result["page"], "limit": result["limit"],
+    })
+
+
+@staff_bp.get("/vacancies/summary")
+@jwt_required()
+@role_required("staff", "admin")
+def staff_vacancy_summary():
+    base = Vacancy.query.filter(Vacancy.deleted_at.is_(None))
+    return ok({
+        "total": base.count(),
+        "draft": base.filter_by(status="draft").count(),
+        "pending": base.filter_by(status="pending").count(),
+        "approved": base.filter_by(status="approved").count(),
+        "published": base.filter_by(status="published").count(),
+        "rejected": base.filter_by(status="rejected").count(),
+        "suspended": base.filter_by(status="suspended").count(),
+        "closed": base.filter_by(status="closed").count(),
+        "filled": base.filter_by(status="filled").count(),
+    })
+
+
+@staff_bp.get("/vacancies/analytics")
+@jwt_required()
+@role_required("staff", "admin")
+def staff_vacancy_analytics():
+    months = int(request.args.get("months", 6))
+    return ok(build_vacancy_analytics(months))
+
+
+@staff_bp.get("/vacancies/export/excel")
+@jwt_required()
+@role_required("staff", "admin")
+def export_vacancies_excel():
+    scope = request.args.get("scope", "all")
+    query = build_vacancy_query(request.args).order_by(Vacancy.created_at.desc())
+    if scope == "selected":
+        ids = request.args.get("ids", "")
+        query = query.filter(Vacancy.id.in_(ids.split(",") if ids else []))
+    elif scope == "current_page":
+        page = max(int(request.args.get("page", 1)), 1)
+        limit = min(int(request.args.get("limit", 50)), 200)
+        query = query.offset((page - 1) * limit).limit(limit)
+    vacancies = query.limit(20000).all()
+
+    rows = [
+        [
+            v.title, v.employer_company.company_name if v.employer_company else "", v.industry or "",
+            v.city_municipality_name or "", (v.job_type or "").replace("_", " ").title(),
+            v.status.replace("_", " ").title(), v.num_slots, len(v.applications), v.created_at.strftime("%Y-%m-%d"),
+        ]
+        for v in vacancies
+    ]
+    buf = build_excel_report(
+        "Vacancies",
+        ["Job Title", "Employer", "Industry", "Municipality", "Employment Type", "Status", "Openings", "Applicants", "Posted Date"],
+        rows,
+    )
+    log_audit(User.query.get(get_jwt_identity()), "Export", "vacancies")
+    return send_file(
+        buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True, download_name=f"vacancies_export_{now_manila().strftime('%Y%m%d_%H%M%S')}.xlsx",
+    )
 
 
 @staff_bp.get("/vacancies/<vacancy_id>")
@@ -595,11 +665,46 @@ def staff_list_vacancies():
 @role_required("staff", "admin")
 def staff_get_vacancy(vacancy_id):
     vacancy = Vacancy.query.get(vacancy_id)
-    if not vacancy:
+    if not vacancy or vacancy.deleted_at:
         return fail("Vacancy not found.", 404)
     result = vacancy.to_dict()
-    result["applicants"] = [a.to_dict() for a in vacancy.applications]
+    applicants = [a.to_dict() for a in vacancy.applications]
+    result["applicants"] = applicants
+    status_counts = {}
+    for a in applicants:
+        status_counts[a["status"]] = status_counts.get(a["status"], 0) + 1
+    result["applicant_stats"] = status_counts
+    result["hiring_stats"] = {
+        "total_applicants": len(applicants),
+        "hired": status_counts.get("hired", 0),
+        "days_since_posted": (now_manila().date() - vacancy.created_at.date()).days if vacancy.created_at else None,
+    }
+    result["audit_history"] = [
+        e.to_dict() for e in AuditTrail.query.filter_by(module="vacancies", record_id=str(vacancy.id))
+        .order_by(AuditTrail.created_at.desc()).all()
+    ]
     return ok(result)
+
+
+@staff_bp.get("/vacancies/<vacancy_id>/applicants/export/excel")
+@jwt_required()
+@role_required("staff", "admin")
+def export_vacancy_applicants_excel(vacancy_id):
+    vacancy = Vacancy.query.get(vacancy_id)
+    if not vacancy:
+        return fail("Vacancy not found.", 404)
+    rows = [
+        [a.jobseeker_profile.full_name, a.jobseeker_profile.contact_number or "", a.status, a.match_score or "", a.created_at.strftime("%Y-%m-%d")]
+        for a in vacancy.applications
+    ]
+    buf = build_excel_report(
+        f"Applicants - {vacancy.title}"[:31], ["Applicant Name", "Contact Number", "Status", "Match Score", "Applied Date"], rows,
+    )
+    log_audit(User.query.get(get_jwt_identity()), "Export", "vacancies", vacancy.id, "Exported applicants")
+    return send_file(
+        buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True, download_name=f"vacancy_{vacancy_id}_applicants.xlsx",
+    )
 
 
 @staff_bp.put("/vacancies/<vacancy_id>/approve")
@@ -646,6 +751,163 @@ def reject_vacancy(vacancy_id):
                 socket_payload={"vacancy_id": str(vacancy.id), "remarks": vacancy.rejection_remarks})
     log_audit(User.query.get(get_jwt_identity()), "Reject", "vacancies", vacancy.id, before=before, after=after)
     return ok(vacancy.to_dict(), "Vacancy rejected.")
+
+
+@staff_bp.put("/vacancies/<vacancy_id>/suspend")
+@jwt_required()
+@role_required("staff", "admin")
+def suspend_vacancy(vacancy_id):
+    vacancy = Vacancy.query.get(vacancy_id)
+    if not vacancy or vacancy.deleted_at:
+        return fail("Vacancy not found.", 404)
+    if not can_transition(vacancy.status, "suspended", "staff"):
+        return fail(f"Cannot suspend a vacancy from status '{vacancy.status}'.", 400)
+
+    data = request.get_json(force=True) or {}
+    before = {"status": vacancy.status}
+    vacancy.status = "suspended"
+    vacancy.suspended_reason = data.get("reason", "")
+    after = {"status": vacancy.status}
+    db.session.commit()
+    notify_user(vacancy.employer_company.user_id, "vacancy_suspended", "Vacancy Suspended",
+                f"{vacancy.title} has been suspended." + (f" Reason: {vacancy.suspended_reason}" if vacancy.suspended_reason else ""),
+                socket_event="vacancy:suspended", socket_payload={"vacancy_id": str(vacancy.id)})
+    log_audit(User.query.get(get_jwt_identity()), "Update", "vacancies", vacancy.id, "Suspended", before=before, after=after)
+    return ok(vacancy.to_dict(), "Vacancy suspended.")
+
+
+@staff_bp.put("/vacancies/<vacancy_id>/reactivate")
+@jwt_required()
+@role_required("admin")
+def reactivate_vacancy(vacancy_id):
+    vacancy = Vacancy.query.get(vacancy_id)
+    if not vacancy or vacancy.deleted_at:
+        return fail("Vacancy not found.", 404)
+    if not can_transition(vacancy.status, "published", "admin"):
+        return fail(f"Cannot reactivate a vacancy from status '{vacancy.status}'.", 400)
+
+    before = {"status": vacancy.status}
+    vacancy.status = "published"
+    vacancy.suspended_reason = None
+    after = {"status": vacancy.status}
+    db.session.commit()
+    notify_user(vacancy.employer_company.user_id, "vacancy_reactivated", "Vacancy Reactivated",
+                f"{vacancy.title} has been reactivated and is published again.",
+                socket_event="vacancy:approved", socket_payload={"vacancy_id": str(vacancy.id)})
+    log_audit(User.query.get(get_jwt_identity()), "Update", "vacancies", vacancy.id, "Reactivated", before=before, after=after)
+    return ok(vacancy.to_dict(), "Vacancy reactivated.")
+
+
+@staff_bp.put("/vacancies/<vacancy_id>/close")
+@jwt_required()
+@role_required("staff", "admin")
+def staff_close_vacancy(vacancy_id):
+    vacancy = Vacancy.query.get(vacancy_id)
+    if not vacancy or vacancy.deleted_at:
+        return fail("Vacancy not found.", 404)
+    if not can_transition(vacancy.status, "closed", "staff"):
+        return fail(f"Cannot close a vacancy from status '{vacancy.status}'.", 400)
+
+    before = {"status": vacancy.status}
+    vacancy.status = "closed"
+    after = {"status": vacancy.status}
+    db.session.commit()
+    log_audit(User.query.get(get_jwt_identity()), "Update", "vacancies", vacancy.id, "Closed by staff", before=before, after=after)
+    return ok(vacancy.to_dict(), "Vacancy closed.")
+
+
+@staff_bp.delete("/vacancies/<vacancy_id>")
+@jwt_required()
+@role_required("admin")
+def staff_delete_vacancy(vacancy_id):
+    """Soft delete — admin can Restore it later, unlike the hard-delete used for
+    employer/jobseeker accounts (this vacancy may have applicant history worth
+    preserving, so the row is kept, just hidden from every normal listing)."""
+    vacancy = Vacancy.query.get(vacancy_id)
+    if not vacancy or vacancy.deleted_at:
+        return fail("Vacancy not found.", 404)
+
+    vacancy.deleted_at = now_manila()
+    db.session.commit()
+    log_audit(User.query.get(get_jwt_identity()), "Delete", "vacancies", vacancy.id, f"Soft-deleted: {vacancy.title}")
+    return ok(message="Vacancy deleted. It can be restored from the Admin panel.")
+
+
+@staff_bp.put("/vacancies/<vacancy_id>/restore")
+@jwt_required()
+@role_required("admin")
+def restore_vacancy(vacancy_id):
+    vacancy = Vacancy.query.get(vacancy_id)
+    if not vacancy or not vacancy.deleted_at:
+        return fail("Vacancy not found or not deleted.", 404)
+
+    vacancy.deleted_at = None
+    db.session.commit()
+    log_audit(User.query.get(get_jwt_identity()), "Update", "vacancies", vacancy.id, f"Restored: {vacancy.title}")
+    return ok(vacancy.to_dict(), "Vacancy restored.")
+
+
+@staff_bp.post("/vacancies/bulk-action")
+@jwt_required()
+@role_required("staff", "admin")
+def bulk_vacancy_action():
+    """Transaction-safe per item: one vacancy's failure doesn't roll back the
+    others' success — the response reports exactly which ids succeeded/failed
+    and why, rather than an all-or-nothing outcome."""
+    data = request.get_json(force=True) or {}
+    action = data.get("action")
+    vacancy_ids = data.get("vacancy_ids", [])
+    remarks = data.get("remarks", "")
+    actor_role = get_jwt().get("role")
+    actor = User.query.get(get_jwt_identity())
+
+    action_to_status = {
+        "approve": "approved", "reject": "rejected", "suspend": "suspended", "close": "closed",
+    }
+    if action == "delete" and actor_role != "admin":
+        return fail("Only Admin can bulk-delete vacancies.", 403)
+    if action not in (*action_to_status, "delete"):
+        return fail("Invalid bulk action.", 400)
+
+    succeeded, failed = [], []
+    for vacancy_id in vacancy_ids:
+        try:
+            try:
+                uuid.UUID(str(vacancy_id))
+            except ValueError:
+                failed.append({"id": vacancy_id, "reason": "Invalid vacancy ID."})
+                continue
+
+            vacancy = Vacancy.query.get(vacancy_id)
+            if not vacancy or vacancy.deleted_at:
+                failed.append({"id": vacancy_id, "reason": "Vacancy not found."})
+                continue
+
+            if action == "delete":
+                vacancy.deleted_at = now_manila()
+                log_audit(actor, "Delete", "vacancies", vacancy.id, "Bulk deleted")
+            else:
+                new_status = action_to_status[action]
+                if not can_transition(vacancy.status, new_status, "staff" if action != "delete" else "admin"):
+                    failed.append({"id": vacancy_id, "reason": f"Cannot {action} from status '{vacancy.status}'."})
+                    continue
+                if action == "reject" and not remarks:
+                    failed.append({"id": vacancy_id, "reason": "Remarks are required to reject."})
+                    continue
+                before = {"status": vacancy.status}
+                vacancy.status = new_status
+                if action == "reject":
+                    vacancy.rejection_remarks = remarks
+                if action == "suspend":
+                    vacancy.suspended_reason = remarks
+                log_audit(actor, action.title(), "vacancies", vacancy.id, f"Bulk {action}", before=before, after={"status": new_status})
+            db.session.commit()
+            succeeded.append(vacancy_id)
+        except Exception as exc:  # noqa: BLE001
+            db.session.rollback()
+            failed.append({"id": vacancy_id, "reason": str(exc)})
+
+    return ok({"succeeded": succeeded, "failed": failed}, f"{len(succeeded)} succeeded, {len(failed)} failed.")
 
 
 @staff_bp.post("/vacancies")

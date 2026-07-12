@@ -207,6 +207,78 @@ def build_dashboard_excel(args):
     return build_multi_sheet_excel_report(sheets)
 
 
+def build_vacancy_analytics(months: int = 6) -> dict:
+    """Admin/Staff Vacancy Management analytics — reuses this module's own
+    month-bucketing convention, scoped to vacancies rather than platform-wide."""
+    from models.vacancy import VACANCY_STATUSES
+
+    buckets = _month_buckets(min(max(months, 1), 12))
+    labels = [f"{y:04d}-{m:02d}" for y, m in buckets]
+    start_date = date(buckets[0][0], buckets[0][1], 1)
+
+    month_rows = dict(
+        db.session.query(func.to_char(Vacancy.created_at, "YYYY-MM"), func.count(Vacancy.id))
+        .filter(Vacancy.created_at >= start_date, Vacancy.deleted_at.is_(None))
+        .group_by(func.to_char(Vacancy.created_at, "YYYY-MM")).all()
+    )
+    vacancies_per_month = [{"month": lbl, "count": month_rows.get(lbl, 0)} for lbl in labels]
+
+    def _top(column, limit=8):
+        rows = (
+            db.session.query(column, func.count(Vacancy.id))
+            .filter(Vacancy.deleted_at.is_(None)).group_by(column)
+            .order_by(func.count(Vacancy.id).desc()).all()
+        )
+        return [{"label": lbl or "Unspecified", "count": cnt} for lbl, cnt in rows[:limit]]
+
+    by_industry = _top(Vacancy.industry)
+    by_municipality = _top(Vacancy.city_municipality_name)
+    by_employment_type = _top(Vacancy.job_type)
+
+    top_employer_rows = (
+        db.session.query(EmployerCompany.company_name, func.count(Vacancy.id))
+        .join(Vacancy, Vacancy.employer_company_id == EmployerCompany.id)
+        .filter(Vacancy.deleted_at.is_(None))
+        .group_by(EmployerCompany.company_name)
+        .order_by(func.count(Vacancy.id).desc()).limit(8).all()
+    )
+    top_employers = [{"label": name or "Unnamed Company", "count": cnt} for name, cnt in top_employer_rows]
+
+    app_count_rows = (
+        db.session.query(Vacancy.title, func.count(Application.id))
+        .join(Application, Application.vacancy_id == Vacancy.id)
+        .filter(Vacancy.deleted_at.is_(None))
+        .group_by(Vacancy.id, Vacancy.title)
+        .order_by(func.count(Application.id).desc()).limit(10).all()
+    )
+    applications_per_vacancy = [{"label": title, "count": cnt} for title, cnt in app_count_rows]
+
+    status_counts = dict(
+        db.session.query(Vacancy.status, func.count(Vacancy.id)).filter(Vacancy.deleted_at.is_(None)).group_by(Vacancy.status).all()
+    )
+    for s in VACANCY_STATUSES:
+        status_counts.setdefault(s, 0)
+    decided = status_counts["approved"] + status_counts["rejected"] + status_counts["published"] + status_counts["suspended"] + status_counts["closed"] + status_counts["filled"]
+    approved_total = decided - status_counts["rejected"]
+    approval_rate = round(approved_total / decided * 100, 1) if decided else 0
+    ever_published = status_counts["published"] + status_counts["closed"] + status_counts["filled"]
+    filled_vs_unfilled = {"filled": status_counts["filled"], "unfilled": status_counts["published"] + status_counts["closed"]}
+    fill_rate = round(status_counts["filled"] / ever_published * 100, 1) if ever_published else 0
+
+    return {
+        "vacancies_per_month": vacancies_per_month,
+        "by_industry": by_industry,
+        "by_municipality": by_municipality,
+        "by_employment_type": by_employment_type,
+        "top_employers": top_employers,
+        "applications_per_vacancy": applications_per_vacancy,
+        "approval_rate": approval_rate,
+        "filled_vs_unfilled": filled_vs_unfilled,
+        "fill_rate": fill_rate,
+        "status_counts": status_counts,
+    }
+
+
 def build_dashboard_pdf(args, generated_by: str) -> bytes:
     scope = args.get("scope", "both")
     months = int(args.get("months", 6))
