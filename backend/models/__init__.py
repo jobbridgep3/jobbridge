@@ -3,7 +3,7 @@
 from models.announcement import Announcement
 from models.application import Application
 from models.audit import AuditTrail
-from models.employer import EmployerCompany
+from models.employer import EmployerCompany, EmployerCompanyDocument
 from models.employment import EmploymentRecord
 from models.interview import Interview
 from models.jobfair import JobFair, JobFairBooth, JobFairRegistration
@@ -25,6 +25,7 @@ __all__ = [
     "Education",
     "JobseekerDocument",
     "EmployerCompany",
+    "EmployerCompanyDocument",
     "Vacancy",
     "Application",
     "Interview",

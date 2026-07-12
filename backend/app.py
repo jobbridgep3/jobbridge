@@ -64,6 +64,7 @@ def _register_blueprints(app: Flask):
     from blueprints.jobfair import jobfair_bp, staff_jobfair_bp
     from blueprints.jobs import jobs_bp
     from blueprints.lmi import lmi_bp
+    from blueprints.lookups import lookups_bp
     from blueprints.notifications import notifications_bp
     from blueprints.profile import profile_bp
     from blueprints.programs import programs_bp
@@ -77,7 +78,7 @@ def _register_blueprints(app: Flask):
         jobfair_bp, staff_jobfair_bp, programs_bp, training_bp, staff_training_bp,
         notifications_bp, settings_bp, admin_settings_bp,
         employer_bp, company_bp, vacancies_bp, applicants_bp,
-        staff_bp, lmi_bp, admin_bp, announcements_bp, chatbot_bp,
+        staff_bp, lmi_bp, admin_bp, announcements_bp, chatbot_bp, lookups_bp,
     ):
         app.register_blueprint(bp)
 

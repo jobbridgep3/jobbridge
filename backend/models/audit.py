@@ -19,8 +19,11 @@ class AuditTrail(BaseModel):
     module = db.Column(db.String(100), nullable=False)
     record_id = db.Column(db.String(100), nullable=True)
     ip_address = db.Column(db.String(64), nullable=True)
+    user_agent = db.Column(db.String(500), nullable=True)
     details = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(20), nullable=False, default="success")  # "success" | "failed"
+    before_state = db.Column(db.JSON, nullable=True)
+    after_state = db.Column(db.JSON, nullable=True)
 
     def to_dict(self):
         return {
@@ -32,7 +35,10 @@ class AuditTrail(BaseModel):
             "module": self.module,
             "record_id": self.record_id,
             "ip_address": self.ip_address,
+            "user_agent": self.user_agent,
             "details": self.details,
             "status": self.status,
+            "before_state": self.before_state,
+            "after_state": self.after_state,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

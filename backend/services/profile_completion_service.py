@@ -44,10 +44,16 @@ REQUIRED_FIELDS = [
 ]
 
 
-def compute_completion(profile) -> dict:
+def compute_completion(profile, required_fields=None) -> dict:
     """Returns {"profile_completion": int, "completed_count": int, "total_count": int,
-    "missing_fields": [{"key","section","label"}, ...]}."""
-    results = [(key, section, label, bool(check(profile))) for key, section, label, check in REQUIRED_FIELDS]
+    "missing_fields": [{"key","section","label"}, ...]}.
+
+    required_fields defaults to the jobseeker REQUIRED_FIELDS list above so every
+    existing call site is unaffected; pass COMPANY_REQUIRED_FIELDS / HR_REQUIRED_FIELDS
+    (below) to reuse this same engine for Company Profile / HR Profile completion.
+    """
+    fields = required_fields if required_fields is not None else REQUIRED_FIELDS
+    results = [(key, section, label, bool(check(profile))) for key, section, label, check in fields]
     total = len(results)
     completed = sum(1 for *_, ok in results if ok)
     missing_fields = [{"key": key, "section": section, "label": label} for key, section, label, ok in results if not ok]
