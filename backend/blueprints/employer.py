@@ -1,5 +1,5 @@
 from marshmallow import ValidationError
-from flask import Blueprint, request
+from flask import Blueprint, request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from extensions import db
@@ -38,6 +38,7 @@ def _hr_profile() -> EmployerHRProfile:
 @jwt_required()
 @role_required("employer")
 def dashboard_stats():
+    """Deprecated — superseded by /dashboard/summary. Kept so no existing caller 404s."""
     company = _company()
     if not company:
         return fail("Company profile not found.", 404)
@@ -49,6 +50,109 @@ def dashboard_stats():
         "total_applicants": applicant_count,
         "company_verification_status": company.accreditation_status,
     })
+
+
+@employer_bp.get("/dashboard/summary")
+@jwt_required()
+@role_required("employer")
+def employer_dashboard_summary():
+    from services.employer_dashboard_service import build_summary
+
+    company = _company()
+    if not company:
+        return fail("Company profile not found.", 404)
+    return ok(build_summary(company))
+
+
+@employer_bp.get("/dashboard/analytics")
+@jwt_required()
+@role_required("employer")
+def employer_dashboard_analytics():
+    from services.employer_dashboard_service import build_analytics
+
+    company = _company()
+    if not company:
+        return fail("Company profile not found.", 404)
+    months = int(request.args.get("months", 6))
+    return ok(build_analytics(company, months, request.args.get("date_from"), request.args.get("date_to")))
+
+
+@employer_bp.get("/dashboard/pending-actions")
+@jwt_required()
+@role_required("employer")
+def employer_dashboard_pending_actions():
+    from services.employer_dashboard_service import build_pending_actions
+
+    company = _company()
+    if not company:
+        return fail("Company profile not found.", 404)
+    return ok(build_pending_actions(company, _hr_profile()))
+
+
+@employer_bp.get("/dashboard/recent-applicants")
+@jwt_required()
+@role_required("employer")
+def employer_dashboard_recent_applicants():
+    from services.employer_dashboard_service import build_recent_applicants
+
+    company = _company()
+    if not company:
+        return fail("Company profile not found.", 404)
+    return ok(build_recent_applicants(company))
+
+
+@employer_bp.get("/dashboard/recent-activity")
+@jwt_required()
+@role_required("employer")
+def employer_dashboard_recent_activity():
+    from services.employer_dashboard_service import build_recent_activity
+
+    company = _company()
+    if not company:
+        return fail("Company profile not found.", 404)
+    return ok(build_recent_activity(company))
+
+
+@employer_bp.get("/dashboard/insights")
+@jwt_required()
+@role_required("employer")
+def employer_dashboard_insights():
+    from services.employer_dashboard_service import build_company_insights
+
+    company = _company()
+    if not company:
+        return fail("Company profile not found.", 404)
+    return ok(build_company_insights(company))
+
+
+@employer_bp.get("/dashboard/export/excel")
+@jwt_required()
+@role_required("employer")
+def employer_dashboard_export_excel():
+    from services.employer_dashboard_service import build_employer_dashboard_excel
+
+    company = _company()
+    if not company:
+        return fail("Company profile not found.", 404)
+    buf = build_employer_dashboard_excel(company, request.args)
+    log_audit(User.query.get(company.user_id), "Export", "employer_dashboard")
+    return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="dashboard_report.xlsx")
+
+
+@employer_bp.get("/dashboard/export/pdf")
+@jwt_required()
+@role_required("employer")
+def employer_dashboard_export_pdf():
+    from services.employer_dashboard_service import build_employer_dashboard_pdf
+    from services.pdf_service import to_bytesio
+
+    company = _company()
+    if not company:
+        return fail("Company profile not found.", 404)
+    actor = User.query.get(company.user_id)
+    pdf_bytes = build_employer_dashboard_pdf(company, request.args, actor.email)
+    log_audit(actor, "Export", "employer_dashboard")
+    return send_file(to_bytesio(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name="dashboard_report.pdf")
 
 
 @employer_bp.get("/profile")

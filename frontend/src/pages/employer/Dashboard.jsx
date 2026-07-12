@@ -1,21 +1,29 @@
 import { useQuery } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
-import { Briefcase, CalendarCheck, ClipboardList, ShieldCheck } from 'lucide-react'
+import { CalendarCheck } from 'lucide-react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { Badge } from '../../components/ui/Badge'
+import { Button } from '../../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { StatCard } from '../../components/ui/StatCard'
+import { Input, Label } from '../../components/ui/Input'
+import { PageHeader } from '../../components/ui/PageHeader'
 import api from '../../lib/axios'
-import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
+import { fadeIn } from '../../lib/motion'
+import { DashboardExportDialog } from '../admin/dashboard/DashboardExportDialog'
+import { AnalyticsCharts } from './dashboard/AnalyticsCharts'
+import { CompanyInsights } from './dashboard/CompanyInsights'
+import { PendingActionsPanel } from './dashboard/PendingActionsPanel'
+import { QuickActions } from './dashboard/QuickActions'
+import { RecentActivity } from './dashboard/RecentActivity'
+import { RecentApplicants } from './dashboard/RecentApplicants'
+import { SummaryCards } from './dashboard/SummaryCards'
 
 export default function EmployerDashboard() {
-  const { data: stats } = useQuery({
-    queryKey: ['employer', 'dashboard-stats'],
-    queryFn: async () => (await api.get('/api/employer/dashboard-stats')).data.data,
-  })
+  const [dateRange, setDateRange] = useState({ date_from: '', date_to: '' })
+
   const { data: interviews } = useQuery({
     queryKey: ['interviews', 'upcoming'],
     queryFn: async () => (await api.get('/api/interviews/upcoming')).data.data,
@@ -27,27 +35,49 @@ export default function EmployerDashboard() {
 
   return (
     <motion.div {...fadeIn} className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">Employer Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">Overview of your hiring activity.</p>
+      <PageHeader
+        title="Employer Dashboard"
+        description="Overview of your hiring activity."
+        actions={<DashboardExportDialog apiBase="/api/employer" initialFilters={dateRange} />}
+      />
+
+      <SummaryCards />
+      <QuickActions />
+
+      <Card>
+        <CardContent className="flex flex-wrap items-end gap-4">
+          <div>
+            <Label>Date From</Label>
+            <Input type="date" value={dateRange.date_from} onChange={(e) => setDateRange((r) => ({ ...r, date_from: e.target.value }))} />
+          </div>
+          <div>
+            <Label>Date To</Label>
+            <Input type="date" value={dateRange.date_to} onChange={(e) => setDateRange((r) => ({ ...r, date_to: e.target.value }))} />
+          </div>
+          <p className="text-xs text-slate-400">Filters the analytics charts below and pre-fills the export dialog above.</p>
+        </CardContent>
+      </Card>
+
+      <div id="dashboard-analytics">
+        <AnalyticsCharts dateRange={dateRange} />
       </div>
 
-      <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-        {[
-          { label: 'Active Vacancies', value: stats?.active_vacancies ?? '–', icon: Briefcase, tone: 'primary' },
-          { label: 'Total Applicants', value: stats?.total_applicants ?? '–', icon: ClipboardList, tone: 'warning' },
-          { label: 'Company Status', value: stats?.company_verification_status ?? '–', icon: ShieldCheck, tone: 'success' },
-        ].map((s) => (
-          <motion.div key={s.label} variants={staggerItem}>
-            <StatCard {...s} value={typeof s.value === 'string' && s.value !== '–' ? <span className="capitalize">{s.value}</span> : s.value} />
-          </motion.div>
-        ))}
-      </motion.div>
+      <CompanyInsights />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <PendingActionsPanel />
+        <RecentActivity />
+      </div>
+
+      <RecentApplicants />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Upcoming Interviews</CardTitle>
+            <Button asChild variant="link" size="sm">
+              <Link to="/employer/interviews">View All</Link>
+            </Button>
           </CardHeader>
           <CardContent className="space-y-3">
             {!interviews?.length ? (
@@ -64,7 +94,7 @@ export default function EmployerDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="dashboard-announcements">
           <CardHeader>
             <CardTitle>PESO Announcements</CardTitle>
           </CardHeader>
@@ -80,12 +110,6 @@ export default function EmployerDashboard() {
             )}
           </CardContent>
         </Card>
-      </div>
-
-      <div className="flex gap-3">
-        <Link to="/employer/vacancies/create">
-          <Badge variant="primary" className="px-4 py-2 text-sm">+ Post a New Vacancy</Badge>
-        </Link>
       </div>
     </motion.div>
   )

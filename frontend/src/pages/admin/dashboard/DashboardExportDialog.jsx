@@ -1,5 +1,5 @@
 import { Download } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 
 import { Button } from '../../../components/ui/Button'
@@ -9,12 +9,22 @@ import { downloadFile, parseBlobError } from '../../../lib/download'
 
 const EMPTY_FILTERS = { date_from: '', date_to: '', scope: 'both' }
 
-/** Shared Admin/Staff dashboard export dialog — entire dashboard, a filtered
- * subset (scope), or a selected date range, exported as Excel or PDF. */
-export function DashboardExportDialog({ apiBase = '/api/admin' }) {
+/** Shared Admin/Staff/Employer dashboard export dialog — entire dashboard, a
+ * filtered subset (scope), or a selected date range, exported as Excel or PDF.
+ * `initialFilters` lets a caller (e.g. the Employer Dashboard's page-level date
+ * range picker) pre-fill the dialog so the export matches what's on screen —
+ * admin/staff usage omits it and gets the same blank-filter behavior as before. */
+export function DashboardExportDialog({ apiBase = '/api/admin', initialFilters }) {
   const [open, setOpen] = useState(false)
-  const [filters, setFilters] = useState(EMPTY_FILTERS)
+  const [filters, setFilters] = useState({ ...EMPTY_FILTERS, ...initialFilters })
   const [exporting, setExporting] = useState(null)
+
+  // Re-sync from the page's current date range each time the dialog is opened,
+  // so it always reflects what's on screen at that moment (not just at mount).
+  useEffect(() => {
+    if (open) setFilters({ ...EMPTY_FILTERS, ...initialFilters })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   const setFilter = (field) => (e) => setFilters((f) => ({ ...f, [field]: e.target.value }))
 
