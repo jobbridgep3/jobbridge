@@ -21,7 +21,8 @@ from schemas.auth_schemas import (
     VerifyOtpSchema,
 )
 from services.audit_service import log_audit
-from services.email_service import send_otp_email
+from services.email_service import send_employer_welcome_email, send_otp_email
+from services.notification_service import notify_user
 from utils.client_ip import get_client_ip
 from utils.rate_limit_keys import ip_and_email_key
 from utils.recaptcha import verify_recaptcha
@@ -163,6 +164,21 @@ def verify_otp():
         user.is_verified = True
     db.session.commit()
     log_audit(user, "Update", "auth", user.id, "OTP verified")
+
+    if payload["purpose"] == "register" and user.role == "employer" and user.welcome_flow_sent_at is None:
+        # Flag flipped + committed *before* the email send so a client retry of this
+        # same request (or a second verify-otp call replaying an already-consumed
+        # code, which fails earlier above) can never double-send — a failed email
+        # is logged but never fails this response, same as other notify_* call sites.
+        user.welcome_flow_sent_at = now_manila()
+        db.session.commit()
+        company = EmployerCompany.query.filter_by(user_id=user.id).first()
+        send_employer_welcome_email(user.email, company.company_name if company else None)
+        notify_user(
+            user.id, "account_welcome", "Welcome to JobBridge",
+            "Complete your Company Profile and required documents to get accredited before posting vacancies.",
+            link="/employer/company", socket_event="account:welcome",
+        )
 
     if payload["purpose"] == "register":
         # Auto-issue a JWT so the frontend can immediately drive /complete-profile

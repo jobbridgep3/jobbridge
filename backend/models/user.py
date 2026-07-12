@@ -16,6 +16,7 @@ class User(BaseModel):
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     must_change_password = db.Column(db.Boolean, default=False, nullable=False)
     last_login_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    welcome_flow_sent_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     jobseeker_profile = db.relationship(
         "JobseekerProfile", back_populates="user", uselist=False, cascade="all, delete-orphan"

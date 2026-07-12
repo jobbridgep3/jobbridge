@@ -356,6 +356,8 @@ def create_vacancy():
     company = _company()
     if not company:
         return fail("Complete your company profile before posting a vacancy.", 400)
+    if company.accreditation_status != "accredited":
+        return fail("Your company must be accredited by PESO/Admin before posting vacancies.", 403)
     data = request.get_json(force=True) or {}
     if not data.get("title"):
         return fail("Job title is required.", 400)

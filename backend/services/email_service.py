@@ -105,6 +105,24 @@ def send_verification_status_email(to: str, full_name: str, verified: bool, rema
     return send_email(to, subject, html)
 
 
+def send_employer_welcome_email(to: str, company_name: str | None = None):
+    display_name = company_name or "there"
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Welcome to JobBridge, {display_name}!</h2>
+      <p>Your account has been successfully verified.</p>
+      <p>Before you can post job vacancies, please:</p>
+      <ol>
+        <li>Complete your <b>Company Profile</b> (business details, address, representative).</li>
+        <li>Upload your <b>required documents</b> (Business Permit, SEC/DTI/CDA Certificate, BIR Registration, Company Logo).</li>
+        <li>Submit your profile and <b>wait for PESO/Admin accreditation</b>.</li>
+      </ol>
+      <p>Once accredited, you'll be able to post vacancies and start receiving applicants.</p>
+    </div>
+    """
+    return send_email(to, "Welcome to JobBridge — Complete Your Company Profile", html)
+
+
 def send_announcement_email(to: str, title: str, body: str):
     html = f"""
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto">
