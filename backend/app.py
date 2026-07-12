@@ -101,4 +101,14 @@ def _register_error_handlers(app: Flask):
 app = create_app()
 
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5000, debug=app.config["DEBUG"])
+    # use_reloader=False: Werkzeug's auto-reloader forks/restarts the process on
+    # file changes, and is documented as incompatible with eventlet's own socket
+    # monkey-patching — the reloader's SIGINT/restart races with eventlet's hub
+    # closing file descriptors it still holds, producing the "[Errno 9] Bad file
+    # descriptor" traceback on shutdown/reload. This only affects this local-dev
+    # entrypoint; production (render.yaml) runs via gunicorn+eventlet through
+    # run.py, a separate path that never invokes the Werkzeug reloader.
+    try:
+        socketio.run(app, host="0.0.0.0", port=5000, debug=app.config["DEBUG"], use_reloader=False)
+    except OSError as exc:
+        logging.getLogger(__name__).info("Socket.IO dev server shut down: %s", exc)

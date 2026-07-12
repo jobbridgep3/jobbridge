@@ -21,7 +21,11 @@ const ACTION_ICONS = {
 export function RecentActivity() {
   const { data: audit } = useQuery({
     queryKey: ['admin', 'audit', 'recent'],
-    queryFn: async () => (await api.get('/api/admin/audit')).data.data,
+    // /api/admin/audit returns a paginated {items, total, page, limit} envelope,
+    // not a bare array — reading .items here (previously missing) is the fix;
+    // without it, `audit` was the envelope object, `audit?.length` was always
+    // undefined, and this panel showed "No audit activity yet" unconditionally.
+    queryFn: async () => (await api.get('/api/admin/audit', { params: { limit: 10 } })).data.data.items,
   })
 
   return (

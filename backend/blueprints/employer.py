@@ -822,12 +822,14 @@ def update_applicant_status(application_id):
     if new_status not in ("under_review", "hired", "rejected"):
         return fail("Invalid status.", 400)
 
+    before = {"status": application.status}
     application.status = new_status
     if "feedback_note" in data:
         application.feedback_note = data["feedback_note"]
     if "employer_notes" in data:
         application.employer_notes = data["employer_notes"]
     db.session.commit()
+    log_audit(User.query.get(get_jwt_identity()), "Update", "applications", application.id, before=before, after={"status": new_status})
 
     jobseeker_user_id = application.jobseeker_profile.user_id
     notify_user(
@@ -854,6 +856,9 @@ def bulk_reject():
     for a in apps:
         a.status = "rejected"
     db.session.commit()
+    actor = User.query.get(get_jwt_identity())
+    for a in apps:
+        log_audit(actor, "Update", "applications", a.id, "Bulk rejected", after={"status": "rejected"})
     return ok(message=f"{len(apps)} applicant(s) rejected.")
 
 

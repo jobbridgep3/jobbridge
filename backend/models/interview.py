@@ -16,6 +16,7 @@ class Interview(BaseModel):
     status = db.Column(db.String(20), default="pending", nullable=False)
     notes = db.Column(db.Text, nullable=True)  # internal, employer-only
     decline_reason = db.Column(db.Text, nullable=True)
+    reminder_sent_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     application = db.relationship("Application", back_populates="interviews")
 

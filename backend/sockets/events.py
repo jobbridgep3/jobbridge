@@ -2,7 +2,7 @@ import logging
 
 from flask import request
 from flask_jwt_extended import decode_token
-from flask_socketio import join_room
+from flask_socketio import join_room, rooms
 
 from extensions import socketio
 
@@ -28,7 +28,12 @@ def handle_connect():
 
 @socketio.on("disconnect")
 def handle_disconnect():
-    pass
+    # Flask-SocketIO removes this client from its rooms automatically after this
+    # handler returns — rooms() still reflects membership at this point, so this
+    # is the last chance to log which user/role rooms were attached to the socket
+    # that just disconnected (previously a silent no-op, making disconnects
+    # invisible in the logs entirely).
+    logger.info("Socket disconnected: sid=%s rooms=%s", request.sid, rooms())
 
 
 def emit_to_user(user_id, event: str, payload: dict):
