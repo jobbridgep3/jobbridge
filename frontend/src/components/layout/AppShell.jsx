@@ -41,6 +41,8 @@ export function AppShell() {
     'interview:scheduled': () => toast('New interview scheduled', { icon: '📅' }),
     'vacancy:approved': () => toast.success('A vacancy was approved'),
     'vacancy:rejected': () => toast.error('A vacancy was returned for revision'),
+    'vacancy:published': (payload) =>
+      toast(`New Job Opportunity!\n${payload.title} at ${payload.company_name} has just been posted. Click to view and apply.`, { icon: '🆕', duration: 6000 }),
     'program:status_change': (payload) => toast(`${payload.type?.toUpperCase()} status: ${payload.new_status}`, { icon: '📋' }),
     'referral:ready': () => toast.success('Your referral letter is ready to download'),
     'announcement:new': (payload) => toast(`PESO Announcement: ${payload.title}`, { icon: '📢' }),

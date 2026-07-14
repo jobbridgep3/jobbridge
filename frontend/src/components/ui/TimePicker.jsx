@@ -1,6 +1,7 @@
 import * as PopoverPrimitive from '@radix-ui/react-popover'
 import { motion } from 'framer-motion'
 import { Clock } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 
 import { dropdownMenu } from '../../lib/motion'
 import { cn } from '../../lib/utils'
@@ -25,15 +26,44 @@ function formatTime({ hour, minute, period }) {
  * manual typing. `value`/`onChange` use "h:mm AM/PM" strings (e.g. "9:00 AM").
  */
 export function TimePicker({ value, onChange, placeholder = 'Select time', disabled, className }) {
-  const parts = parseTime(value)
+  // Local state, seeded once from the `value` prop the first time it becomes
+  // truthy (e.g. an existing schedule loading in asynchronously), then left
+  // alone. Recomputing `parts` fresh from `value` on every render — and
+  // closing over that in `update()` — meant three rapid, back-to-back
+  // selections (hour, then minute, then AM/PM) could each read a `parts`
+  // snapshot from before the previous selection's round trip back through
+  // the parent had landed, silently discarding it (e.g. picking hour 7 then
+  // minute 45 could win with hour defaulting back to 9).
+  //
+  // `partsRef` mirrors `parts` but is written synchronously inside the event
+  // handler itself (not React state, which only commits on the next render),
+  // so back-to-back selections each build on the truly latest values instead
+  // of a stale render's closure. `onChange` — which triggers a setState in a
+  // different component (the parent form) — is called directly from the
+  // event handler rather than from inside a setParts() updater callback,
+  // which React disallows (updater functions run during render and must be
+  // side-effect-free).
+  const [parts, setParts] = useState(() => parseTime(value))
+  const partsRef = useRef(parts)
+  const initializedRef = useRef(!!value)
+  useEffect(() => {
+    if (!initializedRef.current && value) {
+      const parsed = parseTime(value)
+      partsRef.current = parsed
+      setParts(parsed)
+      initializedRef.current = true
+    }
+  }, [value])
 
   const update = (patch) => {
-    const next = { ...parts, ...patch }
+    const next = { ...partsRef.current, ...patch }
     // Default the other two fields the first time any one is picked, so a
     // single selection immediately produces a valid, displayable time.
     if (!next.hour) next.hour = 9
     if (!next.minute) next.minute = '00'
     if (!next.period) next.period = 'AM'
+    partsRef.current = next
+    setParts(next)
     onChange(formatTime(next))
   }
 

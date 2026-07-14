@@ -189,18 +189,58 @@ def send_employer_welcome_email(to: str, company_name: str | None = None):
     return send_email(to, "Welcome to JobBridge — Complete Your Company Profile", html)
 
 
-def send_new_vacancy_email(to: str, full_name: str, job_title: str, company_name: str, vacancy_id: str):
-    job_url = f"{current_app.config['FRONTEND_URL']}/jobseeker/jobs/{vacancy_id}"
+def _format_salary_for_email(salary_min, salary_max, hide_salary) -> str | None:
+    if hide_salary:
+        return None
+    if salary_min and salary_max:
+        return f"₱{float(salary_min):,.0f} - ₱{float(salary_max):,.0f}"
+    if salary_min:
+        return f"From ₱{float(salary_min):,.0f}"
+    if salary_max:
+        return f"Up to ₱{float(salary_max):,.0f}"
+    return None
+
+
+def send_new_vacancy_email(to: str, full_name: str, vacancy, company):
+    """`vacancy`/`company` are the ORM objects (Vacancy/EmployerCompany), so
+    the email can include the full posting summary the requirement asks for
+    — company branding, salary, work arrangement, location, deadline — not
+    just the job title."""
+    job_url = f"{current_app.config['FRONTEND_URL']}/jobseeker/jobs/{vacancy.id}"
+    salary = _format_salary_for_email(vacancy.salary_min, vacancy.salary_max, vacancy.hide_salary)
+    short_description = (vacancy.description or "").strip()
+    if len(short_description) > 240:
+        short_description = short_description[:240].rsplit(" ", 1)[0] + "…"
+    logo_html = (
+        f'<img src="{company.logo_url}" alt="{company.company_name}" style="height:48px;width:48px;border-radius:8px;object-fit:cover;margin-bottom:12px" />'
+        if company.logo_url else ""
+    )
+
+    detail_rows = "".join(
+        f'<tr><td style="padding:4px 0;color:#64748b">{label}</td><td style="padding:4px 0;font-weight:bold">{value}</td></tr>'
+        for label, value in [
+            ("Employment Type", (vacancy.job_type or "").replace("_", " ").title() or None),
+            ("Salary", salary),
+            ("Work Arrangement", (vacancy.work_arrangement or "").title() or None),
+            ("Location", vacancy.work_location or vacancy.city_municipality_name or None),
+            ("Application Deadline", vacancy.application_deadline.strftime("%B %d, %Y") if vacancy.application_deadline else None),
+        ]
+        if value
+    )
+
     html = f"""
     <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
-      <h2 style="color:#1e3a8a">A new job matches your profile!</h2>
-      <p>Hi {full_name}, a new <b>{job_title}</b> position has been posted by <b>{company_name}</b> that matches your interests and profile on JobBridge.</p>
+      {logo_html}
+      <h2 style="color:#1e3a8a">New Job Opportunity!</h2>
+      <p>Hi {full_name}, <b>{vacancy.title}</b> at <b>{company.company_name}</b> has just been posted on JobBridge — it matches your interests and profile.</p>
+      <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:14px">{detail_rows}</table>
+      {f'<p style="color:#334155">{short_description}</p>' if short_description else ''}
       <p style="margin:24px 0">
-        <a href="{job_url}" style="background:#1e3a8a;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">View Job Posting</a>
+        <a href="{job_url}" style="background:#1e3a8a;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">View Job &amp; Apply</a>
       </p>
     </div>
     """
-    return send_email(to, f"New Job Match: {job_title} at {company_name}", html)
+    return send_email(to, f"New Job Opportunity: {vacancy.title} at {company.company_name}", html)
 
 
 def send_announcement_email(to: str, title: str, body: str):
