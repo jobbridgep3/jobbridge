@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { Copy, Eye, FileText, Save, Send, Sparkles } from 'lucide-react'
+import { Copy, Eye, Save, Send, Sparkles } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -10,7 +10,6 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import { Dialog, DialogContent } from '../../components/ui/Dialog'
-import { Input, Label } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -44,8 +43,6 @@ export default function EmployerVacancyForm() {
   const [saving, setSaving] = useState(false)
   const [actionLoading, setActionLoading] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
-  const [showSaveTemplate, setShowSaveTemplate] = useState(false)
-  const [templateName, setTemplateName] = useState('')
 
   const { data: vacancy, isLoading } = useQuery({
     queryKey: ['vacancies', id],
@@ -122,21 +119,6 @@ export default function EmployerVacancyForm() {
     }
   }
 
-  const saveAsTemplate = async () => {
-    if (!templateName.trim()) return
-    setActionLoading('save-template')
-    try {
-      await api.post(`/api/vacancies/${id}/save-template`, { template_name: templateName })
-      toast.success('Saved as template.')
-      setShowSaveTemplate(false)
-      setTemplateName('')
-    } catch (err) {
-      toast.error(formatApiError(err, 'Could not save template.'))
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
   const deleteDraft = async () => {
     if (!window.confirm('Delete this draft vacancy? This cannot be undone.')) return
     try {
@@ -191,14 +173,9 @@ export default function EmployerVacancyForm() {
             <Eye className="h-4 w-4" /> Preview
           </Button>
           {isEdit && (
-            <>
-              <Button type="button" variant="secondary" onClick={duplicateVacancy} disabled={actionLoading === 'duplicate'}>
-                <Copy className="h-4 w-4" /> Duplicate
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setShowSaveTemplate(true)}>
-                <FileText className="h-4 w-4" /> Save as Template
-              </Button>
-            </>
+            <Button type="button" variant="secondary" onClick={duplicateVacancy} disabled={actionLoading === 'duplicate'}>
+              <Copy className="h-4 w-4" /> Duplicate
+            </Button>
           )}
           {canDelete && (
             <Button type="button" variant="danger" onClick={deleteDraft}>Delete Draft</Button>
@@ -277,19 +254,6 @@ export default function EmployerVacancyForm() {
                 </div>
               </div>
             )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showSaveTemplate} onOpenChange={setShowSaveTemplate}>
-        <DialogContent title="Save as Template" description="Reuse this vacancy's fields as a starting point for future postings.">
-          <Label>Template Name</Label>
-          <Input value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="e.g. Standard Software Engineer posting" />
-          <div className="mt-4 flex justify-end gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setShowSaveTemplate(false)}>Cancel</Button>
-            <Button size="sm" disabled={!templateName.trim() || actionLoading === 'save-template'} onClick={saveAsTemplate}>
-              {actionLoading === 'save-template' ? 'Saving…' : 'Save Template'}
-            </Button>
           </div>
         </DialogContent>
       </Dialog>

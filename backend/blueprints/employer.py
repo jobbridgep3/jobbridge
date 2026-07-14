@@ -514,17 +514,6 @@ def my_vacancies():
     return ok([v.to_dict() for v in vacancies])
 
 
-@vacancies_bp.get("/templates")
-@jwt_required()
-@role_required("employer")
-def list_vacancy_templates():
-    company = _company()
-    if not company:
-        return ok([])
-    templates = Vacancy.query.filter_by(employer_company_id=company.id, is_template=True).order_by(Vacancy.created_at.desc()).all()
-    return ok([v.to_dict() for v in templates])
-
-
 @vacancies_bp.get("/categories")
 @jwt_required()
 def list_vacancy_categories():
@@ -741,31 +730,6 @@ def duplicate_vacancy(vacancy_id):
     db.session.commit()
     log_audit(User.query.get(company.user_id), "Create", "vacancies", duplicate.id, f"Duplicated from {original.id}")
     return ok(duplicate.to_dict(), "Vacancy duplicated as a new draft.", 201)
-
-
-@vacancies_bp.post("/<vacancy_id>/save-template")
-@jwt_required()
-@role_required("employer")
-def save_vacancy_template(vacancy_id):
-    company = _company()
-    original = Vacancy.query.get(vacancy_id)
-    if not original or not company or original.employer_company_id != company.id:
-        return fail("Vacancy not found.", 404)
-    data = request.get_json(force=True) or {}
-    template_name = data.get("template_name")
-    if not template_name:
-        return fail("A template name is required.", 400)
-
-    copy_fields = {c.name: getattr(original, c.name) for c in Vacancy.__table__.columns if c.name not in (
-        "id", "created_at", "updated_at", "status", "approved_by", "approved_at", "published_at", "filled_at",
-        "submitted_at", "deleted_at", "rejection_remarks", "suspended_reason", "is_template", "template_name",
-        "duplicated_from_id",
-    )}
-    template = Vacancy(**copy_fields, status="draft", is_template=True, template_name=template_name)
-    db.session.add(template)
-    db.session.commit()
-    log_audit(User.query.get(company.user_id), "Create", "vacancies", template.id, f"Saved as template: {template_name}")
-    return ok(template.to_dict(), "Saved as template.", 201)
 
 
 @vacancies_bp.get("/<vacancy_id>/matched-jobseekers")

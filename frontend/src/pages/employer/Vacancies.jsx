@@ -1,12 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { Copy, Eye, FileText, Plus } from 'lucide-react'
+import { Eye, Plus } from 'lucide-react'
 import { useMemo } from 'react'
 import toast from 'react-hot-toast'
 import { Link, useSearchParams } from 'react-router-dom'
 
 import { Button } from '../../components/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import { DataTable } from '../../components/ui/DataTable'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -24,10 +23,6 @@ export default function EmployerVacancies() {
     queryKey: ['vacancies', 'my'],
     queryFn: async () => (await api.get('/api/vacancies/my')).data.data,
   })
-  const { data: templates } = useQuery({
-    queryKey: ['vacancies', 'templates'],
-    queryFn: async () => (await api.get('/api/vacancies/templates')).data.data,
-  })
 
   const filtered = useMemo(
     () => (statusFilter ? (vacancies || []).filter((v) => v.status === statusFilter) : vacancies),
@@ -41,16 +36,6 @@ export default function EmployerVacancies() {
       queryClient.invalidateQueries({ queryKey: ['vacancies', 'my'] })
     },
     onError: (err) => toast.error(formatApiError(err, 'Could not update vacancy.')),
-  })
-
-  const useTemplate = useMutation({
-    mutationFn: (id) => api.post(`/api/vacancies/${id}/duplicate`),
-    onSuccess: (res) => {
-      toast.success('New draft created from template.')
-      queryClient.invalidateQueries({ queryKey: ['vacancies', 'my'] })
-      window.location.href = `/employer/vacancies/${res.data.data.id}/edit`
-    },
-    onError: (err) => toast.error(formatApiError(err, 'Could not use template.')),
   })
 
   const columns = [
@@ -99,23 +84,6 @@ export default function EmployerVacancies() {
           </Button>
         }
       />
-
-      {templates?.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-4 w-4 text-primary-600" /> Saved Templates
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-3">
-            {templates.map((t) => (
-              <Button key={t.id} size="sm" variant="secondary" onClick={() => useTemplate.mutate(t.id)} disabled={useTemplate.isPending}>
-                <Copy className="h-3.5 w-3.5" /> {t.template_name || t.title}
-              </Button>
-            ))}
-          </CardContent>
-        </Card>
-      )}
 
       <DataTable
         columns={columns}

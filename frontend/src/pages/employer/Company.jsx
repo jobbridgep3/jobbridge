@@ -41,8 +41,20 @@ export default function EmployerCompany() {
     if (company) setForm(company)
   }, [company])
 
+  // Full replace of both the query cache and the local edit-in-progress form —
+  // only correct for actions that intentionally commit the current form (save,
+  // submit-for-accreditation), where there's no unrelated unsaved edit to protect.
   const refreshFrom = (data) => {
     setForm(data)
+    queryClient.setQueryData(['company'], data)
+  }
+
+  // Uploads only change one slice of the company profile (logo/signature/a
+  // document), but the endpoint's response is the full company object. Sync the
+  // cache with the full response, but only patch the changed slice into the
+  // local form so unsaved edits in other sections survive.
+  const patchFrom = (data, patch) => {
+    setForm((f) => ({ ...f, ...patch }))
     queryClient.setQueryData(['company'], data)
   }
 
@@ -66,7 +78,7 @@ export default function EmployerCompany() {
     try {
       const res = await api.post('/api/company/logo', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       toast.success('Logo uploaded.')
-      refreshFrom(res.data.data)
+      patchFrom(res.data.data, { logo_url: res.data.data.logo_url })
     } catch {
       toast.error('Could not upload logo.')
     } finally {
@@ -81,7 +93,7 @@ export default function EmployerCompany() {
     try {
       const res = await api.post('/api/company/signature', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       toast.success('Signature uploaded.')
-      refreshFrom(res.data.data)
+      patchFrom(res.data.data, { rep_signature_url: res.data.data.rep_signature_url })
     } catch {
       toast.error('Could not upload signature.')
     } finally {
@@ -97,7 +109,8 @@ export default function EmployerCompany() {
     try {
       const res = await api.post('/api/company/documents', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       toast.success('Document uploaded for PESO Staff review.')
-      refreshFrom(res.data.data)
+      const { documents, profile_completion, completed_count, total_count, missing_fields } = res.data.data
+      patchFrom(res.data.data, { documents, profile_completion, completed_count, total_count, missing_fields })
     } catch (err) {
       toast.error(err.response?.data?.message || 'Could not upload document.')
     } finally {
@@ -109,7 +122,8 @@ export default function EmployerCompany() {
     try {
       const res = await api.delete(`/api/company/documents/${documentId}`)
       toast.success('Document removed.')
-      refreshFrom(res.data.data)
+      const { documents, profile_completion, completed_count, total_count, missing_fields } = res.data.data
+      patchFrom(res.data.data, { documents, profile_completion, completed_count, total_count, missing_fields })
     } catch (err) {
       toast.error(err.response?.data?.message || 'Could not remove document.')
     }
@@ -144,7 +158,7 @@ export default function EmployerCompany() {
         actions={
           <>
             <StatusBadge status={form.accreditation_status} />
-            <Button size="sm" onClick={save} disabled={saving}>
+            <Button size="sm" onClick={save} disabled={saving || uploadingLogo || uploadingSignature || !!uploadingDocType}>
               {saving ? 'Saving…' : 'Save Changes'}
             </Button>
             {canSubmitAccreditation && (

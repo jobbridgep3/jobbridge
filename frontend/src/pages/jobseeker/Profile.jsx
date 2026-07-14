@@ -44,8 +44,20 @@ export default function JobseekerProfile() {
     if (profile) setForm(profile)
   }, [profile])
 
+  // Full replace of both the query cache and the local edit-in-progress form —
+  // only correct for the explicit "commit current form" action (save), where
+  // there's no unrelated unsaved edit to protect.
   const refreshFrom = (data) => {
     setForm(data)
+    queryClient.setQueryData(['profile'], data)
+  }
+
+  // Uploads (picture/document) only change one slice of the profile, but the
+  // endpoint's response is the full profile object. Sync the cache with the
+  // full response, but only patch the changed slice into the local form so
+  // unsaved edits in other sections survive.
+  const patchFrom = (data, patch) => {
+    setForm((f) => ({ ...f, ...patch }))
     queryClient.setQueryData(['profile'], data)
   }
 
@@ -58,6 +70,9 @@ export default function JobseekerProfile() {
       const { ocr_status } = res.data.data
       const toastConfig = OCR_TOAST[ocr_status] || OCR_TOAST.error
       toastConfig.fn(res.data.message || toastConfig.message)
+      // Unlike picture/document uploads, resume OCR is meant to autofill blank
+      // profile fields (personal/education/employment/skills) — so this one
+      // intentionally merges the full response rather than a narrow patch.
       refreshFrom(res.data.data)
     } catch {
       toast.error('Could not process resume.')
@@ -73,7 +88,7 @@ export default function JobseekerProfile() {
     try {
       const res = await api.post('/api/profile/picture', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       toast.success('Profile picture updated.')
-      refreshFrom(res.data.data)
+      patchFrom(res.data.data, { profile_picture_url: res.data.data.profile_picture_url })
       // Keep the nav bar avatar (authStore.user, a separate data source from this
       // page's React Query cache) in sync immediately — no re-login needed.
       useAuthStore.getState().updateUser({ profile_picture_url: res.data.data.profile_picture_url })
@@ -92,7 +107,8 @@ export default function JobseekerProfile() {
     try {
       const res = await api.post('/api/profile/documents', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       toast.success('Document uploaded.')
-      refreshFrom(res.data.data)
+      const { documents, profile_completion, completed_count, total_count, missing_fields } = res.data.data
+      patchFrom(res.data.data, { documents, profile_completion, completed_count, total_count, missing_fields })
     } catch (err) {
       toast.error(err.response?.data?.message || 'Could not upload document.')
     } finally {
@@ -104,7 +120,8 @@ export default function JobseekerProfile() {
     try {
       const res = await api.delete(`/api/profile/documents/${documentId}`)
       toast.success('Document removed.')
-      refreshFrom(res.data.data)
+      const { documents, profile_completion, completed_count, total_count, missing_fields } = res.data.data
+      patchFrom(res.data.data, { documents, profile_completion, completed_count, total_count, missing_fields })
     } catch {
       toast.error('Could not remove document.')
     }
@@ -158,7 +175,7 @@ export default function JobseekerProfile() {
             >
               <Download className="h-4 w-4" /> {downloadingPdf ? 'Downloading…' : 'Download Application Profile (PDF)'}
             </Button>
-            <Button size="sm" onClick={save} disabled={saving}>
+            <Button size="sm" onClick={save} disabled={saving || uploadingResume || uploadingPicture || !!uploadingDocType}>
               {saving ? 'Saving…' : 'Save Changes'}
             </Button>
           </>

@@ -36,8 +36,20 @@ export default function EmployerProfile() {
     if (profile) setForm(profile)
   }, [profile])
 
+  // Full replace of both the query cache and the local edit-in-progress form —
+  // only correct for the explicit "commit current form" action (save/submit),
+  // where there's no unrelated unsaved edit to protect.
   const refreshFrom = (data) => {
     setForm(data)
+    queryClient.setQueryData(['employer-profile'], data)
+  }
+
+  // Uploads only change one slice of the profile (a picture/document), but the
+  // endpoint's response is the full profile object. Sync the cache with the
+  // full response (it should mirror server truth), but only patch the changed
+  // slice into the local form so unsaved edits in other sections survive.
+  const patchFrom = (data, patch) => {
+    setForm((f) => ({ ...f, ...patch }))
     queryClient.setQueryData(['employer-profile'], data)
   }
 
@@ -61,7 +73,7 @@ export default function EmployerProfile() {
     try {
       const res = await api.post('/api/employer/profile/picture', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       toast.success('Profile picture updated.')
-      refreshFrom(res.data.data)
+      patchFrom(res.data.data, { profile_picture_url: res.data.data.profile_picture_url })
       useAuthStore.getState().updateUser({ profile_picture_url: res.data.data.profile_picture_url })
     } catch {
       toast.error('Could not upload profile picture.')
@@ -78,7 +90,8 @@ export default function EmployerProfile() {
     try {
       const res = await api.post('/api/employer/profile/documents', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       toast.success('Document uploaded for PESO Staff review.')
-      refreshFrom(res.data.data)
+      const { documents, profile_completion, completed_count, total_count, missing_fields } = res.data.data
+      patchFrom(res.data.data, { documents, profile_completion, completed_count, total_count, missing_fields })
     } catch (err) {
       toast.error(err.response?.data?.message || 'Could not upload document.')
     } finally {
@@ -90,7 +103,8 @@ export default function EmployerProfile() {
     try {
       const res = await api.delete(`/api/employer/profile/documents/${documentId}`)
       toast.success('Document removed.')
-      refreshFrom(res.data.data)
+      const { documents, profile_completion, completed_count, total_count, missing_fields } = res.data.data
+      patchFrom(res.data.data, { documents, profile_completion, completed_count, total_count, missing_fields })
     } catch (err) {
       toast.error(err.response?.data?.message || 'Could not remove document.')
     }
@@ -107,7 +121,7 @@ export default function EmployerProfile() {
         title="My Profile"
         description="Your own HR/employer account details — separate from the Company Profile."
         actions={
-          <Button size="sm" onClick={save} disabled={saving}>
+          <Button size="sm" onClick={save} disabled={saving || uploadingPicture || !!uploadingDocType}>
             {saving ? 'Saving…' : 'Save Changes'}
           </Button>
         }
