@@ -8,6 +8,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent } from '../../components/ui/Card'
 import { DataTable } from '../../components/ui/DataTable'
+import { DatePicker } from '../../components/ui/DatePicker'
 import { Input, Label, Select } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Pagination } from '../../components/ui/Pagination'
@@ -32,8 +33,7 @@ export default function StaffEmployers({ basePath = '/staff' }) {
     staleTime: Infinity,
   })
 
-  const setFilter = (field) => (e) => {
-    const value = e.target.value
+  const setFilterValue = (field) => (value) => {
     setFilters((f) => ({ ...f, [field]: value }))
     setPage(1)
     setSearchParams((prev) => {
@@ -43,6 +43,7 @@ export default function StaffEmployers({ basePath = '/staff' }) {
       return next
     })
   }
+  const setFilter = (field) => (e) => setFilterValue(field)(e.target.value)
 
   const activeParams = { ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')), page, limit: LIMIT }
 
@@ -140,11 +141,11 @@ export default function StaffEmployers({ basePath = '/staff' }) {
           </div>
           <div>
             <Label>Registered From</Label>
-            <Input type="date" value={filters.date_from} onChange={setFilter('date_from')} />
+            <DatePicker value={filters.date_from} onChange={setFilterValue('date_from')} maxDate={filters.date_to} />
           </div>
           <div>
             <Label>Registered To</Label>
-            <Input type="date" value={filters.date_to} onChange={setFilter('date_to')} />
+            <DatePicker value={filters.date_to} onChange={setFilterValue('date_to')} minDate={filters.date_from} />
           </div>
           <div className="flex items-end">
             <Button

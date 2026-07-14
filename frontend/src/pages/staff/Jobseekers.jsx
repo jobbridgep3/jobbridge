@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { DataTable } from '../../components/ui/DataTable'
+import { DatePicker } from '../../components/ui/DatePicker'
 import { Dialog, DialogContent } from '../../components/ui/Dialog'
 import { Input, Label, Select } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
@@ -31,6 +32,7 @@ export default function StaffJobseekers({ basePath = '/staff' }) {
   const [exporting, setExporting] = useState(false)
 
   const setFilter = (field) => (e) => setFilters((f) => ({ ...f, [field]: e.target.value }))
+  const setFilterValue = (field) => (value) => setFilters((f) => ({ ...f, [field]: value }))
 
   const handleExport = async () => {
     setExporting(true)
@@ -95,11 +97,11 @@ export default function StaffJobseekers({ basePath = '/staff' }) {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label>Date Registered — From</Label>
-              <Input type="date" value={filters.date_from} onChange={setFilter('date_from')} />
+              <DatePicker value={filters.date_from} onChange={setFilterValue('date_from')} maxDate={filters.date_to} />
             </div>
             <div>
               <Label>Date Registered — To</Label>
-              <Input type="date" value={filters.date_to} onChange={setFilter('date_to')} />
+              <DatePicker value={filters.date_to} onChange={setFilterValue('date_to')} minDate={filters.date_from} />
             </div>
             <div>
               <Label>Verification Status</Label>

@@ -10,6 +10,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent } from '../../components/ui/Card'
 import { DataTable } from '../../components/ui/DataTable'
+import { DatePicker } from '../../components/ui/DatePicker'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../../components/ui/DropdownMenu'
 import { Dialog, DialogContent } from '../../components/ui/Dialog'
 import { Input, Label, Select, Textarea } from '../../components/ui/Input'
@@ -39,8 +40,7 @@ export default function StaffVacancies({ basePath = '/staff' }) {
   const [bulkRemarks, setBulkRemarks] = useState('')
   const [bulkResult, setBulkResult] = useState(null)
 
-  const setFilter = (field) => (e) => {
-    const value = e.target.value
+  const setFilterValue = (field) => (value) => {
     setFilters((f) => ({ ...f, [field]: value }))
     setPage(1)
     setSearchParams((prev) => {
@@ -50,6 +50,7 @@ export default function StaffVacancies({ basePath = '/staff' }) {
       return next
     })
   }
+  const setFilter = (field) => (e) => setFilterValue(field)(e.target.value)
 
   const activeParams = { ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')), page, limit: LIMIT }
 
@@ -246,11 +247,11 @@ export default function StaffVacancies({ basePath = '/staff' }) {
           </div>
           <div>
             <Label>Date From</Label>
-            <Input type="date" value={filters.date_from} onChange={setFilter('date_from')} />
+            <DatePicker value={filters.date_from} onChange={setFilterValue('date_from')} maxDate={filters.date_to} />
           </div>
           <div>
             <Label>Date To</Label>
-            <Input type="date" value={filters.date_to} onChange={setFilter('date_to')} />
+            <DatePicker value={filters.date_to} onChange={setFilterValue('date_to')} minDate={filters.date_from} />
           </div>
           <div className="flex items-end">
             <Button variant="secondary" size="sm" onClick={() => { setFilters(EMPTY_FILTERS); setPage(1); setSearchParams({}) }}>

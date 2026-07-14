@@ -2,6 +2,7 @@ import { Plus, Trash2 } from 'lucide-react'
 
 import { Button } from '../../../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
+import { DatePicker } from '../../../components/ui/DatePicker'
 import { Input, Label, Select } from '../../../components/ui/Input'
 import { RequiredLabel } from '../../../components/ui/RequiredLabel'
 import { cn } from '../../../lib/utils'
@@ -91,9 +92,19 @@ export function EmploymentInfoSection({ form, setForm, missingKeys = new Set() }
               <div key={idx} className="grid grid-cols-1 gap-3 rounded-lg border border-slate-100 p-3 sm:grid-cols-4">
                 <Input placeholder="Company" value={w.company} onChange={(e) => updateWorkExperience(idx, 'company', e.target.value)} />
                 <Input placeholder="Position" value={w.position} onChange={(e) => updateWorkExperience(idx, 'position', e.target.value)} />
-                <Input type="date" value={w.start_date || ''} onChange={(e) => updateWorkExperience(idx, 'start_date', e.target.value)} />
+                <DatePicker
+                  placeholder="Start date"
+                  value={w.start_date || ''}
+                  onChange={(value) => updateWorkExperience(idx, 'start_date', value)}
+                  maxDate={w.end_date}
+                />
                 <div className="flex gap-2">
-                  <Input type="date" value={w.end_date || ''} onChange={(e) => updateWorkExperience(idx, 'end_date', e.target.value)} />
+                  <DatePicker
+                    placeholder="End date"
+                    value={w.end_date || ''}
+                    onChange={(value) => updateWorkExperience(idx, 'end_date', value)}
+                    minDate={w.start_date}
+                  />
                   <Button variant="ghost" size="icon" onClick={() => removeWorkExperience(idx)}>
                     <Trash2 className="h-4 w-4 text-red-500" />
                   </Button>

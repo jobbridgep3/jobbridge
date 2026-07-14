@@ -8,12 +8,24 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
+import { DatePicker } from '../../components/ui/DatePicker'
 import { Dialog, DialogContent } from '../../components/ui/Dialog'
 import { Input, Label, Select, Textarea } from '../../components/ui/Input'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
+
+/** Splits/joins a datetime-local string ("yyyy-mm-ddThh:mm") into its date
+ * ("yyyy-mm-dd") and time ("hh:mm") parts for the DatePicker + time Input pair. */
+function splitScheduledDate(value) {
+  const [date = '', time = ''] = (value || '').split('T')
+  return { date, time }
+}
+function joinScheduledDate(date, time) {
+  if (!date) return ''
+  return `${date}T${time || '00:00'}`
+}
 
 export default function EmployerApplicantDetail() {
   const { id } = useParams()
@@ -122,13 +134,33 @@ export default function EmployerApplicantDetail() {
       <Dialog open={interviewOpen} onOpenChange={setInterviewOpen}>
         <DialogContent title="Schedule Interview">
           <div className="space-y-4">
-            <div>
-              <Label>Date & Time</Label>
-              <Input
-                type="datetime-local"
-                value={interviewForm.scheduled_date}
-                onChange={(e) => setInterviewForm({ ...interviewForm, scheduled_date: e.target.value })}
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Date</Label>
+                <DatePicker
+                  value={splitScheduledDate(interviewForm.scheduled_date).date}
+                  onChange={(date) =>
+                    setInterviewForm({
+                      ...interviewForm,
+                      scheduled_date: joinScheduledDate(date, splitScheduledDate(interviewForm.scheduled_date).time),
+                    })
+                  }
+                  minDate={new Date().toISOString().slice(0, 10)}
+                />
+              </div>
+              <div>
+                <Label>Time</Label>
+                <Input
+                  type="time"
+                  value={splitScheduledDate(interviewForm.scheduled_date).time}
+                  onChange={(e) =>
+                    setInterviewForm({
+                      ...interviewForm,
+                      scheduled_date: joinScheduledDate(splitScheduledDate(interviewForm.scheduled_date).date, e.target.value),
+                    })
+                  }
+                />
+              </div>
             </div>
             <div>
               <Label>Mode</Label>

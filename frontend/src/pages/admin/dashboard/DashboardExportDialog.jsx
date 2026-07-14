@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 
 import { Button } from '../../../components/ui/Button'
+import { DatePicker } from '../../../components/ui/DatePicker'
 import { Dialog, DialogContent } from '../../../components/ui/Dialog'
-import { Input, Label, Select } from '../../../components/ui/Input'
+import { Label, Select } from '../../../components/ui/Input'
 import { downloadFile, parseBlobError } from '../../../lib/download'
 
 const EMPTY_FILTERS = { date_from: '', date_to: '', scope: 'both' }
@@ -27,6 +28,7 @@ export function DashboardExportDialog({ apiBase = '/api/admin', initialFilters }
   }, [open])
 
   const setFilter = (field) => (e) => setFilters((f) => ({ ...f, [field]: e.target.value }))
+  const setFilterValue = (field) => (value) => setFilters((f) => ({ ...f, [field]: value }))
 
   const handleExport = async (format) => {
     setExporting(format)
@@ -56,11 +58,11 @@ export function DashboardExportDialog({ apiBase = '/api/admin', initialFilters }
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label>Date From</Label>
-              <Input type="date" value={filters.date_from} onChange={setFilter('date_from')} />
+              <DatePicker value={filters.date_from} onChange={setFilterValue('date_from')} maxDate={filters.date_to} />
             </div>
             <div>
               <Label>Date To</Label>
-              <Input type="date" value={filters.date_to} onChange={setFilter('date_to')} />
+              <DatePicker value={filters.date_to} onChange={setFilterValue('date_to')} minDate={filters.date_from} />
             </div>
             <div className="sm:col-span-2">
               <Label>Scope</Label>

@@ -7,8 +7,9 @@ import { Link } from 'react-router-dom'
 
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
+import { DatePicker } from '../../components/ui/DatePicker'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { Input, Label } from '../../components/ui/Input'
+import { Label } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
@@ -48,11 +49,11 @@ export default function EmployerDashboard() {
         <CardContent className="flex flex-wrap items-end gap-4">
           <div>
             <Label>Date From</Label>
-            <Input type="date" value={dateRange.date_from} onChange={(e) => setDateRange((r) => ({ ...r, date_from: e.target.value }))} />
+            <DatePicker value={dateRange.date_from} onChange={(value) => setDateRange((r) => ({ ...r, date_from: value }))} maxDate={dateRange.date_to} />
           </div>
           <div>
             <Label>Date To</Label>
-            <Input type="date" value={dateRange.date_to} onChange={(e) => setDateRange((r) => ({ ...r, date_to: e.target.value }))} />
+            <DatePicker value={dateRange.date_to} onChange={(value) => setDateRange((r) => ({ ...r, date_to: value }))} minDate={dateRange.date_from} />
           </div>
           <p className="text-xs text-slate-400">Filters the analytics charts below and pre-fills the export dialog above.</p>
         </CardContent>

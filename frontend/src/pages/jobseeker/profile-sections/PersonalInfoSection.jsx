@@ -2,6 +2,7 @@ import { UserRound } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
+import { DatePicker } from '../../../components/ui/DatePicker'
 import { Input, Label, Select } from '../../../components/ui/Input'
 import { RequiredLabel } from '../../../components/ui/RequiredLabel'
 import { cn, sanitizeDigits } from '../../../lib/utils'
@@ -72,10 +73,10 @@ export function PersonalInfoSection({ form, setForm, onUploadPicture, uploadingP
         <div>
           <Label><RequiredLabel label="Date of Birth" missing={missingKeys.has('date_of_birth')} /></Label>
           <div className="flex items-center gap-2">
-            <Input
-              type="date"
+            <DatePicker
               value={form.date_of_birth || ''}
-              onChange={set('date_of_birth')}
+              onChange={(value) => setForm((f) => ({ ...f, date_of_birth: value }))}
+              maxDate={new Date().toISOString().slice(0, 10)}
               className={cn(missingKeys.has('date_of_birth') && 'border-red-300 focus:border-red-400')}
             />
             {form.age != null && <span className="whitespace-nowrap text-xs text-slate-400">{form.age} yrs old</span>}

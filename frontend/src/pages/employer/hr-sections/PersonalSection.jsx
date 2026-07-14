@@ -2,6 +2,7 @@ import { UserRound } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
+import { DatePicker } from '../../../components/ui/DatePicker'
 import { Input, Label, Select } from '../../../components/ui/Input'
 import { RequiredLabel } from '../../../components/ui/RequiredLabel'
 import { cn } from '../../../lib/utils'
@@ -61,7 +62,7 @@ export function PersonalSection({ form, setForm, onUploadPicture, uploadingPictu
         </div>
         <div>
           <Label><RequiredLabel label="Birthday" missing={missingKeys.has('date_of_birth')} /></Label>
-          <Input type="date" value={form.date_of_birth || ''} onChange={set('date_of_birth')} className={err('date_of_birth')} />
+          <DatePicker value={form.date_of_birth || ''} onChange={(value) => setForm((f) => ({ ...f, date_of_birth: value }))} maxDate={new Date().toISOString().slice(0, 10)} className={err('date_of_birth')} />
         </div>
         <div>
           <Label><RequiredLabel label="Civil Status" missing={missingKeys.has('civil_status')} /></Label>

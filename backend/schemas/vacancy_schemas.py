@@ -1,4 +1,4 @@
-from marshmallow import Schema, fields, pre_load, validate
+from marshmallow import Schema, ValidationError, fields, pre_load, validate, validates_schema
 
 from models.vacancy import CIVIL_STATUSES, GENDERS, SCREENING_QUESTION_TYPES, WORK_ARRANGEMENTS
 from utils.validators import validate_contact_number
@@ -116,3 +116,16 @@ class VacancyWriteSchema(Schema):
             data, "category_id", "posting_date", "application_deadline", "expected_start_date",
             "work_arrangement", "pref_gender", "pref_civil_status", "salary_min", "salary_max",
         )
+
+    @validates_schema
+    def _validate_date_order(self, data, **kwargs):
+        """Partial=True on both create/update, so drafts may only have one date
+        filled in at a time — only compare a pair once both sides are present."""
+        posting_date = data.get("posting_date")
+        deadline = data.get("application_deadline")
+        start_date = data.get("expected_start_date")
+
+        if posting_date and deadline and deadline < posting_date:
+            raise ValidationError("Application deadline cannot be earlier than the posting date.", field_name="application_deadline")
+        if deadline and start_date and start_date < deadline:
+            raise ValidationError("Expected start date cannot be earlier than the application deadline.", field_name="expected_start_date")

@@ -8,6 +8,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent } from '../../components/ui/Card'
 import { DataTable } from '../../components/ui/DataTable'
+import { DatePicker } from '../../components/ui/DatePicker'
 import { Input, Label, Select } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Pagination } from '../../components/ui/Pagination'
@@ -29,6 +30,10 @@ export default function AdminAuditTrail() {
 
   const setFilter = (field) => (e) => {
     setFilters((f) => ({ ...f, [field]: e.target.value }))
+    setPage(1)
+  }
+  const setFilterValue = (field) => (value) => {
+    setFilters((f) => ({ ...f, [field]: value }))
     setPage(1)
   }
 
@@ -94,11 +99,11 @@ export default function AdminAuditTrail() {
         <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <Label>Date From</Label>
-            <Input type="date" value={filters.date_from} onChange={setFilter('date_from')} />
+            <DatePicker value={filters.date_from} onChange={setFilterValue('date_from')} maxDate={filters.date_to} />
           </div>
           <div>
             <Label>Date To</Label>
-            <Input type="date" value={filters.date_to} onChange={setFilter('date_to')} />
+            <DatePicker value={filters.date_to} onChange={setFilterValue('date_to')} minDate={filters.date_from} />
           </div>
           <div>
             <Label>User Email</Label>
