@@ -1,6 +1,7 @@
 from marshmallow import Schema, ValidationError, fields, pre_load, validate, validates_schema
 
 from models.vacancy import CIVIL_STATUSES, GENDERS, SCREENING_QUESTION_TYPES, WORK_ARRANGEMENTS
+from utils.timezone import now_manila
 from utils.validators import validate_contact_number
 
 
@@ -129,3 +130,5 @@ class VacancyWriteSchema(Schema):
             raise ValidationError("Application deadline cannot be earlier than the posting date.", field_name="application_deadline")
         if deadline and start_date and start_date < deadline:
             raise ValidationError("Expected start date cannot be earlier than the application deadline.", field_name="expected_start_date")
+        if deadline and deadline < now_manila().date():
+            raise ValidationError("Application deadline cannot be in the past.", field_name="application_deadline")

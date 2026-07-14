@@ -1,0 +1,89 @@
+import * as PopoverPrimitive from '@radix-ui/react-popover'
+import { motion } from 'framer-motion'
+import { Clock } from 'lucide-react'
+
+import { dropdownMenu } from '../../lib/motion'
+import { cn } from '../../lib/utils'
+
+const HOURS = Array.from({ length: 12 }, (_, i) => i + 1)
+const MINUTES = ['00', '15', '30', '45']
+
+/** "h:mm AM/PM" (e.g. "9:00 AM") <-> { hour, minute, period } parts. */
+function parseTime(value) {
+  const match = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec((value || '').trim())
+  if (!match) return { hour: null, minute: null, period: null }
+  return { hour: Number(match[1]), minute: match[2], period: match[3].toUpperCase() }
+}
+
+function formatTime({ hour, minute, period }) {
+  if (!hour || !minute || !period) return ''
+  return `${hour}:${minute} ${period}`
+}
+
+/**
+ * Shared 12-hour time picker (hour / minute / AM-PM selects in a popover) — no
+ * manual typing. `value`/`onChange` use "h:mm AM/PM" strings (e.g. "9:00 AM").
+ */
+export function TimePicker({ value, onChange, placeholder = 'Select time', disabled, className }) {
+  const parts = parseTime(value)
+
+  const update = (patch) => {
+    const next = { ...parts, ...patch }
+    // Default the other two fields the first time any one is picked, so a
+    // single selection immediately produces a valid, displayable time.
+    if (!next.hour) next.hour = 9
+    if (!next.minute) next.minute = '00'
+    if (!next.period) next.period = 'AM'
+    onChange(formatTime(next))
+  }
+
+  return (
+    <PopoverPrimitive.Root>
+      <PopoverPrimitive.Trigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          className={cn(
+            'flex h-10 w-full items-center justify-between rounded-lg border border-slate-300 bg-white px-3 text-left text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary-500 disabled:cursor-not-allowed disabled:bg-slate-50',
+            !value && 'text-slate-400',
+            className
+          )}
+        >
+          <span>{value || placeholder}</span>
+          <Clock className="h-4 w-4 shrink-0 text-slate-400" />
+        </button>
+      </PopoverPrimitive.Trigger>
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Content asChild align="start" sideOffset={6}>
+          <motion.div {...dropdownMenu} className="z-50 flex gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+            <select
+              value={parts.hour || ''}
+              onChange={(e) => update({ hour: Number(e.target.value) })}
+              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-primary-500"
+            >
+              <option value="" disabled>Hr</option>
+              {HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
+            </select>
+            <select
+              value={parts.minute || ''}
+              onChange={(e) => update({ minute: e.target.value })}
+              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-primary-500"
+            >
+              <option value="" disabled>Min</option>
+              {MINUTES.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+            <select
+              value={parts.period || ''}
+              onChange={(e) => update({ period: e.target.value })}
+              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-primary-500"
+            >
+              <option value="" disabled>—</option>
+              <option value="AM">AM</option>
+              <option value="PM">PM</option>
+            </select>
+          </motion.div>
+        </PopoverPrimitive.Content>
+      </PopoverPrimitive.Portal>
+    </PopoverPrimitive.Root>
+  )
+}

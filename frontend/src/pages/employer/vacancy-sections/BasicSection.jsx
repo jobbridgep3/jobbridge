@@ -1,10 +1,27 @@
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
 import { Input, Label, Select } from '../../../components/ui/Input'
 import { RequiredLabel } from '../../../components/ui/RequiredLabel'
+import { TimePicker } from '../../../components/ui/TimePicker'
 import { EMPLOYMENT_TYPES, WORK_ARRANGEMENTS } from './options'
+
+const SCHEDULE_RE = /^(\d{1,2}:\d{2}\s*[AP]M)\s*-\s*(\d{1,2}:\d{2}\s*[AP]M)$/i
+
+/** Best-effort split of a "9:00 AM - 6:00 PM" schedule string into its two
+ * TimePicker values. Legacy free-text schedules (e.g. "Rotating shifts")
+ * simply don't match and leave both pickers blank for re-entry. */
+function splitSchedule(schedule) {
+  const match = SCHEDULE_RE.exec((schedule || '').trim())
+  return match ? { start: match[1].toUpperCase(), end: match[2].toUpperCase() } : { start: '', end: '' }
+}
+
+function joinSchedule(start, end) {
+  if (!start && !end) return ''
+  return `${start || '—'} - ${end || '—'}`
+}
 
 export function BasicSection({ form, setForm, categories = [], missingKeys = new Set() }) {
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
+  const { start: scheduleStart, end: scheduleEnd } = splitSchedule(form.schedule)
 
   return (
     <Card>
@@ -59,9 +76,24 @@ export function BasicSection({ form, setForm, categories = [], missingKeys = new
             ))}
           </Select>
         </div>
-        <div>
+        <div className="sm:col-span-2">
           <Label>Schedule</Label>
-          <Input value={form.schedule || ''} onChange={set('schedule')} placeholder="e.g. Mon-Fri, 9AM-6PM" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs font-normal text-slate-500">Start Time</Label>
+              <TimePicker
+                value={scheduleStart}
+                onChange={(start) => setForm((f) => ({ ...f, schedule: joinSchedule(start, scheduleEnd) }))}
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-normal text-slate-500">End Time</Label>
+              <TimePicker
+                value={scheduleEnd}
+                onChange={(end) => setForm((f) => ({ ...f, schedule: joinSchedule(scheduleStart, end) }))}
+              />
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>

@@ -5,6 +5,10 @@ import { Label } from '../../../components/ui/Input'
 export function HiringDetailsSection({ form, setForm }) {
   const set = (field) => (value) => setForm((f) => ({ ...f, [field]: value }))
 
+  const today = new Date().toISOString().slice(0, 10)
+  // Application Deadline can't be earlier than either the posting date or today.
+  const deadlineMinDate = form.posting_date && form.posting_date > today ? form.posting_date : today
+
   return (
     <Card>
       <CardHeader>
@@ -20,7 +24,7 @@ export function HiringDetailsSection({ form, setForm }) {
           <DatePicker
             value={form.application_deadline || ''}
             onChange={set('application_deadline')}
-            minDate={form.posting_date}
+            minDate={deadlineMinDate}
             maxDate={form.expected_start_date}
           />
         </div>
