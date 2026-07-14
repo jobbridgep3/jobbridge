@@ -4,11 +4,12 @@ from datetime import datetime, timedelta
 from flask import Blueprint, request, send_file
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from marshmallow import ValidationError
+from sqlalchemy import case, func
 
 from extensions import db
 from models.application import Application
 from models.audit import AuditTrail
-from models.employer import EmployerCompany, EmployerCompanyDocument
+from models.employer import COMPANY_MANDATORY_DOCUMENT_TYPES, EmployerCompany, EmployerCompanyDocument
 from models.employer_hr import EmployerHRProfile
 from models.employment import EmploymentRecord
 from models.interview import Interview
@@ -31,6 +32,7 @@ from services.employer_query_service import build_employer_query
 from services.excel_service import build_excel_report
 from services.notification_service import notify_role, notify_user
 from services.pdf_service import generate_referral_letter, generate_table_report, to_bytesio
+from services.profile_completion_service import COMPANY_REQUIRED_FIELDS, compute_completion
 from services.profile_service import apply_document_upload, apply_profile_update, find_document
 from services.storage_service import upload_file
 from services.user_deletion_service import employer_dependent_counts, jobseeker_dependent_counts
@@ -237,19 +239,23 @@ def delete_jobseeker(profile_id):
     return ok(message="Jobseeker account permanently deleted.")
 
 
-@staff_bp.get("/jobseekers/export/excel")
-@jwt_required()
-@role_required("staff", "admin")
-def export_jobseekers_excel():
+JOBSEEKER_EXPORT_COLUMNS = [
+    "Full Name", "Email", "Contact Number", "Address", "Barangay", "Municipality", "Province",
+    "Date Registered", "Highest Educational Attainment", "Technical Skills", "Soft Skills", "Certifications",
+    "Employment Status", "Resume Status", "Verification Status", "Active Status", "Profile Completion",
+]
+
+
+def _jobseeker_export_query(args):
     query = db.session.query(JobseekerProfile, User).join(User, User.id == JobseekerProfile.user_id)
 
-    date_from = request.args.get("date_from")
-    date_to = request.args.get("date_to")
-    verification_status = request.args.get("verification_status")
-    is_active_param = request.args.get("is_active")
-    barangay = request.args.get("barangay")
-    municipality = request.args.get("municipality")
-    employment_status = request.args.get("employment_status")
+    date_from = args.get("date_from")
+    date_to = args.get("date_to")
+    verification_status = args.get("verification_status")
+    is_active_param = args.get("is_active")
+    barangay = args.get("barangay")
+    municipality = args.get("municipality")
+    employment_status = args.get("employment_status")
 
     if date_from:
         query = query.filter(JobseekerProfile.created_at >= datetime.fromisoformat(date_from))
@@ -269,29 +275,47 @@ def export_jobseekers_excel():
         query = query.filter(JobseekerProfile.municipality.ilike(f"%{municipality}%"))
     if employment_status:
         query = query.filter(JobseekerProfile.employment_status == employment_status)
+    return query.order_by(JobseekerProfile.created_at.desc())
 
-    rows = [
-        [
-            p.full_name, u.email, p.contact_number or "",
-            p.created_at.strftime("%Y-%m-%d"),
+
+def _jobseeker_export_rows(args):
+    rows = []
+    for p, u in _jobseeker_export_query(args).all():
+        highest_education = max(p.educations, key=lambda e: e.graduation_year or 0).attainment_level if p.educations else ""
+        rows.append([
+            p.full_name, u.email, p.contact_number or "", p.address or "",
             p.barangay or "", p.municipality or "", p.province or "",
+            p.created_at.strftime("%Y-%m-%d"), highest_education or "",
+            ", ".join(p.technical_skills or []), ", ".join(p.soft_skills or []), ", ".join(p.certifications or []),
+            p.employment_status or "", "Uploaded" if p.resume_url else "Not Uploaded",
             "Verified" if p.is_verified_by_staff else "Unverified",
             "Active" if u.is_active else "Inactive",
-            p.employment_status or "",
             f"{p.profile_completion()}%",
-        ]
-        for p, u in query.order_by(JobseekerProfile.created_at.desc()).all()
-    ]
-    columns = [
-        "Full Name", "Email", "Contact Number", "Date Registered", "Barangay", "Municipality",
-        "Province", "Verification Status", "Active Status", "Employment Status", "Profile Completion",
-    ]
-    buf = build_excel_report("Job Seekers Export", columns, rows)
+        ])
+    return rows
+
+
+@staff_bp.get("/jobseekers/export/excel")
+@jwt_required()
+@role_required("staff", "admin")
+def export_jobseekers_excel():
+    buf = build_excel_report("Job Seekers Export", JOBSEEKER_EXPORT_COLUMNS, _jobseeker_export_rows(request.args))
     log_audit(User.query.get(get_jwt_identity()), "Export", "jobseekers")
     return send_file(
         buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         as_attachment=True, download_name="jobseekers_export.xlsx",
     )
+
+
+@staff_bp.get("/jobseekers/export/pdf")
+@jwt_required()
+@role_required("staff", "admin")
+def export_jobseekers_pdf():
+    pdf_bytes = generate_table_report(
+        "Job Seekers Report", JOBSEEKER_EXPORT_COLUMNS, _jobseeker_export_rows(request.args), now_manila().strftime("%Y-%m-%d"),
+    )
+    log_audit(User.query.get(get_jwt_identity()), "Export", "jobseekers")
+    return send_file(to_bytesio(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name="jobseekers_export.pdf")
 
 
 @staff_bp.put("/jobseekers/<profile_id>/profile")
@@ -397,30 +421,77 @@ def list_employers():
     })
 
 
+EMPLOYER_EXPORT_COLUMNS = [
+    "Company Name", "Business Type", "Industry", "Nature of Business", "Complete Address", "Region", "Province",
+    "Municipality", "Barangay", "ZIP Code", "Company Email", "Contact Number", "Alt. Contact Number", "Website",
+    "HR Representative", "Rep. Position", "Rep. Contact Number", "SEC No.", "DTI No.", "CDA No.", "BIR TIN",
+    "Business Permit No.", "Accreditation Status", "Document Verification", "Registered Date",
+    "Active Vacancies", "Total Applicants", "Total Hired", "Company Profile Completion",
+]
+
+
+def _employer_hire_stats():
+    """One grouped query for hired/applicant totals per company, instead of an
+    N+1 query per row in the export."""
+    rows = (
+        db.session.query(
+            Vacancy.employer_company_id,
+            func.count(Application.id),
+            func.sum(case((Application.status == "hired", 1), else_=0)),
+        )
+        .join(Application, Application.vacancy_id == Vacancy.id)
+        .group_by(Vacancy.employer_company_id)
+        .all()
+    )
+    return {str(company_id): (total or 0, hired or 0) for company_id, total, hired in rows}
+
+
+def _employer_export_rows(args):
+    companies = build_employer_query(args).order_by(EmployerCompany.created_at.desc()).limit(20000).all()
+    hire_stats = _employer_hire_stats()
+    rows = []
+    for c in companies:
+        applicants, hired = hire_stats.get(str(c.id), (0, 0))
+        mandatory_docs = [d for d in c.documents if d.document_type in COMPANY_MANDATORY_DOCUMENT_TYPES]
+        verified_count = sum(1 for d in mandatory_docs if d.status == "verified")
+        rows.append([
+            c.company_name or "", (c.business_type or "").replace("_", " ").title(), c.industry or "",
+            c.nature_of_business or "",
+            ", ".join(filter(None, [c.street_address, c.barangay_name])) or "",
+            c.region_name or "", c.province_name or "", c.city_municipality_name or "", c.barangay_name or "",
+            c.zip_code or "", c.company_email or "", c.contact_number or "", c.alt_contact_number or "",
+            c.website or "", c.rep_name or "", c.rep_position or "", c.rep_contact_number or "",
+            c.sec_number or "", c.dti_number or "", c.cda_number or "", c.bir_tin or "", c.business_permit_no or "",
+            c.accreditation_status.replace("_", " ").title(), f"{verified_count}/{len(mandatory_docs)} verified",
+            c.created_at.strftime("%Y-%m-%d"), c.active_vacancies_count(), applicants, hired,
+            f"{compute_completion(c, COMPANY_REQUIRED_FIELDS)['profile_completion']}%",
+        ])
+    return rows
+
+
 @staff_bp.get("/employers/export/excel")
 @jwt_required()
 @role_required("staff", "admin")
 def export_employers_excel():
-    companies = build_employer_query(request.args).order_by(EmployerCompany.created_at.desc()).limit(20000).all()
-    rows = [
-        [
-            c.company_name or "", (c.business_type or "").replace("_", " ").title(), c.industry or "",
-            c.region_name or "", c.province_name or "", c.city_municipality_name or "",
-            c.accreditation_status.replace("_", " ").title(), c.created_at.strftime("%Y-%m-%d"),
-            c.active_vacancies_count(), c.rep_name or "", c.rep_email or "",
-        ]
-        for c in companies
-    ]
-    buf = build_excel_report(
-        "Employers",
-        ["Company Name", "Business Type", "Industry", "Region", "Province", "City/Municipality",
-         "Accreditation Status", "Registered Date", "Active Vacancies", "Representative", "Rep. Email"],
-        rows,
-    )
+    buf = build_excel_report("Employers", EMPLOYER_EXPORT_COLUMNS, _employer_export_rows(request.args))
     log_audit(User.query.get(get_jwt_identity()), "Export", "employers")
     return send_file(
         buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         as_attachment=True, download_name=f"employers_export_{now_manila().strftime('%Y%m%d_%H%M%S')}.xlsx",
+    )
+
+
+@staff_bp.get("/employers/export/pdf")
+@jwt_required()
+@role_required("staff", "admin")
+def export_employers_pdf():
+    pdf_bytes = generate_table_report(
+        "Employers Report", EMPLOYER_EXPORT_COLUMNS, _employer_export_rows(request.args), now_manila().strftime("%Y-%m-%d"),
+    )
+    log_audit(User.query.get(get_jwt_identity()), "Export", "employers")
+    return send_file(
+        to_bytesio(pdf_bytes), mimetype="application/pdf",
+        as_attachment=True, download_name=f"employers_export_{now_manila().strftime('%Y%m%d_%H%M%S')}.pdf",
     )
 
 
@@ -632,38 +703,77 @@ def staff_vacancy_analytics():
     return ok(build_vacancy_analytics(months))
 
 
+VACANCY_EXPORT_COLUMNS = [
+    "Vacancy No.", "Job Title", "Employer", "Category", "Industry", "Salary Range", "Employment Type",
+    "Work Arrangement", "Region", "Province", "Municipality", "Barangay", "Date Posted", "Application Deadline",
+    "Openings", "Applicant Count", "Hiring/Approval Status", "Last Updated",
+]
+
+
+def _format_salary(v):
+    if v.hide_salary:
+        return "Not disclosed"
+    if v.salary_min and v.salary_max:
+        return f"P{float(v.salary_min):,.0f} - P{float(v.salary_max):,.0f}"
+    if v.salary_min:
+        return f"From P{float(v.salary_min):,.0f}"
+    if v.salary_max:
+        return f"Up to P{float(v.salary_max):,.0f}"
+    return ""
+
+
+def _scoped_vacancy_query(args):
+    scope = args.get("scope", "all")
+    query = build_vacancy_query(args).order_by(Vacancy.created_at.desc())
+    if scope == "selected":
+        ids = args.get("ids", "")
+        query = query.filter(Vacancy.id.in_(ids.split(",") if ids else []))
+    elif scope == "current_page":
+        page = max(int(args.get("page", 1)), 1)
+        limit = min(int(args.get("limit", 50)), 200)
+        query = query.offset((page - 1) * limit).limit(limit)
+    return query.limit(20000).all()
+
+
+def _vacancy_export_rows(args):
+    return [
+        [
+            v.vacancy_no or "", v.title, v.employer_company.company_name if v.employer_company else "",
+            v.category.name if v.category else "", v.industry or "", _format_salary(v),
+            (v.job_type or "").replace("_", " ").title(), (v.work_arrangement or "").title(),
+            v.region_name or "", v.province_name or "", v.city_municipality_name or "", v.barangay_name or "",
+            v.created_at.strftime("%Y-%m-%d"),
+            v.application_deadline.strftime("%Y-%m-%d") if v.application_deadline else "",
+            v.num_slots, len(v.applications), v.status.replace("_", " ").title(),
+            v.updated_at.strftime("%Y-%m-%d") if v.updated_at else "",
+        ]
+        for v in _scoped_vacancy_query(args)
+    ]
+
+
 @staff_bp.get("/vacancies/export/excel")
 @jwt_required()
 @role_required("staff", "admin")
 def export_vacancies_excel():
-    scope = request.args.get("scope", "all")
-    query = build_vacancy_query(request.args).order_by(Vacancy.created_at.desc())
-    if scope == "selected":
-        ids = request.args.get("ids", "")
-        query = query.filter(Vacancy.id.in_(ids.split(",") if ids else []))
-    elif scope == "current_page":
-        page = max(int(request.args.get("page", 1)), 1)
-        limit = min(int(request.args.get("limit", 50)), 200)
-        query = query.offset((page - 1) * limit).limit(limit)
-    vacancies = query.limit(20000).all()
-
-    rows = [
-        [
-            v.title, v.employer_company.company_name if v.employer_company else "", v.industry or "",
-            v.city_municipality_name or "", (v.job_type or "").replace("_", " ").title(),
-            v.status.replace("_", " ").title(), v.num_slots, len(v.applications), v.created_at.strftime("%Y-%m-%d"),
-        ]
-        for v in vacancies
-    ]
-    buf = build_excel_report(
-        "Vacancies",
-        ["Job Title", "Employer", "Industry", "Municipality", "Employment Type", "Status", "Openings", "Applicants", "Posted Date"],
-        rows,
-    )
+    buf = build_excel_report("Vacancies", VACANCY_EXPORT_COLUMNS, _vacancy_export_rows(request.args))
     log_audit(User.query.get(get_jwt_identity()), "Export", "vacancies")
     return send_file(
         buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         as_attachment=True, download_name=f"vacancies_export_{now_manila().strftime('%Y%m%d_%H%M%S')}.xlsx",
+    )
+
+
+@staff_bp.get("/vacancies/export/pdf")
+@jwt_required()
+@role_required("staff", "admin")
+def export_vacancies_pdf():
+    pdf_bytes = generate_table_report(
+        "Vacancies Report", VACANCY_EXPORT_COLUMNS, _vacancy_export_rows(request.args), now_manila().strftime("%Y-%m-%d"),
+    )
+    log_audit(User.query.get(get_jwt_identity()), "Export", "vacancies")
+    return send_file(
+        to_bytesio(pdf_bytes), mimetype="application/pdf",
+        as_attachment=True, download_name=f"vacancies_export_{now_manila().strftime('%Y%m%d_%H%M%S')}.pdf",
     )
 
 

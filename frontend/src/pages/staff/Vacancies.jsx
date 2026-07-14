@@ -92,13 +92,16 @@ export default function StaffVacancies({ basePath = '/staff' }) {
     }
   }
 
-  const handleExport = async (scope) => {
+  const handleExport = async (scope, format = 'excel') => {
     setExporting(true)
     try {
       const exportParams = { ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')), scope }
       if (scope === 'selected') exportParams.ids = [...selected].join(',')
       if (scope === 'current_page') { exportParams.page = page; exportParams.limit = LIMIT }
-      await downloadFile('/api/staff/vacancies/export/excel', { params: exportParams, filename: 'vacancies_export.xlsx' })
+      await downloadFile(`/api/staff/vacancies/export/${format}`, {
+        params: exportParams,
+        filename: `vacancies_export.${format === 'excel' ? 'xlsx' : 'pdf'}`,
+      })
     } catch (err) {
       toast.error(await parseBlobError(err))
     } finally {
@@ -196,8 +199,11 @@ export default function StaffVacancies({ basePath = '/staff' }) {
             <Button variant="secondary" size="sm" onClick={() => setShowAnalytics((s) => !s)}>
               <BarChart3 className="h-4 w-4" /> {showAnalytics ? 'Hide Analytics' : 'Analytics'}
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => handleExport('all')} disabled={exporting}>
-              <Download className="h-4 w-4" /> Export (Filtered)
+            <Button variant="secondary" size="sm" onClick={() => handleExport('all', 'excel')} disabled={exporting}>
+              <Download className="h-4 w-4" /> Export Excel (Filtered)
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => handleExport('all', 'pdf')} disabled={exporting}>
+              <Download className="h-4 w-4" /> Export PDF (Filtered)
             </Button>
           </>
         }
@@ -272,8 +278,11 @@ export default function StaffVacancies({ basePath = '/staff' }) {
             {role === 'admin' && (
               <Button size="sm" variant="danger" onClick={() => setBulkAction({ action: 'delete' })}>Bulk Delete</Button>
             )}
-            <Button size="sm" variant="secondary" onClick={() => handleExport('selected')} disabled={exporting}>
-              <Download className="h-3.5 w-3.5" /> Export Selected
+            <Button size="sm" variant="secondary" onClick={() => handleExport('selected', 'excel')} disabled={exporting}>
+              <Download className="h-3.5 w-3.5" /> Export Selected (Excel)
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => handleExport('selected', 'pdf')} disabled={exporting}>
+              <Download className="h-3.5 w-3.5" /> Export Selected (PDF)
             </Button>
           </CardContent>
         </Card>

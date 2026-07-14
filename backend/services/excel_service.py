@@ -43,6 +43,12 @@ def _write_sheet(ws, columns: list[str], rows: list[list]) -> None:
         ws.column_dimensions[get_column_letter(col_idx)].width = min(max_len + 2, 60)
     ws.freeze_panes = "A2"
 
+    # Column filter/sort dropdowns on the header row, for government-report-style
+    # spreadsheets where reviewers commonly filter/sort by column (e.g. status,
+    # region) rather than reading the whole export top to bottom.
+    if rows:
+        ws.auto_filter.ref = ws.dimensions
+
 
 def build_excel_report(title: str, columns: list[str], rows: list[list]) -> io.BytesIO:
     wb = Workbook()

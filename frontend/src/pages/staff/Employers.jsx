@@ -25,7 +25,7 @@ export default function StaffEmployers({ basePath = '/staff' }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [filters, setFilters] = useState({ ...EMPTY_FILTERS, ...Object.fromEntries(searchParams) })
   const [page, setPage] = useState(1)
-  const [exporting, setExporting] = useState(false)
+  const [exporting, setExporting] = useState(null)
 
   const { data: regions } = useQuery({
     queryKey: ['lookups', 'psgc', 'regions'],
@@ -56,15 +56,18 @@ export default function StaffEmployers({ basePath = '/staff' }) {
   const total = data?.total || 0
   const pageCount = Math.max(Math.ceil(total / LIMIT), 1)
 
-  const handleExport = async () => {
-    setExporting(true)
+  const handleExport = async (format) => {
+    setExporting(format)
     try {
       const exportParams = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== ''))
-      await downloadFile('/api/staff/employers/export/excel', { params: exportParams, filename: 'employers_export.xlsx' })
+      await downloadFile(`/api/staff/employers/export/${format}`, {
+        params: exportParams,
+        filename: `employers_export.${format === 'excel' ? 'xlsx' : 'pdf'}`,
+      })
     } catch (err) {
       toast.error(await parseBlobError(err))
     } finally {
-      setExporting(false)
+      setExporting(null)
     }
   }
 
@@ -94,9 +97,14 @@ export default function StaffEmployers({ basePath = '/staff' }) {
         title="Employer Management"
         description="Search, filter, and manage all registered employer accounts."
         actions={
-          <Button variant="secondary" size="sm" onClick={handleExport} disabled={exporting}>
-            <Download className="h-4 w-4" /> {exporting ? 'Exporting…' : 'Export Excel'}
-          </Button>
+          <>
+            <Button variant="secondary" size="sm" onClick={() => handleExport('excel')} disabled={exporting !== null}>
+              <Download className="h-4 w-4" /> {exporting === 'excel' ? 'Exporting…' : 'Export Excel'}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => handleExport('pdf')} disabled={exporting !== null}>
+              <Download className="h-4 w-4" /> {exporting === 'pdf' ? 'Exporting…' : 'Export PDF'}
+            </Button>
+          </>
         }
       />
 

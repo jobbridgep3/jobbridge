@@ -29,22 +29,25 @@ export default function StaffJobseekers({ basePath = '/staff' }) {
 
   const [exportOpen, setExportOpen] = useState(false)
   const [filters, setFilters] = useState(EMPTY_FILTERS)
-  const [exporting, setExporting] = useState(false)
+  const [exporting, setExporting] = useState(null)
 
   const setFilter = (field) => (e) => setFilters((f) => ({ ...f, [field]: e.target.value }))
   const setFilterValue = (field) => (value) => setFilters((f) => ({ ...f, [field]: value }))
 
-  const handleExport = async () => {
-    setExporting(true)
+  const handleExport = async (format) => {
+    setExporting(format)
     try {
       const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== ''))
-      await downloadFile('/api/staff/jobseekers/export/excel', { params, filename: 'jobseekers_export.xlsx' })
+      await downloadFile(`/api/staff/jobseekers/export/${format}`, {
+        params,
+        filename: `jobseekers_export.${format === 'excel' ? 'xlsx' : 'pdf'}`,
+      })
       toast.success('Export downloaded.')
       setExportOpen(false)
     } catch (err) {
       toast.error(await parseBlobError(err))
     } finally {
-      setExporting(false)
+      setExporting(null)
     }
   }
 
@@ -133,11 +136,14 @@ export default function StaffJobseekers({ basePath = '/staff' }) {
             </div>
           </div>
           <div className="mt-5 flex justify-end gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setFilters(EMPTY_FILTERS)} disabled={exporting}>
+            <Button variant="secondary" size="sm" onClick={() => setFilters(EMPTY_FILTERS)} disabled={exporting !== null}>
               Clear Filters
             </Button>
-            <Button size="sm" onClick={handleExport} disabled={exporting}>
-              {exporting ? 'Exporting…' : 'Export to Excel'}
+            <Button variant="secondary" size="sm" onClick={() => handleExport('excel')} disabled={exporting !== null}>
+              {exporting === 'excel' ? 'Exporting…' : 'Export to Excel'}
+            </Button>
+            <Button size="sm" onClick={() => handleExport('pdf')} disabled={exporting !== null}>
+              {exporting === 'pdf' ? 'Exporting…' : 'Export to PDF'}
             </Button>
           </div>
         </DialogContent>
