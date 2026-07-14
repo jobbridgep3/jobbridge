@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 
 import { AddressCard } from '../../components/ui/AddressCard'
@@ -32,8 +32,18 @@ export default function EmployerProfile() {
   const [uploadingPicture, setUploadingPicture] = useState(false)
   const [uploadingDocType, setUploadingDocType] = useState(null)
 
+  // Seed `form` from the server response exactly once (the initial load). Every
+  // later write to the `['employer-profile']` cache (patchFrom/refreshFrom) is
+  // already applied directly to `form` by the caller — if this effect re-ran on
+  // every cache write too (it used to, since setQueryData installs a new object
+  // reference and re-triggers a [profile]-keyed effect), it would clobber that
+  // update, plus any unsaved edit in progress elsewhere on the form.
+  const initializedRef = useRef(false)
   useEffect(() => {
-    if (profile) setForm(profile)
+    if (profile && !initializedRef.current) {
+      setForm(profile)
+      initializedRef.current = true
+    }
   }, [profile])
 
   // Full replace of both the query cache and the local edit-in-progress form —

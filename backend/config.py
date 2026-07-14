@@ -67,8 +67,16 @@ class Config:
     CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 
     # --- Frontend (for building absolute links in emails, e.g. "Go to Dashboard"
-    # buttons) — set to the deployed Render frontend URL in production. ---
+    # buttons) — must be set to the deployed production frontend URL on Render;
+    # the localhost default below is for local dev only. Fails loudly at boot in
+    # production if left unset (or still pointing at localhost) instead of
+    # silently leaking a localhost link into a real email. ---
     FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+    if ENV == "production" and (not os.environ.get("FRONTEND_URL") or "localhost" in FRONTEND_URL):
+        raise RuntimeError(
+            "FRONTEND_URL must be set to the production frontend URL in production "
+            "(never localhost) — set it in the Render dashboard."
+        )
 
     # --- AI service credentials (optional — stub mode when absent) ---
     # Vision and Dialogflow live in separate GCP projects/service accounts here, so each

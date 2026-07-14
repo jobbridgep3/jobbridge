@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 
 import { AddressCard } from '../../components/ui/AddressCard'
@@ -37,8 +37,16 @@ export default function EmployerCompany() {
   const [submitting, setSubmitting] = useState(false)
   const [confirmSubmit, setConfirmSubmit] = useState(false)
 
+  // Seed `form` from the server response exactly once (the initial load) — see
+  // Profile.jsx for why re-running this on every cache write (which used to
+  // happen, since setQueryData installs a new object reference) clobbers
+  // patchFrom's narrow merge and any unsaved edit in progress elsewhere.
+  const initializedRef = useRef(false)
   useEffect(() => {
-    if (company) setForm(company)
+    if (company && !initializedRef.current) {
+      setForm(company)
+      initializedRef.current = true
+    }
   }, [company])
 
   // Full replace of both the query cache and the local edit-in-progress form —

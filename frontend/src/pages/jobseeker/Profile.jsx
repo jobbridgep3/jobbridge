@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { Download } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 
 import { Button } from '../../components/ui/Button'
@@ -40,8 +40,17 @@ export default function JobseekerProfile() {
   const [saving, setSaving] = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
 
+  // Seed `form` from the server response exactly once (the initial load) — see
+  // employer/Profile.jsx for why re-running this on every cache write (which
+  // used to happen, since setQueryData installs a new object reference)
+  // clobbers patchFrom's narrow merge and any unsaved edit in progress
+  // elsewhere on the form.
+  const initializedRef = useRef(false)
   useEffect(() => {
-    if (profile) setForm(profile)
+    if (profile && !initializedRef.current) {
+      setForm(profile)
+      initializedRef.current = true
+    }
   }, [profile])
 
   // Full replace of both the query cache and the local edit-in-progress form —

@@ -18,7 +18,10 @@ services:
       # DATABASE_URL, JWT_SECRET_KEY, SECRET_KEY, SUPABASE_URL, SUPABASE_ANON_KEY,
       # SUPABASE_SERVICE_ROLE_KEY, SUPABASE_STORAGE_BUCKET, BREVO_API_KEY,
       # BREVO_SENDER_EMAIL, BREVO_SENDER_NAME, CORS_ORIGINS (set to the deployed Vercel
-      # URL), GOOGLE_APPLICATION_CREDENTIALS_JSON, DIALOGFLOW_PROJECT_ID, ADMIN_SEED_EMAIL,
+      # URL), FRONTEND_URL (same deployed Vercel URL, no trailing slash — used to build
+      # absolute links in emails, e.g. the accreditation "Go to Dashboard" button; the
+      # app refuses to boot in production without this set to a non-localhost value),
+      # GOOGLE_APPLICATION_CREDENTIALS_JSON, DIALOGFLOW_PROJECT_ID, ADMIN_SEED_EMAIL,
       # ADMIN_SEED_PASSWORD
       #
       # GOOGLE_APPLICATION_CREDENTIALS_JSON: base64-encoded contents of the Vision
@@ -48,6 +51,8 @@ services:
       - key: BREVO_SENDER_NAME
         sync: false
       - key: CORS_ORIGINS
+        sync: false
+      - key: FRONTEND_URL
         sync: false
       - key: GOOGLE_APPLICATION_CREDENTIALS_JSON
         sync: false

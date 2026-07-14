@@ -13,6 +13,12 @@ const dayPickerClassNames = {
   months: 'flex flex-col',
   month: 'space-y-3',
   month_caption: 'flex items-center justify-center px-8 text-sm font-medium text-slate-900',
+  dropdowns: 'flex items-center justify-center gap-1.5',
+  dropdown_root: 'relative inline-flex items-center',
+  dropdown: 'absolute inset-0 h-full w-full cursor-pointer opacity-0',
+  months_dropdown: '',
+  years_dropdown: '',
+  caption_label: 'inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-sm font-medium text-slate-900 hover:bg-slate-50',
   nav: 'flex items-center justify-between absolute inset-x-1 top-3',
   button_previous: 'h-7 w-7 rounded-md text-slate-500 hover:bg-slate-100 flex items-center justify-center disabled:opacity-30',
   button_next: 'h-7 w-7 rounded-md text-slate-500 hover:bg-slate-100 flex items-center justify-center disabled:opacity-30',
@@ -73,6 +79,9 @@ export function DatePicker({ value, onChange, minDate, maxDate, placeholder = 'S
           <motion.div {...dropdownMenu} className="z-50 rounded-lg border border-slate-200 bg-white shadow-lg">
             <DayPicker
               mode="single"
+              captionLayout="dropdown"
+              startMonth={new Date(new Date().getFullYear() - 100, 0)}
+              endMonth={new Date(new Date().getFullYear() + 10, 11)}
               selected={selected}
               defaultMonth={selected}
               onSelect={(date) => onChange(toIso(date))}
