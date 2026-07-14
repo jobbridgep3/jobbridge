@@ -13,6 +13,7 @@ from models.vacancy import Vacancy, VacancyCategory, VacancyScreeningQuestion
 from schemas.employer_schemas import CompanyProfileSchema, HRProfileSchema
 from schemas.vacancy_schemas import VacancyWriteSchema
 from services.audit_service import log_audit
+from services.email_service import send_new_vacancy_email
 from services.matching_service import rank_jobseekers_for_vacancy
 from services.notification_service import notify_role, notify_user
 from services.profile_completion_service import COMPANY_REQUIRED_FIELDS, HR_REQUIRED_FIELDS, compute_completion
@@ -632,6 +633,26 @@ def publish_vacancy(vacancy_id):
     vacancy.published_at = now_manila()
     db.session.commit()
     log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, "Published", before=before, after={"status": vacancy.status})
+
+    # Notify jobseekers whose profile reasonably matches this vacancy — a
+    # persisted in-app notification + email each, using the same matching
+    # engine that powers the employer's "AI-Suggested Matched Jobseekers"
+    # panel. Capped candidate pool mirrors that endpoint's existing precedent.
+    MATCH_THRESHOLD = 20
+    candidates = JobseekerProfile.query.filter_by(is_verified_by_staff=True).limit(500).all()
+    matched = [(p, score) for p, score in rank_jobseekers_for_vacancy(vacancy, candidates) if score >= MATCH_THRESHOLD]
+    for profile, _score in matched:
+        notify_user(
+            profile.user_id, "vacancy_published", "New Job Match!",
+            f"A new {vacancy.title} position has been posted by {company.company_name}.",
+            link=f"/jobseeker/jobs/{vacancy.id}", socket_event="vacancy:published",
+            socket_payload={"vacancy_id": str(vacancy.id), "title": vacancy.title},
+        )
+        send_new_vacancy_email(User.query.get(profile.user_id).email, profile.full_name, vacancy.title, company.company_name, str(vacancy.id))
+    # Broad, unpersisted ping so anyone currently browsing the Jobs list sees
+    # the new posting live, regardless of whether they matched.
+    notify_role("jobseeker", "vacancy:new", {"vacancy_id": str(vacancy.id), "title": vacancy.title})
+
     return ok(vacancy.to_dict(), "Vacancy published.")
 
 

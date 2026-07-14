@@ -172,6 +172,20 @@ def send_employer_welcome_email(to: str, company_name: str | None = None):
     return send_email(to, "Welcome to JobBridge — Complete Your Company Profile", html)
 
 
+def send_new_vacancy_email(to: str, full_name: str, job_title: str, company_name: str, vacancy_id: str):
+    job_url = f"{current_app.config['FRONTEND_URL']}/jobseeker/jobs/{vacancy_id}"
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">A new job matches your profile!</h2>
+      <p>Hi {full_name}, a new <b>{job_title}</b> position has been posted by <b>{company_name}</b> that matches your interests and profile on JobBridge.</p>
+      <p style="margin:24px 0">
+        <a href="{job_url}" style="background:#1e3a8a;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">View Job Posting</a>
+      </p>
+    </div>
+    """
+    return send_email(to, f"New Job Match: {job_title} at {company_name}", html)
+
+
 def send_announcement_email(to: str, title: str, body: str):
     html = f"""
     <div style="font-family:Arial,sans-serif;max-width:560px;margin:auto">

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { Briefcase, MapPin, Search } from 'lucide-react'
 import { useState } from 'react'
@@ -10,16 +10,22 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Select } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { CardSkeleton } from '../../components/ui/Skeleton'
+import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
 
 export default function JobseekerJobs() {
   const [filters, setFilters] = useState({ q: '', job_type: '', location: '' })
+  const queryClient = useQueryClient()
 
   const { data: jobs, isLoading } = useQuery({
     queryKey: ['jobs', filters],
     queryFn: async () => (await api.get('/api/jobs', { params: filters })).data.data,
   })
+
+  // Live-update the list the moment a new vacancy is published — no manual
+  // refresh needed to see it appear.
+  useSocket({ 'vacancy:new': () => queryClient.invalidateQueries({ queryKey: ['jobs'] }) })
 
   return (
     <motion.div {...fadeIn} className="space-y-6">
