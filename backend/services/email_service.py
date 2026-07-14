@@ -127,6 +127,23 @@ def send_document_status_email(to: str, full_name: str, document_label: str, ver
     return send_email(to, subject, html)
 
 
+def send_vacancy_approved_email(to: str, employer_name: str, company_name: str, job_title: str, approved_by: str, approved_date: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Vacancy Approved</h2>
+      <p>Hi {employer_name}, your job vacancy has been approved by PESO. You may now publish it to make it visible to job seekers.</p>
+      <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:14px">
+        <tr><td style="padding:4px 0;color:#64748b">Employer Name</td><td style="padding:4px 0;font-weight:bold">{employer_name}</td></tr>
+        <tr><td style="padding:4px 0;color:#64748b">Company Name</td><td style="padding:4px 0;font-weight:bold">{company_name}</td></tr>
+        <tr><td style="padding:4px 0;color:#64748b">Job Title</td><td style="padding:4px 0;font-weight:bold">{job_title}</td></tr>
+        <tr><td style="padding:4px 0;color:#64748b">Approval Date</td><td style="padding:4px 0;font-weight:bold">{approved_date}</td></tr>
+        <tr><td style="padding:4px 0;color:#64748b">Approved By</td><td style="padding:4px 0;font-weight:bold">{approved_by}</td></tr>
+      </table>
+    </div>
+    """
+    return send_email(to, f"Your vacancy '{job_title}' has been approved", html)
+
+
 def send_accreditation_status_email(to: str, company_name: str, approved: bool, remarks: str | None = None):
     if approved:
         dashboard_url = f"{current_app.config['FRONTEND_URL']}/employer/dashboard"

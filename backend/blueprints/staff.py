@@ -27,7 +27,12 @@ from services.dashboard_service import (
     build_summary,
     build_vacancy_analytics,
 )
-from services.email_service import send_accreditation_status_email, send_document_status_email, send_verification_status_email
+from services.email_service import (
+    send_accreditation_status_email,
+    send_document_status_email,
+    send_vacancy_approved_email,
+    send_verification_status_email,
+)
 from services.employer_query_service import build_employer_query
 from services.excel_service import build_excel_report
 from services.notification_service import notify_role, notify_user
@@ -892,9 +897,21 @@ def approve_vacancy(vacancy_id):
     vacancy.approved_at = now_manila()
     after = {"status": vacancy.status}
     db.session.commit()
-    notify_user(vacancy.employer_company.user_id, "vacancy_approved", "Vacancy Approved",
-                f"{vacancy.title} has been approved. Publish it to make it visible to jobseekers.", socket_event="vacancy:approved",
-                socket_payload={"vacancy_id": str(vacancy.id)})
+
+    company = vacancy.employer_company
+    approver = User.query.get(get_jwt_identity())
+    hr_profile = EmployerHRProfile.query.filter_by(employer_company_id=company.id).first()
+    employer_name = (hr_profile.full_name if hr_profile else None) or company.rep_name or "there"
+
+    notify_user(
+        company.user_id, "vacancy_approved", "Vacancy Approved",
+        f"Your job vacancy '{vacancy.title}' has been approved by PESO. You may now publish it to make it visible to job seekers.",
+        link="/employer/vacancies", socket_event="vacancy:approved", socket_payload={"vacancy_id": str(vacancy.id)},
+    )
+    send_vacancy_approved_email(
+        User.query.get(company.user_id).email, employer_name, company.company_name, vacancy.title,
+        approver.email, now_manila().strftime("%B %d, %Y"),
+    )
     log_audit(User.query.get(get_jwt_identity()), "Approve", "vacancies", vacancy.id, before=before, after=after)
     return ok(vacancy.to_dict(), "Vacancy approved.")
 
