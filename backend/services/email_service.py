@@ -105,6 +105,33 @@ def send_verification_status_email(to: str, full_name: str, verified: bool, rema
     return send_email(to, subject, html)
 
 
+def send_accreditation_status_email(to: str, company_name: str, approved: bool, remarks: str | None = None):
+    if approved:
+        dashboard_url = f"{current_app.config['FRONTEND_URL']}/employer/dashboard"
+        subject = "Congratulations! Your company is now PESO-accredited"
+        html = f"""
+        <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+          <h2 style="color:#1e3a8a">Congratulations, {company_name}!</h2>
+          <p>Your company has been successfully accredited by PESO Pila, Laguna.</p>
+          <p>Your company can now create and submit job vacancies. You may now begin recruiting through JobBridge.</p>
+          <p style="margin:24px 0">
+            <a href="{dashboard_url}" style="background:#1e3a8a;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">Go to Employer Dashboard</a>
+          </p>
+        </div>
+        """
+    else:
+        subject = "Update on your company accreditation"
+        html = f"""
+        <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+          <h2 style="color:#1e3a8a">Accreditation Not Approved</h2>
+          <p>PESO Pila, Laguna reviewed <b>{company_name}</b>'s accreditation request and it was not approved at this time.</p>
+          <p><b>Reason:</b> {remarks}</p>
+          <p>Please log in to JobBridge, update your Company Profile and documents as needed, and resubmit for review.</p>
+        </div>
+        """
+    return send_email(to, subject, html)
+
+
 def send_employer_welcome_email(to: str, company_name: str | None = None):
     display_name = company_name or "there"
     html = f"""

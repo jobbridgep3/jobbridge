@@ -25,7 +25,7 @@ from services.dashboard_service import (
     build_summary,
     build_vacancy_analytics,
 )
-from services.email_service import send_verification_status_email
+from services.email_service import send_accreditation_status_email, send_verification_status_email
 from services.employer_query_service import build_employer_query
 from services.excel_service import build_excel_report
 from services.notification_service import notify_role, notify_user
@@ -508,6 +508,10 @@ def verify_employer(company_id):
         + (f" Reason: {company.accreditation_remarks}" if not approve else ""),
         link="/employer/company", socket_event="account:verified",
         socket_payload={"employer_id": str(company.id), "status": company.accreditation_status},
+    )
+    send_accreditation_status_email(
+        User.query.get(company.user_id).email, company.company_name, approve,
+        remarks=company.accreditation_remarks if not approve else None,
     )
     log_audit(User.query.get(get_jwt_identity()), "Approve" if approve else "Reject", "employers", company.id, before=before, after=after)
     return ok(company.to_dict(), "Employer accreditation updated.")

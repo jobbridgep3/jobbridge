@@ -66,6 +66,10 @@ class Config:
     # --- CORS ---
     CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 
+    # --- Frontend (for building absolute links in emails, e.g. "Go to Dashboard"
+    # buttons) — set to the deployed Render frontend URL in production. ---
+    FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+
     # --- AI service credentials (optional — stub mode when absent) ---
     # Vision and Dialogflow live in separate GCP projects/service accounts here, so each
     # gets its own credential file rather than sharing GOOGLE_APPLICATION_CREDENTIALS.
