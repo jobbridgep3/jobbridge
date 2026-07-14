@@ -10,7 +10,7 @@ from extensions import db
 from models.application import Application
 from models.audit import AuditTrail
 from models.employer import COMPANY_MANDATORY_DOCUMENT_TYPES, EmployerCompany, EmployerCompanyDocument
-from models.employer_hr import EmployerHRProfile
+from models.employer_hr import EmployerHRDocument, EmployerHRProfile
 from models.employment import EmploymentRecord
 from models.interview import Interview
 from models.jobseeker import JobseekerProfile
@@ -27,7 +27,7 @@ from services.dashboard_service import (
     build_summary,
     build_vacancy_analytics,
 )
-from services.email_service import send_accreditation_status_email, send_verification_status_email
+from services.email_service import send_accreditation_status_email, send_document_status_email, send_verification_status_email
 from services.employer_query_service import build_employer_query
 from services.excel_service import build_excel_report
 from services.notification_service import notify_role, notify_user
@@ -551,6 +551,53 @@ def review_company_document(company_id, document_id):
         f"{doc_label} document {status}", before=before, after=after,
     )
     return ok(company.to_dict(), "Document review updated.")
+
+
+@staff_bp.put("/employers/<company_id>/hr-documents/<document_id>/review")
+@jwt_required()
+@role_required("staff", "admin")
+def review_hr_document(company_id, document_id):
+    company = EmployerCompany.query.get(company_id)
+    if not company:
+        return fail("Employer not found.", 404)
+    hr_profile = EmployerHRProfile.query.filter_by(employer_company_id=company.id).first()
+    if not hr_profile:
+        return fail("HR profile not found.", 404)
+    document = EmployerHRDocument.query.filter_by(id=document_id, employer_hr_profile_id=hr_profile.id).first()
+    if not document:
+        return fail("Document not found.", 404)
+
+    data = request.get_json(force=True) or {}
+    status = data.get("status")
+    if status not in ("verified", "rejected"):
+        return fail("Status must be 'verified' or 'rejected'.", 400)
+    if status == "rejected" and not data.get("rejection_reason"):
+        return fail("A rejection reason is required.", 400)
+
+    before = {"status": document.status, "rejection_reason": document.rejection_reason}
+    document.status = status
+    document.rejection_reason = data.get("rejection_reason") if status == "rejected" else None
+    document.reviewed_by = get_jwt_identity()
+    document.reviewed_at = now_manila()
+    after = {"status": document.status, "rejection_reason": document.rejection_reason}
+    db.session.commit()
+
+    doc_label = document.document_type.replace("_", " ").title()
+    notify_user(
+        hr_profile.user_id, "hr_document_reviewed", f"Document {status.title()}",
+        f"Your {doc_label} was {status}." + (f" Reason: {document.rejection_reason}" if status == "rejected" else ""),
+        link="/employer/profile", socket_event="hr_document:verified" if status == "verified" else "hr_document:rejected",
+        socket_payload={"employer_id": str(company.id), "document_type": document.document_type, "status": status},
+    )
+    send_document_status_email(
+        User.query.get(hr_profile.user_id).email, hr_profile.full_name, doc_label,
+        status == "verified", rejection_reason=document.rejection_reason,
+    )
+    log_audit(
+        User.query.get(get_jwt_identity()), "Approve" if status == "verified" else "Reject", "employers", company.id,
+        f"HR {doc_label} document {status}", before=before, after=after,
+    )
+    return ok(hr_profile.to_dict(), "Document review updated.")
 
 
 @staff_bp.put("/employers/<company_id>/verify")

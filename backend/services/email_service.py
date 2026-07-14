@@ -105,6 +105,28 @@ def send_verification_status_email(to: str, full_name: str, verified: bool, rema
     return send_email(to, subject, html)
 
 
+def send_document_status_email(to: str, full_name: str, document_label: str, verified: bool, rejection_reason: str | None = None):
+    if verified:
+        subject = f"Your {document_label} has been verified"
+        html = f"""
+        <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+          <h2 style="color:#1e3a8a">Document Verified</h2>
+          <p>Hi {full_name}, your <b>{document_label}</b> has been verified by PESO Pila, Laguna.</p>
+        </div>
+        """
+    else:
+        subject = f"Action needed: Your {document_label} was not verified"
+        html = f"""
+        <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+          <h2 style="color:#1e3a8a">Document Not Verified</h2>
+          <p>Hi {full_name}, PESO staff reviewed your <b>{document_label}</b> and it was not verified.</p>
+          <p><b>Reason:</b> {rejection_reason}</p>
+          <p>Please log in to JobBridge and re-upload this document for review.</p>
+        </div>
+        """
+    return send_email(to, subject, html)
+
+
 def send_accreditation_status_email(to: str, company_name: str, approved: bool, remarks: str | None = None):
     if approved:
         dashboard_url = f"{current_app.config['FRONTEND_URL']}/employer/dashboard"

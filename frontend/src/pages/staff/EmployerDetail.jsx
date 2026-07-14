@@ -49,6 +49,8 @@ export default function StaffEmployerDetail({ basePath = '/staff' }) {
   const [deleting, setDeleting] = useState(false)
   const [reviewingDoc, setReviewingDoc] = useState(null) // { id, label } | null
   const [docRejectReason, setDocRejectReason] = useState('')
+  const [reviewingHrDoc, setReviewingHrDoc] = useState(null) // { id, label } | null
+  const [hrDocRejectReason, setHrDocRejectReason] = useState('')
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['staff', 'employers', id] })
 
@@ -87,6 +89,18 @@ export default function StaffEmployerDetail({ basePath = '/staff' }) {
       toast.success('Document review updated.')
       setReviewingDoc(null)
       setDocRejectReason('')
+      invalidate()
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not update document review.'),
+  })
+
+  const reviewHrDocument = useMutation({
+    mutationFn: ({ documentId, status, rejection_reason }) =>
+      api.put(`/api/staff/employers/${id}/hr-documents/${documentId}/review`, { status, rejection_reason }),
+    onSuccess: () => {
+      toast.success('Document review updated.')
+      setReviewingHrDoc(null)
+      setHrDocRejectReason('')
       invalidate()
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Could not update document review.'),
@@ -272,7 +286,27 @@ export default function StaffEmployerDetail({ basePath = '/staff' }) {
                             <p className="text-xs text-red-600">Rejected: {doc.rejection_reason}</p>
                           )}
                         </div>
-                        {doc && <StatusBadge status={doc.status} />}
+                        <div className="flex shrink-0 items-center gap-2">
+                          {doc && <StatusBadge status={doc.status} />}
+                          {doc && doc.status !== 'verified' && (
+                            <button
+                              title="Verify"
+                              onClick={() => reviewHrDocument.mutate({ documentId: doc.id, status: 'verified' })}
+                              className="text-green-600 hover:text-green-700"
+                            >
+                              <CheckCircle2 className="h-4 w-4" />
+                            </button>
+                          )}
+                          {doc && doc.status !== 'rejected' && (
+                            <button
+                              title="Reject"
+                              onClick={() => setReviewingHrDoc({ id: doc.id, label })}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )
                   })}
@@ -409,6 +443,22 @@ export default function StaffEmployerDetail({ basePath = '/staff' }) {
               onClick={() => reviewDocument.mutate({ documentId: reviewingDoc.id, status: 'rejected', rejection_reason: docRejectReason })}
             >
               {reviewDocument.isPending ? 'Please wait…' : 'Reject Document'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={reviewingHrDoc !== null} onOpenChange={(open) => !open && setReviewingHrDoc(null)}>
+        <DialogContent title={`Reject ${reviewingHrDoc?.label}?`} description="A rejection reason is required so the employer knows what to fix.">
+          <Label>Rejection Reason</Label>
+          <Textarea rows={3} value={hrDocRejectReason} onChange={(e) => setHrDocRejectReason(e.target.value)} placeholder="e.g. Document is blurry/unreadable." />
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setReviewingHrDoc(null)}>Cancel</Button>
+            <Button
+              variant="danger" size="sm" disabled={!hrDocRejectReason.trim() || reviewHrDocument.isPending}
+              onClick={() => reviewHrDocument.mutate({ documentId: reviewingHrDoc.id, status: 'rejected', rejection_reason: hrDocRejectReason })}
+            >
+              {reviewHrDocument.isPending ? 'Please wait…' : 'Reject Document'}
             </Button>
           </div>
         </DialogContent>
