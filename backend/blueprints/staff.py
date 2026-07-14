@@ -681,10 +681,11 @@ def staff_list_vacancies():
 @jwt_required()
 @role_required("staff", "admin")
 def staff_vacancy_summary():
-    base = Vacancy.query.filter(Vacancy.deleted_at.is_(None))
+    # Drafts are private to the employer — Staff/Admin should have zero
+    # visibility into them, including in count/summary form.
+    base = Vacancy.query.filter(Vacancy.deleted_at.is_(None), Vacancy.status != "draft")
     return ok({
         "total": base.count(),
-        "draft": base.filter_by(status="draft").count(),
         "pending": base.filter_by(status="pending").count(),
         "approved": base.filter_by(status="approved").count(),
         "published": base.filter_by(status="published").count(),

@@ -225,7 +225,7 @@ export default function StaffVacancies({ basePath = '/staff' }) {
             <Label>Status</Label>
             <Select value={filters.status} onChange={setFilter('status')}>
               <option value="">All</option>
-              {['draft', 'pending', 'approved', 'rejected', 'published', 'suspended', 'closed', 'filled'].map((s) => (
+              {['pending', 'approved', 'rejected', 'published', 'suspended', 'closed', 'filled'].map((s) => (
                 <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
               ))}
             </Select>
