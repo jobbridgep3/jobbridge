@@ -137,6 +137,7 @@ class Vacancy(BaseModel):
             "employer_company_id": str(self.employer_company_id),
             "company_name": company.company_name if company else None,
             "company_logo_url": company.logo_url if company else None,
+            "company_accredited": bool(company and company.accreditation_status == "accredited"),
             "title": self.title,
             "category_id": str(self.category_id) if self.category_id else None,
             "category_name": self.category.name if self.category else None,

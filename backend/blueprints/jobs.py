@@ -70,7 +70,11 @@ def get_job(vacancy_id):
         profile = JobseekerProfile.query.filter_by(user_id=identity).first()
         if profile:
             score = match_score(profile, vacancy)
-    return ok(vacancy.to_dict(match_score=score))
+
+    result = vacancy.to_dict(match_score=score)
+    hired_count = Application.query.filter_by(vacancy_id=vacancy.id, status="hired").count()
+    result["slots_remaining"] = max((vacancy.num_slots or 1) - hired_count, 0)
+    return ok(result)
 
 
 @jobs_bp.post("/applications")
