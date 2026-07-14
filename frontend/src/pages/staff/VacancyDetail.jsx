@@ -5,13 +5,13 @@ import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
-import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { Textarea } from '../../components/ui/Input'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { VacancyDisplay } from '../../components/vacancy/VacancyDisplay'
 import api from '../../lib/axios'
 import { downloadFile, parseBlobError } from '../../lib/download'
 import { fadeIn } from '../../lib/motion'
@@ -139,43 +139,7 @@ export default function StaffVacancyDetail({ basePath = '/staff' }) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader><CardTitle>Job Details</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          {vacancy.summary && <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: vacancy.summary }} />}
-          {vacancy.responsibilities && (
-            <div>
-              <h4 className="text-sm font-semibold text-slate-700">Responsibilities</h4>
-              <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: vacancy.responsibilities }} />
-            </div>
-          )}
-          {!vacancy.summary && !vacancy.responsibilities && vacancy.description && (
-            <p className="whitespace-pre-line text-sm text-slate-600">{vacancy.description}</p>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle>Qualifications</CardTitle></CardHeader>
-        <CardContent className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-          <div><span className="text-slate-400">Education:</span> {vacancy.education_level || '—'}</div>
-          <div><span className="text-slate-400">Min. Experience:</span> {vacancy.min_experience_years ?? '—'} yrs</div>
-          <div><span className="text-slate-400">Fresh Grad OK:</span> {vacancy.fresh_grad_ok ? 'Yes' : 'No'}</div>
-          <div className="col-span-2 sm:col-span-3">
-            <span className="text-slate-400">Skills:</span>{' '}
-            {vacancy.required_skills?.length ? vacancy.required_skills.map((s) => <Badge key={s} className="mr-1">{s}</Badge>) : '—'}
-          </div>
-        </CardContent>
-      </Card>
-
-      {vacancy.benefits?.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>Benefits</CardTitle></CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            {vacancy.benefits.map((b) => <Badge key={b}>{b}</Badge>)}
-          </CardContent>
-        </Card>
-      )}
+      <VacancyDisplay vacancy={vacancy} company={vacancy.employer_company} hrProfile={vacancy.hr_profile} />
 
       <Card>
         <CardHeader><CardTitle>Hiring & Applicant Statistics</CardTitle></CardHeader>

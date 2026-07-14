@@ -13,9 +13,9 @@ import { Dialog, DialogContent } from '../../components/ui/Dialog'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { VacancyDisplay } from '../../components/vacancy/VacancyDisplay'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
-import { formatSalaryRange } from '../../lib/salaryFormat'
 import { formatApiError } from '../../lib/utils'
 import { canTransition } from '../../lib/vacancyStateMachine'
 import { AdditionalInfoSection } from './vacancy-sections/AdditionalInfoSection'
@@ -57,6 +57,13 @@ export default function EmployerVacancyForm() {
     queryKey: ['vacancies', id, 'matches'],
     queryFn: async () => (await api.get(`/api/vacancies/${id}/matched-jobseekers`)).data.data,
     enabled: isEdit && vacancy?.status === 'published',
+  })
+  // Only needed for the Preview's company branding when creating a brand-new
+  // vacancy — `form` won't have company_name/logo_url until the first save.
+  const { data: company } = useQuery({
+    queryKey: ['company'],
+    queryFn: async () => (await api.get('/api/company')).data.data,
+    enabled: showPreview && !form.company_name,
   })
 
   useEffect(() => {
@@ -230,30 +237,20 @@ export default function EmployerVacancyForm() {
       )}
 
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
-        <DialogContent title={form.title || 'Untitled Vacancy'} description={`${form.job_type || ''} • ${form.work_arrangement || ''}`} className="max-w-2xl">
-          <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
-            <p className="font-medium text-slate-700">{formatSalaryRange(form.salary_min, form.salary_max, form.hide_salary)}</p>
-            {form.summary && <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: form.summary }} />}
-            {form.responsibilities && (
-              <div>
-                <h4 className="text-sm font-semibold text-slate-700">Responsibilities</h4>
-                <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: form.responsibilities }} />
-              </div>
-            )}
-            {form.daily_tasks && (
-              <div>
-                <h4 className="text-sm font-semibold text-slate-700">Daily Tasks</h4>
-                <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: form.daily_tasks }} />
-              </div>
-            )}
-            {form.required_skills?.length > 0 && (
-              <div>
-                <h4 className="text-sm font-semibold text-slate-700">Skills</h4>
-                <div className="flex flex-wrap gap-1.5">
-                  {form.required_skills.map((s) => <Badge key={s}>{s}</Badge>)}
-                </div>
-              </div>
-            )}
+        <DialogContent
+          title="Vacancy Preview"
+          description="Exactly how this posting will appear to jobseekers once published."
+          className="max-w-4xl"
+        >
+          <div className="max-h-[75vh] overflow-y-auto pr-1">
+            <VacancyDisplay
+              vacancy={{
+                ...form,
+                company_name: form.company_name || company?.company_name,
+                company_logo_url: form.company_logo_url || company?.logo_url,
+              }}
+              companyVerified={company?.accreditation_status === 'accredited'}
+            />
           </div>
         </DialogContent>
       </Dialog>

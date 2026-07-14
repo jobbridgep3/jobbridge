@@ -848,6 +848,10 @@ def staff_get_vacancy(vacancy_id):
         e.to_dict() for e in AuditTrail.query.filter_by(module="vacancies", record_id=str(vacancy.id))
         .order_by(AuditTrail.created_at.desc()).all()
     ]
+    if vacancy.employer_company:
+        result["employer_company"] = vacancy.employer_company.to_dict(include_email=User.query.get(vacancy.employer_company.user_id).email)
+        hr_profile = EmployerHRProfile.query.filter_by(employer_company_id=vacancy.employer_company_id).first()
+        result["hr_profile"] = hr_profile.to_dict(include_email=User.query.get(hr_profile.user_id).email) if hr_profile else None
     return ok(result)
 
 
