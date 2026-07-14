@@ -196,6 +196,8 @@ class EmployerCompany(BaseModel):
             "completed_count": completion["completed_count"],
             "total_count": completion["total_count"],
             "missing_fields": completion["missing_fields"],
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
 

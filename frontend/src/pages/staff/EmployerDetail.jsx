@@ -11,12 +11,30 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Ca
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { Dialog, DialogContent } from '../../components/ui/Dialog'
 import { Label, Textarea } from '../../components/ui/Input'
+import { ProgressBar } from '../../components/ui/ProgressBar'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
 import { useAuthStore } from '../../store/authStore'
 import { COMPANY_DOCUMENT_TYPES } from '../employer/company-sections/options'
+import { HR_DOCUMENT_TYPES } from '../employer/hr-sections/options'
+
+/** Read-only "label: value" row — used throughout the Company/HR Profile detail cards below. */
+function InfoRow({ label, value }) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-slate-400">{label}</p>
+      <p className="text-sm text-slate-800">{value || value === 0 ? value : '—'}</p>
+    </div>
+  )
+}
+
+function formatAddress(entity) {
+  return [entity.street_address, entity.barangay_name, entity.city_municipality_name, entity.province_name, entity.region_name, entity.zip_code]
+    .filter(Boolean)
+    .join(', ') || '—'
+}
 
 export default function StaffEmployerDetail({ basePath = '/staff' }) {
   const { id } = useParams()
@@ -128,6 +146,140 @@ export default function StaffEmployerDetail({ basePath = '/staff' }) {
               </Button>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Company Profile</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <ProgressBar percent={company.profile_completion || 0} label={`Profile Completion (${company.completed_count ?? 0}/${company.total_count ?? 0} fields)`} />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <InfoRow label="Trade Name" value={company.trade_name} />
+            <InfoRow label="Business Type" value={company.business_type?.replace(/_/g, ' ')} />
+            <InfoRow label="Nature of Business" value={company.nature_of_business} />
+            <InfoRow label="Company Size" value={company.company_size} />
+            <InfoRow label="Year Established" value={company.year_established} />
+            <InfoRow label="Number of Employees" value={company.num_employees} />
+            <InfoRow label="Website" value={company.website} />
+            <InfoRow label="Contact Number" value={company.contact_number} />
+            <InfoRow label="Alt. Contact Number" value={company.alt_contact_number} />
+            <InfoRow label="BIR TIN" value={company.bir_tin} />
+            <InfoRow label="SEC Registration No." value={company.sec_number} />
+            <InfoRow label="DTI Registration No." value={company.dti_number} />
+            <InfoRow label="CDA Registration No." value={company.cda_number} />
+            <InfoRow label="Hiring Status" value={company.hiring_status?.replace(/_/g, ' ')} />
+            <InfoRow label="Company Created" value={company.created_at && new Date(company.created_at).toLocaleDateString()} />
+            <InfoRow label="Last Updated" value={company.updated_at && new Date(company.updated_at).toLocaleDateString()} />
+            <div className="sm:col-span-2 lg:col-span-3">
+              <InfoRow label="Complete Address" value={formatAddress(company)} />
+            </div>
+            <div className="sm:col-span-2 lg:col-span-3">
+              <InfoRow label="Company Description" value={company.description} />
+            </div>
+          </div>
+          <div className="border-t border-slate-100 pt-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Company Representative</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <InfoRow label="Full Name" value={company.rep_name} />
+              <InfoRow label="Position" value={company.rep_position} />
+              <InfoRow label="Email" value={company.rep_email} />
+              <InfoRow label="Contact Number" value={company.rep_contact_number} />
+              <InfoRow label="Government ID No." value={company.rep_gov_id_number} />
+              <div>
+                <p className="text-xs font-medium text-slate-400">Digital Signature</p>
+                {company.rep_signature_url ? (
+                  <a href={company.rep_signature_url} target="_blank" rel="noreferrer" className="text-sm text-primary-700 hover:underline">
+                    View signature
+                  </a>
+                ) : (
+                  <p className="text-sm text-slate-800">—</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>HR Profile</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!company.hr_profile ? (
+            <p className="text-sm text-slate-400">This employer has not filled out their personal HR profile yet.</p>
+          ) : (
+            <>
+              <div className="flex items-center gap-4">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-slate-50">
+                  {company.hr_profile.profile_picture_url ? (
+                    <img src={company.hr_profile.profile_picture_url} alt="Profile" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-xs text-slate-400">No photo</span>
+                  )}
+                </div>
+                <ProgressBar
+                  className="flex-1"
+                  percent={company.hr_profile.profile_completion || 0}
+                  label={`Profile Completion (${company.hr_profile.completed_count ?? 0}/${company.hr_profile.total_count ?? 0} fields)`}
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <InfoRow label="Full Name" value={company.hr_profile.full_name} />
+                <InfoRow label="Position" value={company.hr_profile.position} />
+                <InfoRow label="Department" value={company.hr_profile.department} />
+                <InfoRow label="Employment Status" value={company.hr_profile.employment_status} />
+                <InfoRow label="Gender" value={company.hr_profile.gender} />
+                <InfoRow label="Date of Birth" value={company.hr_profile.date_of_birth} />
+                <InfoRow label="Civil Status" value={company.hr_profile.civil_status} />
+                <InfoRow label="Nationality" value={company.hr_profile.nationality} />
+                <InfoRow label="Company Email" value={company.email} />
+                <InfoRow label="Personal Email" value={company.hr_profile.personal_email} />
+                <InfoRow label="Mobile Number" value={company.hr_profile.mobile_number} />
+                <InfoRow label="Telephone Number" value={company.hr_profile.telephone_number} />
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <InfoRow label="Complete Address" value={formatAddress(company.hr_profile)} />
+                </div>
+              </div>
+              <div className="border-t border-slate-100 pt-4">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Emergency Contact</p>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <InfoRow label="Name" value={company.hr_profile.emergency_contact_name} />
+                  <InfoRow label="Relationship" value={company.hr_profile.emergency_contact_relationship} />
+                  <InfoRow label="Contact Number" value={company.hr_profile.emergency_contact_number} />
+                </div>
+              </div>
+              <div className="border-t border-slate-100 pt-4">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">HR Documents</p>
+                <div className="space-y-2">
+                  {HR_DOCUMENT_TYPES.map(({ type, label, required }) => {
+                    const doc = (company.hr_profile.documents || []).find((d) => d.document_type === type)
+                    return (
+                      <div key={type} className="flex items-center justify-between rounded-lg border border-slate-100 p-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-slate-800">
+                            {label} {required && <Badge variant="danger" className="ml-1">Required</Badge>}
+                          </p>
+                          {doc ? (
+                            <a href={doc.file_url} target="_blank" rel="noreferrer" className="text-xs text-primary-700 hover:underline">
+                              View file
+                            </a>
+                          ) : (
+                            <p className="text-xs text-slate-400">Not submitted</p>
+                          )}
+                          {doc?.status === 'rejected' && doc.rejection_reason && (
+                            <p className="text-xs text-red-600">Rejected: {doc.rejection_reason}</p>
+                          )}
+                        </div>
+                        {doc && <StatusBadge status={doc.status} />}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

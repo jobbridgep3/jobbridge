@@ -9,6 +9,7 @@ from extensions import db
 from models.application import Application
 from models.audit import AuditTrail
 from models.employer import EmployerCompany, EmployerCompanyDocument
+from models.employer_hr import EmployerHRProfile
 from models.employment import EmploymentRecord
 from models.interview import Interview
 from models.jobseeker import JobseekerProfile
@@ -436,6 +437,8 @@ def get_employer(company_id):
         e.to_dict() for e in AuditTrail.query.filter_by(module="employers", record_id=str(company.id))
         .order_by(AuditTrail.created_at.desc()).all()
     ]
+    hr_profile = EmployerHRProfile.query.filter_by(employer_company_id=company.id).first()
+    result["hr_profile"] = hr_profile.to_dict(include_email=User.query.get(hr_profile.user_id).email) if hr_profile else None
     return ok(result)
 
 
