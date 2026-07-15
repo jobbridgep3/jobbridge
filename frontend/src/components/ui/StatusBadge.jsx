@@ -37,6 +37,12 @@ const STATUS_MAP = {
   attended: { label: 'Attended', variant: 'success' },
   offered: { label: 'Offered', variant: 'warning' },
   withdrawn: { label: 'Withdrawn', variant: 'default' },
+  pending_deployment: { label: 'Pending Deployment', variant: 'warning' },
+  probationary: { label: 'Probationary', variant: 'info' },
+  regular: { label: 'Regular', variant: 'success' },
+  contract_ended: { label: 'Contract Ended', variant: 'default' },
+  resigned: { label: 'Resigned', variant: 'default' },
+  requested: { label: 'Requested', variant: 'warning' },
   certificate_issued: { label: 'Certificate Issued', variant: 'success' },
 }
 

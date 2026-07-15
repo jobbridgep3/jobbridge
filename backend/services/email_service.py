@@ -315,6 +315,22 @@ def send_offer_response_email(to: str, jobseeker_name: str, position: str, accep
     return send_email(to, f"Offer {verdict} — {position}", html)
 
 
+def send_employment_status_email(to: str, full_name: str, position: str, employer_name: str, status_label: str, note: str | None = None):
+    url = f"{current_app.config['FRONTEND_URL']}/jobseeker/employment"
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Employment Status Update</h2>
+      <p>Hi {full_name},</p>
+      <p>Your employment status as <b>{position}</b> at <b>{employer_name}</b> has been updated to:</p>
+      <p style="font-size:20px;font-weight:bold;color:#1e3a8a">{status_label}</p>
+      {f"<p><b>Note:</b> {note}</p>" if note else ""}
+      <p><a href="{url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">View Employment Record</a></p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"Employment update — {position}: {status_label}", html)
+
+
 def send_referral_decision_email(to: str, full_name: str, approved: bool, job_title: str | None = None, rejection_reason: str | None = None):
     url = f"{current_app.config['FRONTEND_URL']}/jobseeker/applications"
     target = f" for <b>{job_title}</b>" if job_title else ""

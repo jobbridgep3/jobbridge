@@ -1186,30 +1186,110 @@ def interview_report():
 
 # ---------- Employment Monitoring ----------
 
+def _filtered_employment_query():
+    query = EmploymentRecord.query.join(EmployerCompany).join(
+        JobseekerProfile, EmploymentRecord.jobseeker_profile_id == JobseekerProfile.id
+    )
+    if request.args.get("status"):
+        query = query.filter(EmploymentRecord.status == request.args["status"])
+    if request.args.get("employer"):
+        query = query.filter(EmployerCompany.company_name.ilike(f"%{request.args['employer']}%"))
+    if request.args.get("industry"):
+        query = query.filter(EmployerCompany.industry.ilike(f"%{request.args['industry']}%"))
+    if request.args.get("municipality"):
+        query = query.filter(JobseekerProfile.municipality.ilike(f"%{request.args['municipality']}%"))
+    if request.args.get("date_from"):
+        query = query.filter(EmploymentRecord.start_date >= request.args["date_from"])
+    if request.args.get("date_to"):
+        query = query.filter(EmploymentRecord.start_date <= request.args["date_to"])
+    return query
+
+
 @staff_bp.get("/employment")
 @jwt_required()
 @role_required("staff", "admin")
 def staff_list_employment():
-    query = EmploymentRecord.query
-    if request.args.get("status"):
-        query = query.filter_by(status=request.args["status"])
-    records = query.order_by(EmploymentRecord.start_date.desc()).all()
+    records = _filtered_employment_query().order_by(EmploymentRecord.start_date.desc()).all()
     return ok([r.to_dict() for r in records])
+
+
+@staff_bp.get("/employment/analytics")
+@jwt_required()
+@role_required("staff", "admin")
+def staff_employment_analytics():
+    from models.employment import EMPLOYMENT_STATUS_LABELS
+
+    status_rows = db.session.query(EmploymentRecord.status, func.count(EmploymentRecord.id)).group_by(EmploymentRecord.status).all()
+    status_counts = {status: count for status, count in status_rows}
+    total_records = sum(status_counts.values())
+    currently_employed = sum(status_counts.get(s, 0) for s in ("pending_deployment", "active", "probationary", "regular"))
+
+    total_jobseekers = JobseekerProfile.query.count()
+    total_applications = Application.query.count()
+    total_hired = Application.query.filter_by(status="hired").count()
+
+    top_employers = (
+        db.session.query(EmployerCompany.company_name, func.count(EmploymentRecord.id).label("hires"))
+        .join(EmploymentRecord, EmploymentRecord.employer_company_id == EmployerCompany.id)
+        .group_by(EmployerCompany.company_name)
+        .order_by(func.count(EmploymentRecord.id).desc())
+        .limit(5).all()
+    )
+    by_municipality = (
+        db.session.query(JobseekerProfile.municipality, func.count(EmploymentRecord.id))
+        .join(EmploymentRecord, EmploymentRecord.jobseeker_profile_id == JobseekerProfile.id)
+        .filter(JobseekerProfile.municipality.isnot(None))
+        .group_by(JobseekerProfile.municipality)
+        .order_by(func.count(EmploymentRecord.id).desc())
+        .limit(10).all()
+    )
+    by_industry = (
+        db.session.query(EmployerCompany.industry, func.count(EmploymentRecord.id))
+        .join(EmploymentRecord, EmploymentRecord.employer_company_id == EmployerCompany.id)
+        .filter(EmployerCompany.industry.isnot(None))
+        .group_by(EmployerCompany.industry)
+        .order_by(func.count(EmploymentRecord.id).desc())
+        .limit(10).all()
+    )
+
+    return ok({
+        "status_counts": {s: status_counts.get(s, 0) for s in EMPLOYMENT_STATUS_LABELS},
+        "total_records": total_records,
+        "currently_employed": currently_employed,
+        "employment_rate": round(currently_employed / total_jobseekers * 100, 1) if total_jobseekers else 0,
+        "placement_success_rate": round(total_hired / total_applications * 100, 1) if total_applications else 0,
+        "top_employers": [{"name": name, "hires": hires} for name, hires in top_employers],
+        "by_municipality": [{"name": name, "count": count} for name, count in by_municipality],
+        "by_industry": [{"name": name, "count": count} for name, count in by_industry],
+    })
 
 
 @staff_bp.put("/employment/<record_id>")
 @jwt_required()
 @role_required("staff", "admin")
 def staff_update_employment(record_id):
+    from models.employment import EMPLOYMENT_STATUSES, EmploymentStatusHistory
+
     record = EmploymentRecord.query.get(record_id)
     if not record:
         return fail("Record not found.", 404)
     data = request.get_json(force=True) or {}
-    for field in ("position", "status", "termination_reason", "flagged_discrepancy"):
+    old_status = record.status
+    for field in ("position", "termination_reason", "flagged_discrepancy", "remarks"):
         if field in data:
             setattr(record, field, data[field])
+    # Staff can override to any status (oversight role) — still recorded in history.
+    if "status" in data and data["status"] != old_status:
+        if data["status"] not in EMPLOYMENT_STATUSES:
+            return fail("Invalid status.", 400)
+        record.status = data["status"]
+        db.session.add(EmploymentStatusHistory(
+            record_id=record.id, from_status=old_status, to_status=data["status"],
+            changed_by=get_jwt_identity(), note=data.get("note") or "Updated by PESO staff",
+        ))
     db.session.commit()
-    log_audit(User.query.get(get_jwt_identity()), "Update", "employment", record.id)
+    log_audit(User.query.get(get_jwt_identity()), "Update", "employment", record.id,
+              before={"status": old_status}, after={"status": record.status})
     return ok(record.to_dict(), "Employment record updated.")
 
 
@@ -1218,13 +1298,22 @@ def staff_update_employment(record_id):
 @role_required("staff", "admin")
 def staff_create_employment():
     """Manual entry for walk-in placements not made through the system."""
+    from models.employment import EmploymentStatusHistory
+
     data = request.get_json(force=True) or {}
     record = EmploymentRecord(
         jobseeker_profile_id=data["jobseeker_profile_id"], employer_company_id=data["employer_company_id"],
         position=data.get("position", ""), start_date=datetime.fromisoformat(data["start_date"]).date(),
+        salary=data.get("salary"), employment_type=data.get("employment_type"),
+        work_arrangement=data.get("work_arrangement"),
         status="active", is_walk_in=True,
     )
     db.session.add(record)
+    db.session.flush()
+    db.session.add(EmploymentStatusHistory(
+        record_id=record.id, from_status=None, to_status="active",
+        changed_by=get_jwt_identity(), note="Walk-in placement (manual entry)",
+    ))
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Create", "employment", record.id, "Manual walk-in placement entry")
     return ok(record.to_dict(), "Employment record created.", 201)
@@ -1234,14 +1323,30 @@ def staff_create_employment():
 @jwt_required()
 @role_required("staff", "admin")
 def employment_report():
-    records = EmploymentRecord.query.all()
-    rows = [[r.jobseeker_profile.full_name, r.employer_company.company_name, r.position, r.status, str(r.start_date)] for r in records]
+    from models.employment import EMPLOYMENT_STATUS_LABELS
+
+    records = _filtered_employment_query().order_by(EmploymentRecord.start_date.desc()).all()
+    columns = ["Jobseeker", "Municipality", "Employer", "Industry", "Position", "Employment Type", "Start Date", "End Date", "Status"]
+    rows = [
+        [
+            r.jobseeker_profile.full_name,
+            r.jobseeker_profile.municipality or "",
+            r.employer_company.company_name,
+            r.employer_company.industry or "",
+            r.position,
+            (r.employment_type or "").replace("_", " ").title(),
+            r.start_date.strftime("%b %d, %Y") if r.start_date else "",
+            r.end_date.strftime("%b %d, %Y") if r.end_date else "Present",
+            EMPLOYMENT_STATUS_LABELS.get(r.status, r.status),
+        ]
+        for r in records
+    ]
     fmt = request.args.get("format", "excel")
     log_audit(User.query.get(get_jwt_identity()), "Export", "employment")
     if fmt == "pdf":
-        pdf_bytes = generate_table_report("Employment Report", ["Jobseeker", "Employer", "Position", "Status", "Start Date"], rows, datetime.utcnow().strftime("%Y-%m-%d"))
+        pdf_bytes = generate_table_report("Employment Monitoring Report", columns, rows, now_manila().strftime("%B %d, %Y"))
         return send_file(to_bytesio(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name="employment_report.pdf")
-    buf = build_excel_report("Employment Report", ["Jobseeker", "Employer", "Position", "Status", "Start Date"], rows)
+    buf = build_excel_report("Employment Report", columns, rows)
     return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="employment_report.xlsx")
 
 
