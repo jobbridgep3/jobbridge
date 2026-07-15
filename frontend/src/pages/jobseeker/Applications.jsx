@@ -208,6 +208,112 @@ function OfferCard({ offer, applicationId }) {
   )
 }
 
+function ReferralLettersPanel() {
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState({ vacancy_id: '', reason: '' })
+
+  const { data: letters, isLoading } = useQuery({
+    queryKey: ['referral-letters', 'my'],
+    queryFn: async () => (await api.get('/api/referral-letters/my')).data.data,
+  })
+  const { data: jobs } = useQuery({
+    queryKey: ['jobs', 'for-referral'],
+    queryFn: async () => (await api.get('/api/jobs')).data.data,
+  })
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['referral-letters', 'my'] })
+  useSocket({
+    'referral:ready': refresh,
+    'referral:decision': refresh,
+  })
+
+  const requestLetter = useMutation({
+    mutationFn: () => api.post('/api/referral-letters', { vacancy_id: form.vacancy_id || null, reason: form.reason.trim() || null }),
+    onSuccess: () => {
+      toast.success('Request sent to PESO — you will be notified once reviewed.')
+      setForm({ vacancy_id: '', reason: '' })
+      refresh()
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not send request.'),
+  })
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">Request a Referral Letter</h3>
+            <p className="text-xs text-slate-500">
+              PESO staff will review your request. Once approved, the letter attaches automatically when you apply to the matching job.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <Label>For Job Vacancy (optional)</Label>
+              <Select value={form.vacancy_id} onChange={(e) => setForm({ ...form, vacancy_id: e.target.value })}>
+                <option value="">General referral (any employer)</option>
+                {(jobs || []).map((j) => (
+                  <option key={j.id} value={j.id}>
+                    {j.title} — {j.company_name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label>Purpose / Reason</Label>
+              <Input
+                value={form.reason}
+                onChange={(e) => setForm({ ...form, reason: e.target.value })}
+                placeholder="e.g. Required by the employer for my application"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button size="sm" onClick={() => requestLetter.mutate()} disabled={requestLetter.isPending}>
+              {requestLetter.isPending ? 'Sending…' : 'Request Referral Letter'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {isLoading ? (
+        <CardSkeleton />
+      ) : !letters?.length ? (
+        <EmptyState icon={ClipboardList} title="No referral letters yet" description="Your referral letter requests will appear here." />
+      ) : (
+        <div className="space-y-3">
+          {letters.map((letter) => (
+            <Card key={letter.id}>
+              <CardContent className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {letter.job_title ? `${letter.job_title} — ${letter.company_name}` : 'General referral letter'}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Requested {dayjs(letter.created_at).format('MMM D, YYYY')}
+                    {letter.reason ? ` · ${letter.reason}` : ''}
+                  </p>
+                  {letter.status === 'rejected' && letter.rejection_reason && (
+                    <p className="mt-0.5 text-xs text-red-600">Reason: {letter.rejection_reason}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={letter.status} label={letter.status === 'requested' ? 'Pending Review' : undefined} />
+                  {letter.pdf_url && (
+                    <Button size="sm" variant="secondary" onClick={() => window.open(letter.pdf_url, '_blank')}>
+                      <Download className="h-3.5 w-3.5" /> Download
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ApplicationDetailDialog({ applicationId, onClose, onWithdraw }) {
   const [tab, setTab] = useState('overview')
   const { data: detail, isLoading } = useQuery({
@@ -365,6 +471,7 @@ function ApplicationDetailDialog({ applicationId, onClose, onWithdraw }) {
 
 export default function JobseekerApplications() {
   const queryClient = useQueryClient()
+  const [view, setView] = useState('applications')
   const [withdrawTarget, setWithdrawTarget] = useState(null)
   const [detailId, setDetailId] = useState(null)
   const [search, setSearch] = useState('')
@@ -445,7 +552,7 @@ export default function JobseekerApplications() {
         title="My Applications"
         description="Track the status of every job you've applied to, updated in real time."
         actions={
-          applications?.length ? (
+          view === 'applications' && applications?.length ? (
             <Button variant="secondary" size="sm" onClick={exportPdf} disabled={exporting}>
               <FileDown className="h-4 w-4" /> {exporting ? 'Exporting…' : 'Export PDF'}
             </Button>
@@ -453,6 +560,29 @@ export default function JobseekerApplications() {
         }
       />
 
+      <div className="flex w-fit rounded-lg border border-slate-200 bg-white p-0.5">
+        {[
+          { key: 'applications', label: 'Applications' },
+          { key: 'referrals', label: 'Referral Letters' },
+        ].map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setView(t.key)}
+            className={cn(
+              'rounded-md px-4 py-1.5 text-sm font-medium',
+              view === t.key ? 'bg-primary-800 text-white' : 'text-slate-600 hover:bg-slate-100',
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'referrals' && <ReferralLettersPanel />}
+
+      {view === 'applications' && (
+      <>
       <Card>
         <CardContent className="grid grid-cols-2 gap-3 md:grid-cols-5">
           <div className="col-span-2 md:col-span-1">
@@ -546,6 +676,9 @@ export default function JobseekerApplications() {
             </motion.div>
           ))}
         </motion.div>
+      )}
+
+      </>
       )}
 
       <ApplicationDetailDialog applicationId={detailId} onClose={() => setDetailId(null)} onWithdraw={(id) => setWithdrawTarget(id)} />

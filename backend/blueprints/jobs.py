@@ -104,6 +104,20 @@ def apply_to_job():
 
     jobseeker_user = User.query.get(profile.user_id)
     record_initial_history(application, jobseeker_user)
+
+    # Auto-attach an approved, unattached referral letter (vacancy-specific first,
+    # then a general one) so the employer sees it among the applicant's documents.
+    from models.referral import ReferralLetter
+    letter = (
+        ReferralLetter.query.filter_by(jobseeker_profile_id=profile.id, status="approved", application_id=None)
+        .filter(db.or_(ReferralLetter.vacancy_id == vacancy.id, ReferralLetter.vacancy_id.is_(None)))
+        .order_by(ReferralLetter.vacancy_id.desc().nullslast())
+        .first()
+    )
+    if letter:
+        letter.application_id = application.id
+        db.session.commit()
+
     log_audit(jobseeker_user, "Create", "applications", application.id, f"Applied to {vacancy.title}")
     notify_user(
         vacancy.employer_company.user_id, "new_applicant",
@@ -214,6 +228,19 @@ def cancel_application(application_id):
 @jwt_required()
 def download_referral_letter(application_id):
     application = Application.query.get(application_id)
-    if not application or not application.referral_letter:
+    if not application or not application.referral_letter or not application.referral_letter.pdf_url:
         return fail("Referral letter not available.", 404)
+    # Only the owning jobseeker, the vacancy's employer, or staff/admin may fetch it.
+    from flask_jwt_extended import get_jwt
+    role = get_jwt().get("role")
+    identity = get_jwt_identity()
+    if role == "jobseeker":
+        profile = JobseekerProfile.query.filter_by(user_id=identity).first()
+        if not profile or application.jobseeker_profile_id != profile.id:
+            return fail("Referral letter not available.", 404)
+    elif role == "employer":
+        from models.employer import EmployerCompany
+        company = EmployerCompany.query.filter_by(user_id=identity).first()
+        if not company or application.vacancy.employer_company_id != company.id:
+            return fail("Referral letter not available.", 404)
     return ok({"pdf_url": application.referral_letter.pdf_url})

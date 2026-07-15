@@ -53,6 +53,7 @@ import StaffEmployerDetail from './pages/staff/EmployerDetail'
 import StaffVacancies from './pages/staff/Vacancies'
 import StaffVacancyDetail from './pages/staff/VacancyDetail'
 import StaffInterviews from './pages/staff/Interviews'
+import StaffReferralLetters from './pages/staff/ReferralLetters'
 import StaffEmployment from './pages/staff/Employment'
 import StaffJobFair from './pages/staff/JobFair'
 import StaffJobFairScanner from './pages/staff/JobFairScanner'
@@ -76,6 +77,7 @@ import AdminStaffCreate from './pages/admin/StaffCreate'
 import AdminVacancies from './pages/admin/Vacancies'
 import AdminVacancyDetail from './pages/admin/VacancyDetail'
 import AdminInterviews from './pages/admin/Interviews'
+import AdminReferralLetters from './pages/admin/ReferralLetters'
 import AdminEmployment from './pages/admin/Employment'
 import AdminJobFair from './pages/admin/JobFair'
 import AdminJobFairScanner from './pages/admin/JobFairScanner'
@@ -154,6 +156,7 @@ export default function App() {
             <Route path="vacancies" element={<StaffVacancies />} />
             <Route path="vacancies/:id" element={<StaffVacancyDetail />} />
             <Route path="interviews" element={<StaffInterviews />} />
+            <Route path="referrals" element={<StaffReferralLetters />} />
             <Route path="employment" element={<StaffEmployment />} />
             <Route path="jobfair" element={<StaffJobFair />} />
             <Route path="jobfair/:id/scanner" element={<StaffJobFairScanner />} />
@@ -181,6 +184,7 @@ export default function App() {
             <Route path="vacancies" element={<AdminVacancies />} />
             <Route path="vacancies/:id" element={<AdminVacancyDetail />} />
             <Route path="interviews" element={<AdminInterviews />} />
+            <Route path="referrals" element={<AdminReferralLetters />} />
             <Route path="employment" element={<AdminEmployment />} />
             <Route path="jobfair" element={<AdminJobFair />} />
             <Route path="jobfair/:id/scanner" element={<AdminJobFairScanner />} />

@@ -315,6 +315,35 @@ def send_offer_response_email(to: str, jobseeker_name: str, position: str, accep
     return send_email(to, f"Offer {verdict} — {position}", html)
 
 
+def send_referral_decision_email(to: str, full_name: str, approved: bool, job_title: str | None = None, rejection_reason: str | None = None):
+    url = f"{current_app.config['FRONTEND_URL']}/jobseeker/applications"
+    target = f" for <b>{job_title}</b>" if job_title else ""
+    if approved:
+        subject = "Your PESO referral letter is ready"
+        body = f"""
+        <p>Hi {full_name},</p>
+        <p>Your referral letter request{target} has been <b>approved</b> by PESO Pila, Laguna.
+        You can now download the letter and attach it to your job application.</p>
+        <p><a href="{url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">Download Referral Letter</a></p>
+        """
+    else:
+        subject = "Update on your referral letter request"
+        body = f"""
+        <p>Hi {full_name},</p>
+        <p>Your referral letter request{target} was <b>not approved</b> by PESO Pila, Laguna.</p>
+        {f"<p><b>Reason:</b> {rejection_reason}</p>" if rejection_reason else ""}
+        <p>You may submit a new request after addressing the reason above.</p>
+        """
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Referral Letter {'Approved' if approved else 'Update'}</h2>
+      {body}
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, subject, html)
+
+
 def send_interview_rescheduled_email(to: str, job_title: str, company_name: str, when: str, mode: str, location: str | None):
     interviews_url = f"{current_app.config['FRONTEND_URL']}/jobseeker/interviews"
     html = f"""

@@ -384,6 +384,7 @@ def staff_delete_jobseeker_document(profile_id, document_id):
 @jwt_required()
 @role_required("staff", "admin")
 def generate_referral(application_id):
+    """Staff direct-issue for an existing application (no jobseeker request needed)."""
     application = Application.query.get(application_id)
     if not application:
         return fail("Application not found.", 404)
@@ -398,8 +399,19 @@ def generate_referral(application_id):
     existing = ReferralLetter.query.filter_by(application_id=application.id).first()
     if existing:
         existing.pdf_url = url
+        existing.status = "approved"
+        existing.reviewed_by = staff_user.id
+        existing.generated_by = staff_user.id
     else:
-        db.session.add(ReferralLetter(application_id=application.id, generated_by=staff_user.id, pdf_url=url))
+        db.session.add(ReferralLetter(
+            application_id=application.id,
+            jobseeker_profile_id=application.jobseeker_profile_id,
+            vacancy_id=application.vacancy_id,
+            status="approved",
+            reviewed_by=staff_user.id,
+            generated_by=staff_user.id,
+            pdf_url=url,
+        ))
     db.session.commit()
 
     notify_user(

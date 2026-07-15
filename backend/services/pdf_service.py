@@ -74,13 +74,18 @@ def _render(body_html: str) -> bytes:
     return HTML(string=html).write_pdf()
 
 
-def generate_referral_letter(jobseeker_name: str, job_title: str, company_name: str, date_str: str) -> bytes:
+def generate_referral_letter(jobseeker_name: str, job_title: str | None, company_name: str | None, date_str: str) -> bytes:
+    if job_title and company_name:
+        referral_line = (
+            f"and is being referred for the position of <b>{_esc(job_title)}</b> at <b>{_esc(company_name)}</b>."
+        )
+    else:
+        referral_line = "and is hereby referred for employment to any suitable position with your good office."
     body = f"""
-    <p>Date: {date_str}</p>
+    <p>Date: {_esc(date_str)}</p>
     <p>TO WHOM IT MAY CONCERN:</p>
-    <p>This is to certify that <b>{jobseeker_name}</b> is a registered jobseeker at the Public Employment
-    Service Office (PESO) of Pila, Laguna, and is being referred for the position of
-    <b>{job_title}</b> at <b>{company_name}</b>.</p>
+    <p>This is to certify that <b>{_esc(jobseeker_name)}</b> is a registered jobseeker at the Public Employment
+    Service Office (PESO) of Pila, Laguna, {referral_line}</p>
     <p>We hope you will give favorable consideration to the bearer of this letter.</p>
     <div class="signature">
       <p>Very truly yours,</p>

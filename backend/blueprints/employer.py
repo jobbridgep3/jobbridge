@@ -933,12 +933,5 @@ def bulk_reject():
     return ok(message=f"{len(apps)} applicant(s) rejected.")
 
 
-@applicants_bp.post("/<application_id>/referral-request")
-@jwt_required()
-@role_required("employer")
-def request_referral(application_id):
-    application = Application.query.get(application_id)
-    if not application:
-        return fail("Applicant not found.", 404)
-    notify_role("staff", "referral:requested", {"application_id": str(application.id)})
-    return ok(message="Referral letter requested from PESO Staff.")
+# Referral letters are jobseeker-requested (see blueprints/referrals.py) — the old
+# employer-initiated request endpoint was removed in the Phase 4 workflow redesign.
