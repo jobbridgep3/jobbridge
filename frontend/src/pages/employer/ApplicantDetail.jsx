@@ -56,7 +56,13 @@ export default function EmployerApplicantDetail() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [interviewOpen, setInterviewOpen] = useState(false)
-  const [interviewForm, setInterviewForm] = useState({ scheduled_date: '', mode: 'onsite', location: '' })
+  const [interviewForm, setInterviewForm] = useState({
+    scheduled_date: '',
+    mode: 'onsite',
+    location: '',
+    meeting_link: '',
+    interviewer_name: '',
+  })
 
   const { data: applicant, isLoading } = useQuery({
     queryKey: ['applicants', id],
@@ -206,17 +212,38 @@ export default function EmployerApplicantDetail() {
                 />
               </div>
             </div>
-            <div>
-              <Label>Mode</Label>
-              <Select value={interviewForm.mode} onChange={(e) => setInterviewForm({ ...interviewForm, mode: e.target.value })}>
-                <option value="onsite">Onsite</option>
-                <option value="online">Online</option>
-              </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Mode</Label>
+                <Select value={interviewForm.mode} onChange={(e) => setInterviewForm({ ...interviewForm, mode: e.target.value })}>
+                  <option value="onsite">Onsite</option>
+                  <option value="online">Online</option>
+                </Select>
+              </div>
+              <div>
+                <Label>Interviewer</Label>
+                <Input
+                  value={interviewForm.interviewer_name}
+                  onChange={(e) => setInterviewForm({ ...interviewForm, interviewer_name: e.target.value })}
+                  placeholder="Interviewer name"
+                />
+              </div>
             </div>
-            <div>
-              <Label>Location / Meeting Link</Label>
-              <Textarea value={interviewForm.location} onChange={(e) => setInterviewForm({ ...interviewForm, location: e.target.value })} />
-            </div>
+            {interviewForm.mode === 'online' ? (
+              <div>
+                <Label>Meeting Link</Label>
+                <Input
+                  value={interviewForm.meeting_link}
+                  onChange={(e) => setInterviewForm({ ...interviewForm, meeting_link: e.target.value })}
+                  placeholder="https://meet…"
+                />
+              </div>
+            ) : (
+              <div>
+                <Label>Venue</Label>
+                <Textarea value={interviewForm.location} onChange={(e) => setInterviewForm({ ...interviewForm, location: e.target.value })} />
+              </div>
+            )}
             <div className="flex justify-end">
               <Button onClick={() => scheduleInterview.mutate()} disabled={scheduleInterview.isPending}>
                 {scheduleInterview.isPending ? 'Scheduling…' : 'Send Invite'}

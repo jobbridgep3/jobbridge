@@ -37,8 +37,14 @@ export function AppShell() {
     'notification:new': () => {
       incrementUnread()
     },
-    'application:status_update': (payload) => toast.success(`Application status updated: ${payload.new_status?.replace('_', ' ')}`),
+    'application:status_update': (payload) =>
+      toast.success(`Application status updated: ${payload.status_label || payload.new_status?.replace(/_/g, ' ')}`),
     'interview:scheduled': () => toast('New interview scheduled', { icon: '📅' }),
+    'interview:rescheduled': () => toast('An interview was rescheduled', { icon: '📅' }),
+    'interview:cancelled': () => toast('An interview was cancelled', { icon: '📅' }),
+    'interview:reschedule_request': () => toast('New interview reschedule request', { icon: '🔁' }),
+    'interview:reschedule_response': () => toast('Your reschedule request has a response', { icon: '🔁' }),
+    'interview:result': () => toast('An interview result was recorded', { icon: '📝' }),
     'vacancy:approved': () => toast.success('A vacancy was approved'),
     'vacancy:rejected': () => toast.error('A vacancy was returned for revision'),
     'vacancy:published': (payload) =>

@@ -1122,11 +1122,26 @@ def staff_create_vacancy():
 
 # ---------- Interview Oversight ----------
 
+def _filtered_interviews_query():
+    query = Interview.query.join(Application).join(Vacancy).join(EmployerCompany)
+    if request.args.get("status"):
+        query = query.filter(Interview.status == request.args["status"])
+    if request.args.get("employer"):
+        query = query.filter(EmployerCompany.company_name.ilike(f"%{request.args['employer']}%"))
+    if request.args.get("municipality"):
+        query = query.filter(Vacancy.city_municipality_name.ilike(f"%{request.args['municipality']}%"))
+    if request.args.get("date_from"):
+        query = query.filter(Interview.scheduled_date >= request.args["date_from"])
+    if request.args.get("date_to"):
+        query = query.filter(Interview.scheduled_date <= request.args["date_to"] + "T23:59:59")
+    return query
+
+
 @staff_bp.get("/interviews")
 @jwt_required()
 @role_required("staff", "admin")
 def staff_list_interviews():
-    interviews = Interview.query.order_by(Interview.scheduled_date.desc()).all()
+    interviews = _filtered_interviews_query().order_by(Interview.scheduled_date.desc()).all()
     return ok([i.to_dict() for i in interviews])
 
 
@@ -1134,10 +1149,26 @@ def staff_list_interviews():
 @jwt_required()
 @role_required("staff", "admin")
 def interview_report():
-    interviews = Interview.query.all()
-    rows = [[i.application.jobseeker_profile.full_name, i.application.vacancy.title, i.status, str(i.scheduled_date)] for i in interviews]
-    buf = build_excel_report("Interview Report", ["Jobseeker", "Position", "Status", "Date"], rows)
+    interviews = _filtered_interviews_query().order_by(Interview.scheduled_date.desc()).all()
+    columns = ["Jobseeker", "Employer", "Position", "Date", "Mode", "Venue/Link", "Status", "Result"]
+    rows = [
+        [
+            i.application.jobseeker_profile.full_name,
+            i.application.vacancy.employer_company.company_name,
+            i.application.vacancy.title,
+            i.scheduled_date.strftime("%b %d, %Y %I:%M %p") if i.scheduled_date else "",
+            i.mode,
+            i.meeting_link or i.location or "",
+            i.status,
+            i.result,
+        ]
+        for i in interviews
+    ]
     log_audit(User.query.get(get_jwt_identity()), "Export", "interviews")
+    if request.args.get("format") == "pdf":
+        pdf = generate_table_report("Interview Oversight Report", columns, rows, now_manila().strftime("%B %d, %Y"))
+        return send_file(to_bytesio(pdf), mimetype="application/pdf", as_attachment=True, download_name="interview_report.pdf")
+    buf = build_excel_report("Interview Report", columns, rows)
     return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="interview_report.xlsx")
 
 

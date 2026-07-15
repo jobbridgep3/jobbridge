@@ -254,6 +254,81 @@ def send_announcement_email(to: str, title: str, body: str):
     return send_email(to, f"PESO Announcement: {title}", html)
 
 
+def send_interview_rescheduled_email(to: str, job_title: str, company_name: str, when: str, mode: str, location: str | None):
+    interviews_url = f"{current_app.config['FRONTEND_URL']}/jobseeker/interviews"
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Interview Rescheduled</h2>
+      <p>Your interview for <b>{job_title}</b> at <b>{company_name}</b> has been moved to a new schedule:</p>
+      <p><b>New Date &amp; Time:</b> {when}<br/><b>Mode:</b> {mode}{f"<br/><b>Location/Link:</b> {location}" if location else ""}</p>
+      <p><a href="{interviews_url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">Review and Respond</a></p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"Interview rescheduled — {job_title}", html)
+
+
+def send_interview_cancelled_email(to: str, job_title: str, company_name: str, reason: str | None = None):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Interview Cancelled</h2>
+      <p>Your interview for <b>{job_title}</b> at <b>{company_name}</b> has been cancelled.</p>
+      {f"<p><b>Reason:</b> {reason}</p>" if reason else ""}
+      <p>Your application remains active — the employer may schedule a new interview or update your application status.</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"Interview cancelled — {job_title}", html)
+
+
+def send_reschedule_request_email(to: str, jobseeker_name: str, job_title: str, preferred: str, reason: str | None):
+    interviews_url = f"{current_app.config['FRONTEND_URL']}/employer/interviews"
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Reschedule Request</h2>
+      <p><b>{jobseeker_name}</b> has requested to reschedule the interview for <b>{job_title}</b>.</p>
+      <p><b>Preferred Date &amp; Time:</b> {preferred}</p>
+      {f"<p><b>Reason:</b> {reason}</p>" if reason else ""}
+      <p><a href="{interviews_url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">Approve or Respond</a></p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"Reschedule request — {job_title}", html)
+
+
+def send_reschedule_response_email(to: str, job_title: str, company_name: str, outcome: str, when: str | None, note: str | None):
+    interviews_url = f"{current_app.config['FRONTEND_URL']}/jobseeker/interviews"
+    outcome_line = {
+        "approved": f"Your requested schedule was <b>approved</b>. New date &amp; time: <b>{when}</b>.",
+        "rejected": "Your reschedule request was <b>declined</b> — the original schedule stands.",
+        "suggested": f"The employer suggested a different schedule: <b>{when}</b>. Please review and respond.",
+    }.get(outcome, outcome)
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Reschedule Request Update</h2>
+      <p>Regarding your interview for <b>{job_title}</b> at <b>{company_name}</b>:</p>
+      <p>{outcome_line}</p>
+      {f"<p><b>Note from the employer:</b> {note}</p>" if note else ""}
+      <p><a href="{interviews_url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">View My Interviews</a></p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"Reschedule request {outcome} — {job_title}", html)
+
+
+def send_interview_result_email(to: str, job_title: str, company_name: str, result_label: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Interview Result Recorded</h2>
+      <p>The employer has recorded the result of your interview for <b>{job_title}</b> at <b>{company_name}</b>:</p>
+      <p style="font-size:20px;font-weight:bold;color:#1e3a8a">{result_label}</p>
+      <p>Watch your application status for the next steps.</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"Interview result — {job_title}: {result_label}", html)
+
+
 def send_application_status_email(to: str, full_name: str, job_title: str, company_name: str, status_label: str, note: str | None = None):
     applications_url = f"{current_app.config['FRONTEND_URL']}/jobseeker/applications"
     note_html = f"<p><b>Note from the employer:</b> {note}</p>" if note else ""

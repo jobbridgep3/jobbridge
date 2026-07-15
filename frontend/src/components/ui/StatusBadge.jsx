@@ -18,6 +18,7 @@ const STATUS_MAP = {
   completed: { label: 'Completed', variant: 'success' },
   accepted: { label: 'Accepted', variant: 'success' },
   declined: { label: 'Declined', variant: 'danger' },
+  rescheduled: { label: 'Rescheduled', variant: 'info' },
   verified: { label: 'Verified', variant: 'success' },
   unverified: { label: 'Unverified', variant: 'default' },
   suspended: { label: 'Suspended', variant: 'danger' },

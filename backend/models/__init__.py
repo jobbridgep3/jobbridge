@@ -6,7 +6,7 @@ from models.audit import AuditTrail
 from models.employer import EmployerCompany, EmployerCompanyDocument
 from models.employer_hr import EmployerHRDocument, EmployerHRProfile
 from models.employment import EmploymentRecord
-from models.interview import Interview
+from models.interview import Interview, InterviewRescheduleRequest
 from models.jobfair import JobFair, JobFairBooth, JobFairRegistration
 from models.jobseeker import Education, JobseekerDocument, JobseekerProfile, WorkExperience
 from models.notification import Notification
@@ -35,6 +35,7 @@ __all__ = [
     "Application",
     "ApplicationStatusHistory",
     "Interview",
+    "InterviewRescheduleRequest",
     "EmploymentRecord",
     "ReferralLetter",
     "JobFair",
