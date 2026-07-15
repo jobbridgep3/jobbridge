@@ -58,6 +58,8 @@ export function AppShell() {
     'referral:decision': () => toast('Your referral letter request has an update', { icon: '📄' }),
     'referral:requested': () => toast('New referral letter request', { icon: '📄' }),
     'announcement:new': (payload) => toast(`PESO Announcement: ${payload.title}`, { icon: '📢' }),
+    'jobfair:published': (payload) => toast(`New Job Fair: ${payload.name} — register now!`, { icon: '🎪', duration: 6000 }),
+    'jobfair:updated': (payload) => toast(`Job fair update: ${payload.name}`, { icon: '🎪' }),
     'employment:updated': () => toast('Employment record updated', { icon: '💼' }),
     'certificate:issued': () => toast.success('Your certificate has been issued'),
   })

@@ -43,6 +43,9 @@ const STATUS_MAP = {
   contract_ended: { label: 'Contract Ended', variant: 'default' },
   resigned: { label: 'Resigned', variant: 'default' },
   requested: { label: 'Requested', variant: 'warning' },
+  ongoing: { label: 'Ongoing', variant: 'info' },
+  archived: { label: 'Archived', variant: 'default' },
+  upcoming: { label: 'Upcoming', variant: 'info' },
   certificate_issued: { label: 'Certificate Issued', variant: 'success' },
 }
 

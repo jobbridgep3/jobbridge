@@ -104,6 +104,33 @@ def _send_interview_reminders(app):
             logger.info("APScheduler: sent %d interview reminder(s).", len(due))
 
 
+def _advance_jobfair_statuses(app):
+    """published -> ongoing on event day, ongoing -> completed once the event ends
+    (end_time, or end of the event day when no end_time is set)."""
+    with app.app_context():
+        from datetime import timedelta
+
+        from extensions import db
+        from models.jobfair import JobFair
+        from utils.timezone import now_manila
+
+        now = now_manila()
+        started = JobFair.query.filter(JobFair.status == "published", JobFair.event_date <= now).all()
+        for fair in started:
+            fair.status = "ongoing"
+        ongoing = JobFair.query.filter(JobFair.status == "ongoing").all()
+        ended = [
+            fair for fair in ongoing
+            if (fair.end_time and fair.end_time < now)
+            or (not fair.end_time and fair.event_date and fair.event_date + timedelta(hours=12) < now)
+        ]
+        for fair in ended:
+            fair.status = "completed"
+        if started or ended:
+            db.session.commit()
+            logger.info("APScheduler: job fairs — %d started, %d completed.", len(started), len(ended))
+
+
 def init_scheduler(app):
     if scheduler.running:
         return
@@ -122,5 +149,9 @@ def init_scheduler(app):
     scheduler.add_job(
         lambda: _send_interview_reminders(app),
         trigger="interval", hours=1, id="send_interview_reminders", replace_existing=True,
+    )
+    scheduler.add_job(
+        lambda: _advance_jobfair_statuses(app),
+        trigger="interval", hours=1, id="advance_jobfair_statuses", replace_existing=True,
     )
     scheduler.start()

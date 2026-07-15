@@ -315,6 +315,36 @@ def send_offer_response_email(to: str, jobseeker_name: str, position: str, accep
     return send_email(to, f"Offer {verdict} — {position}", html)
 
 
+def send_jobfair_published_email(to: str, fair_name: str, event_date_str: str, venue: str, deadline_str: str | None, role: str):
+    path = "/jobseeker/jobfair" if role == "jobseeker" else "/employer/jobfair"
+    url = f"{current_app.config['FRONTEND_URL']}{path}"
+    action = "Register now to attend" if role == "jobseeker" else "Register your company booth"
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Upcoming Job Fair!</h2>
+      <p>PESO Pila, Laguna has announced a new job fair:</p>
+      <p style="font-size:18px;font-weight:bold;color:#1e3a8a">{fair_name}</p>
+      <p><b>When:</b> {event_date_str}<br/><b>Where:</b> {venue}{f"<br/><b>Registration deadline:</b> {deadline_str}" if deadline_str else ""}</p>
+      <p>{action} through JobBridge.</p>
+      <p><a href="{url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">View Job Fair</a></p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"Job Fair — {fair_name}", html)
+
+
+def send_jobfair_update_email(to: str, fair_name: str, change_summary: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Job Fair Update</h2>
+      <p>There is an update to <b>{fair_name}</b>:</p>
+      <p>{change_summary}</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"Job fair update — {fair_name}", html)
+
+
 def send_employment_status_email(to: str, full_name: str, position: str, employer_name: str, status_label: str, note: str | None = None):
     url = f"{current_app.config['FRONTEND_URL']}/jobseeker/employment"
     html = f"""
