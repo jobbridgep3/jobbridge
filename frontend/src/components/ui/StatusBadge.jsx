@@ -3,7 +3,11 @@ import { Badge } from './Badge'
 const STATUS_MAP = {
   applied: { label: 'Applied', variant: 'default' },
   under_review: { label: 'Under Review', variant: 'info' },
+  shortlisted: { label: 'Shortlisted', variant: 'info' },
   interview_scheduled: { label: 'Interview Scheduled', variant: 'warning' },
+  interview_completed: { label: 'Interview Completed', variant: 'info' },
+  background_verification: { label: 'Background Verification', variant: 'warning' },
+  offer_extended: { label: 'Job Offer', variant: 'warning' },
   hired: { label: 'Hired', variant: 'success' },
   rejected: { label: 'Rejected', variant: 'danger' },
   cancelled: { label: 'Cancelled', variant: 'default' },
@@ -33,7 +37,7 @@ const STATUS_MAP = {
   certificate_issued: { label: 'Certificate Issued', variant: 'success' },
 }
 
-export function StatusBadge({ status }) {
+export function StatusBadge({ status, label }) {
   const entry = STATUS_MAP[status] || { label: status?.replace(/_/g, ' ') || 'Unknown', variant: 'default' }
-  return <Badge variant={entry.variant} className="capitalize">{entry.label}</Badge>
+  return <Badge variant={entry.variant} className="capitalize">{label || entry.label}</Badge>
 }

@@ -10,6 +10,7 @@ from models.interview import Interview
 from models.jobseeker import JobseekerProfile
 from models.user import User
 from models.vacancy import Vacancy
+from services.application_status_service import transition_application
 from services.audit_service import log_audit
 from services.email_service import send_interview_invite_email
 from services.notification_service import notify_user
@@ -90,8 +91,15 @@ def create_interview():
         location=data.get("location", ""),
         status="pending",
     )
-    application.status = "interview_scheduled"
     db.session.add(interview)
+
+    actor = User.query.get(company.user_id)
+    if application.status != "interview_scheduled":
+        # notify=False: the richer interview-invite notification + email below covers it.
+        success, error = transition_application(application, "interview_scheduled", actor, notify=False)
+        if not success:
+            db.session.rollback()
+            return fail(error, 400)
     db.session.commit()
 
     jobseeker = application.jobseeker_profile
@@ -115,8 +123,9 @@ def create_interview():
 @jwt_required()
 @role_required("employer")
 def update_interview(interview_id):
+    company = EmployerCompany.query.filter_by(user_id=get_jwt_identity()).first()
     interview = Interview.query.get(interview_id)
-    if not interview:
+    if not interview or not company or interview.application.vacancy.employer_company_id != company.id:
         return fail("Interview not found.", 404)
     data = request.get_json(force=True) or {}
     if data.get("scheduled_date"):
@@ -134,8 +143,9 @@ def update_interview(interview_id):
 @jwt_required()
 @role_required("jobseeker")
 def accept_interview(interview_id):
+    profile = JobseekerProfile.query.filter_by(user_id=get_jwt_identity()).first()
     interview = Interview.query.get(interview_id)
-    if not interview:
+    if not interview or not profile or interview.application.jobseeker_profile_id != profile.id:
         return fail("Interview not found.", 404)
     interview.status = "accepted"
     db.session.commit()
@@ -154,8 +164,9 @@ def accept_interview(interview_id):
 @jwt_required()
 @role_required("jobseeker")
 def decline_interview(interview_id):
+    profile = JobseekerProfile.query.filter_by(user_id=get_jwt_identity()).first()
     interview = Interview.query.get(interview_id)
-    if not interview:
+    if not interview or not profile or interview.application.jobseeker_profile_id != profile.id:
         return fail("Interview not found.", 404)
     data = request.get_json(force=True) or {}
     interview.status = "declined"
@@ -176,12 +187,17 @@ def decline_interview(interview_id):
 @jwt_required()
 @role_required("employer")
 def complete_interview(interview_id):
+    company = EmployerCompany.query.filter_by(user_id=get_jwt_identity()).first()
     interview = Interview.query.get(interview_id)
-    if not interview:
+    if not interview or not company or interview.application.vacancy.employer_company_id != company.id:
         return fail("Interview not found.", 404)
     data = request.get_json(force=True) or {}
     interview.status = "completed"
     if "notes" in data:
         interview.notes = data["notes"]
     db.session.commit()
+
+    application = interview.application
+    if application.status == "interview_scheduled":
+        transition_application(application, "interview_completed", User.query.get(company.user_id))
     return ok(interview.to_dict(), "Interview marked as completed.")

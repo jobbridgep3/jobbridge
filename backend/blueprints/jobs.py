@@ -2,16 +2,19 @@ from flask import Blueprint, request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from extensions import db
-from models.application import Application
+from models.application import APPLICATION_STATUS_LABELS, Application
+from models.employer_hr import EmployerHRProfile
 from models.jobseeker import JobseekerProfile
 from models.user import User
 from models.vacancy import Vacancy
+from services.application_status_service import build_timeline, record_initial_history, transition_application
 from services.audit_service import log_audit
 from services.matching_service import match_score, rank_vacancies_for_jobseeker
 from services.notification_service import notify_role, notify_user
-from services.pdf_service import to_bytesio
+from services.pdf_service import generate_table_report, to_bytesio
 from utils.decorators import role_required
 from utils.responses import fail, ok
+from utils.timezone import now_manila
 
 jobs_bp = Blueprint("jobs", __name__, url_prefix="/api")
 
@@ -99,7 +102,9 @@ def apply_to_job():
     db.session.add(application)
     db.session.commit()
 
-    log_audit(User.query.get(profile.user_id), "Create", "applications", application.id, f"Applied to {vacancy.title}")
+    jobseeker_user = User.query.get(profile.user_id)
+    record_initial_history(application, jobseeker_user)
+    log_audit(jobseeker_user, "Create", "applications", application.id, f"Applied to {vacancy.title}")
     notify_user(
         vacancy.employer_company.user_id, "new_applicant",
         "New applicant received", f"{profile.full_name} applied to {vacancy.title}",
@@ -123,15 +128,66 @@ def my_applications():
 @jwt_required()
 @role_required("jobseeker")
 def applications_summary():
+    summary = {status: 0 for status in APPLICATION_STATUS_LABELS}
     profile = JobseekerProfile.query.filter_by(user_id=get_jwt_identity()).first()
     if not profile:
-        return ok({"applied": 0, "under_review": 0, "interview_scheduled": 0, "hired": 0})
+        return ok(summary)
     apps = Application.query.filter_by(jobseeker_profile_id=profile.id).all()
-    summary = {"applied": 0, "under_review": 0, "interview_scheduled": 0, "hired": 0}
     for a in apps:
         if a.status in summary:
             summary[a.status] += 1
     return ok(summary)
+
+
+@jobs_bp.get("/applications/export/pdf")
+@jwt_required()
+@role_required("jobseeker")
+def export_my_applications():
+    profile = JobseekerProfile.query.filter_by(user_id=get_jwt_identity()).first()
+    if not profile:
+        return fail("Profile not found.", 404)
+    apps = Application.query.filter_by(jobseeker_profile_id=profile.id).order_by(Application.created_at.desc()).all()
+    rows = [
+        [
+            a.reference_no,
+            a.vacancy.title if a.vacancy else "",
+            a.vacancy.employer_company.company_name if a.vacancy and a.vacancy.employer_company else "",
+            a.created_at.strftime("%b %d, %Y") if a.created_at else "",
+            APPLICATION_STATUS_LABELS.get(a.status, a.status),
+            a.updated_at.strftime("%b %d, %Y") if a.updated_at else "",
+        ]
+        for a in apps
+    ]
+    pdf = generate_table_report(
+        f"Application History — {profile.full_name}",
+        ["Reference No.", "Position", "Company", "Date Applied", "Status", "Last Updated"],
+        rows, now_manila().strftime("%B %d, %Y"),
+    )
+    return send_file(to_bytesio(pdf), mimetype="application/pdf", as_attachment=True, download_name="my-applications.pdf")
+
+
+@jobs_bp.get("/applications/<application_id>")
+@jwt_required()
+@role_required("jobseeker")
+def application_detail(application_id):
+    profile = JobseekerProfile.query.filter_by(user_id=get_jwt_identity()).first()
+    application = Application.query.get(application_id)
+    if not application or not profile or application.jobseeker_profile_id != profile.id:
+        return fail("Application not found.", 404)
+
+    vacancy = application.vacancy
+    company = vacancy.employer_company if vacancy else None
+    hr = EmployerHRProfile.query.filter_by(user_id=company.user_id).first() if company else None
+
+    result = application.to_dict()
+    result["timeline"] = build_timeline(application)
+    result["interviews"] = [i.to_dict() for i in sorted(application.interviews, key=lambda i: i.scheduled_date or i.created_at)]
+    result["hr_representative"] = (
+        {"full_name": hr.full_name, "position": hr.position, "department": hr.department} if hr and hr.full_name else None
+    )
+    result["vacancy"] = vacancy.to_dict() if vacancy else None
+    result["referral_letter"] = application.referral_letter.to_dict() if application.referral_letter else None
+    return ok(result)
 
 
 @jobs_bp.delete("/applications/<application_id>")
@@ -143,11 +199,13 @@ def cancel_application(application_id):
     if not application or not profile or application.jobseeker_profile_id != profile.id:
         return fail("Application not found.", 404)
     if application.status not in ("applied", "under_review"):
-        return fail("This application can no longer be cancelled.", 400)
-    application.status = "cancelled"
-    db.session.commit()
-    log_audit(User.query.get(profile.user_id), "Update", "applications", application.id, "Cancelled by jobseeker")
-    return ok(message="Application cancelled.")
+        return fail("This application can no longer be withdrawn.", 400)
+    success, error = transition_application(
+        application, "cancelled", User.query.get(profile.user_id), note="Withdrawn by applicant",
+    )
+    if not success:
+        return fail(error, 400)
+    return ok(message="Application withdrawn.")
 
 
 @jobs_bp.get("/referral-letter/<application_id>")

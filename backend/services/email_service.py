@@ -252,3 +252,20 @@ def send_announcement_email(to: str, title: str, body: str):
     </div>
     """
     return send_email(to, f"PESO Announcement: {title}", html)
+
+
+def send_application_status_email(to: str, full_name: str, job_title: str, company_name: str, status_label: str, note: str | None = None):
+    applications_url = f"{current_app.config['FRONTEND_URL']}/jobseeker/applications"
+    note_html = f"<p><b>Note from the employer:</b> {note}</p>" if note else ""
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Application Status Update</h2>
+      <p>Hi {full_name},</p>
+      <p>Your application for <b>{job_title}</b> at <b>{company_name}</b> has moved to:</p>
+      <p style="font-size:20px;font-weight:bold;color:#1e3a8a">{status_label}</p>
+      {note_html}
+      <p><a href="{applications_url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">View My Applications</a></p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"Application update — {job_title}: {status_label}", html)

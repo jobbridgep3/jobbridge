@@ -1,24 +1,170 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
-import { ClipboardList, Download, X } from 'lucide-react'
-import { useState } from 'react'
+import { Building2, Calendar, ClipboardList, Download, Eye, FileDown, Search, X } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
 
+import { ApplicationTimeline } from '../../components/application/ApplicationTimeline'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { DatePicker } from '../../components/ui/DatePicker'
+import { Dialog, DialogContent } from '../../components/ui/Dialog'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { Input, Label, Select } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
+import { downloadFile, parseBlobError } from '../../lib/download'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
+
+const STATUS_OPTIONS = [
+  { value: 'applied', label: 'Application Submitted' },
+  { value: 'under_review', label: 'Documents Under Review' },
+  { value: 'shortlisted', label: 'Shortlisted' },
+  { value: 'interview_scheduled', label: 'Interview Scheduled' },
+  { value: 'interview_completed', label: 'Interview Completed' },
+  { value: 'background_verification', label: 'Background Verification' },
+  { value: 'offer_extended', label: 'Job Offer' },
+  { value: 'hired', label: 'Hired' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'cancelled', label: 'Withdrawn' },
+]
+
+const WITHDRAWABLE = ['applied', 'under_review']
+
+function CompanyLogo({ url, name }) {
+  if (url) {
+    return <img src={url} alt={name} className="h-11 w-11 shrink-0 rounded-lg border border-slate-200 bg-white object-contain" />
+  }
+  return (
+    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50">
+      <Building2 className="h-5 w-5 text-slate-400" />
+    </div>
+  )
+}
+
+function ApplicationDetailDialog({ applicationId, onClose, onWithdraw }) {
+  const { data: detail, isLoading } = useQuery({
+    queryKey: ['applications', applicationId],
+    queryFn: async () => (await api.get(`/api/applications/${applicationId}`)).data.data,
+    enabled: !!applicationId,
+  })
+
+  return (
+    <Dialog open={!!applicationId} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent title="Application Details" className="max-w-2xl">
+        {isLoading || !detail ? (
+          <CardSkeleton />
+        ) : (
+          <div className="max-h-[70vh] space-y-5 overflow-y-auto pr-1">
+            <div className="flex items-start gap-3">
+              <CompanyLogo url={detail.company_logo_url} name={detail.company_name} />
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-slate-900">{detail.job_title}</p>
+                <p className="text-sm text-slate-500">{detail.company_name}</p>
+                <div className="mt-1.5">
+                  <StatusBadge status={detail.status} label={detail.status_label} />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-lg bg-slate-50 p-4 text-sm sm:grid-cols-3">
+              <div>
+                <p className="text-xs text-slate-500">Reference No.</p>
+                <p className="font-medium text-slate-800">{detail.reference_no}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Date Applied</p>
+                <p className="font-medium text-slate-800">{dayjs(detail.created_at).format('MMM D, YYYY')}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Last Updated</p>
+                <p className="font-medium text-slate-800">{dayjs(detail.updated_at).format('MMM D, YYYY')}</p>
+              </div>
+              <div className="col-span-2 sm:col-span-3">
+                <p className="text-xs text-slate-500">HR Representative</p>
+                <p className="font-medium text-slate-800">
+                  {detail.hr_representative
+                    ? `${detail.hr_representative.full_name}${detail.hr_representative.position ? ` — ${detail.hr_representative.position}` : ''}`
+                    : 'Not assigned yet'}
+                </p>
+              </div>
+            </div>
+
+            {detail.interviews?.length > 0 && (
+              <div>
+                <h4 className="mb-2 text-sm font-semibold text-slate-900">Interview Schedule</h4>
+                <div className="space-y-2">
+                  {detail.interviews.map((iv) => (
+                    <div key={iv.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3 text-sm">
+                      <div>
+                        <p className="font-medium text-slate-800">
+                          <Calendar className="mr-1 inline h-3.5 w-3.5 text-slate-400" />
+                          {dayjs(iv.scheduled_date).format('MMM D, YYYY h:mm A')}
+                        </p>
+                        <p className="text-xs capitalize text-slate-500">
+                          {iv.mode}
+                          {iv.location ? ` · ${iv.location}` : ''}
+                        </p>
+                      </div>
+                      <StatusBadge status={iv.status} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {detail.feedback_note && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-xs font-semibold text-amber-800">Message from the employer</p>
+                <p className="mt-0.5 text-sm text-amber-900">{detail.feedback_note}</p>
+              </div>
+            )}
+
+            <div>
+              <h4 className="mb-2 text-sm font-semibold text-slate-900">Application Timeline</h4>
+              <ApplicationTimeline events={detail.timeline} />
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
+              {detail.referral_letter?.pdf_url && (
+                <Button size="sm" variant="secondary" onClick={() => window.open(detail.referral_letter.pdf_url, '_blank')}>
+                  <Download className="h-3.5 w-3.5" /> Referral Letter
+                </Button>
+              )}
+              {detail.status === 'interview_scheduled' && (
+                <Button size="sm" variant="secondary" asChild>
+                  <Link to="/jobseeker/interviews">View Interview</Link>
+                </Button>
+              )}
+              {WITHDRAWABLE.includes(detail.status) && (
+                <Button size="sm" variant="ghost" onClick={() => onWithdraw(detail.id)}>
+                  <X className="h-3.5 w-3.5" /> Withdraw Application
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 export default function JobseekerApplications() {
   const queryClient = useQueryClient()
-  const [cancelTarget, setCancelTarget] = useState(null)
+  const [withdrawTarget, setWithdrawTarget] = useState(null)
+  const [detailId, setDetailId] = useState(null)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [companyFilter, setCompanyFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [exporting, setExporting] = useState(false)
 
   const { data: applications, isLoading } = useQuery({
     queryKey: ['applications'],
@@ -26,25 +172,119 @@ export default function JobseekerApplications() {
   })
 
   useSocket({
-    'application:status_update': () => queryClient.invalidateQueries({ queryKey: ['applications'] }),
+    'application:status_update': () => {
+      queryClient.invalidateQueries({ queryKey: ['applications'] })
+    },
     'referral:ready': () => queryClient.invalidateQueries({ queryKey: ['applications'] }),
   })
 
-  const cancelApplication = async () => {
+  const companies = useMemo(
+    () => [...new Set((applications || []).map((a) => a.company_name).filter(Boolean))].sort(),
+    [applications],
+  )
+
+  const filtered = useMemo(() => {
+    return (applications || []).filter((app) => {
+      if (search) {
+        const q = search.toLowerCase()
+        const haystack = `${app.job_title || ''} ${app.company_name || ''} ${app.reference_no || ''}`.toLowerCase()
+        if (!haystack.includes(q)) return false
+      }
+      if (statusFilter && app.status !== statusFilter) return false
+      if (companyFilter && app.company_name !== companyFilter) return false
+      if (dateFrom && dayjs(app.created_at).isBefore(dayjs(dateFrom), 'day')) return false
+      if (dateTo && dayjs(app.created_at).isAfter(dayjs(dateTo), 'day')) return false
+      return true
+    })
+  }, [applications, search, statusFilter, companyFilter, dateFrom, dateTo])
+
+  const clearFilters = () => {
+    setSearch('')
+    setStatusFilter('')
+    setCompanyFilter('')
+    setDateFrom('')
+    setDateTo('')
+  }
+
+  const withdrawApplication = async () => {
     try {
-      await api.delete(`/api/applications/${cancelTarget}`)
-      toast.success('Application cancelled.')
+      await api.delete(`/api/applications/${withdrawTarget}`)
+      toast.success('Application withdrawn.')
       queryClient.invalidateQueries({ queryKey: ['applications'] })
-    } catch {
-      toast.error('Could not cancel application.')
+      setDetailId(null)
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not withdraw application.')
     } finally {
-      setCancelTarget(null)
+      setWithdrawTarget(null)
+    }
+  }
+
+  const exportPdf = async () => {
+    setExporting(true)
+    try {
+      await downloadFile('/api/applications/export/pdf', { filename: 'my-applications.pdf' })
+    } catch (err) {
+      toast.error(await parseBlobError(err))
+    } finally {
+      setExporting(false)
     }
   }
 
   return (
     <motion.div {...fadeIn} className="space-y-4">
-      <PageHeader title="My Applications" description="Track the status of every job you've applied to, updated in real time." />
+      <PageHeader
+        title="My Applications"
+        description="Track the status of every job you've applied to, updated in real time."
+        actions={
+          applications?.length ? (
+            <Button variant="secondary" size="sm" onClick={exportPdf} disabled={exporting}>
+              <FileDown className="h-4 w-4" /> {exporting ? 'Exporting…' : 'Export PDF'}
+            </Button>
+          ) : null
+        }
+      />
+
+      <Card>
+        <CardContent className="grid grid-cols-2 gap-3 md:grid-cols-5">
+          <div className="col-span-2 md:col-span-1">
+            <Label>Search</Label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input className="pl-8" placeholder="Job, company, ref no." value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <Label>Status</Label>
+            <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="">All statuses</option>
+              {STATUS_OPTIONS.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label>Company</Label>
+            <Select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)}>
+              <option value="">All companies</option>
+              {companies.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label>Applied From</Label>
+            <DatePicker value={dateFrom} onChange={setDateFrom} />
+          </div>
+          <div>
+            <Label>Applied To</Label>
+            <DatePicker value={dateTo} onChange={setDateTo} />
+          </div>
+        </CardContent>
+      </Card>
 
       {isLoading ? (
         <CardSkeleton />
@@ -56,39 +296,39 @@ export default function JobseekerApplications() {
           actionLabel="Search Jobs"
           onAction={() => (window.location.href = '/jobseeker/jobs')}
         />
+      ) : !filtered.length ? (
+        <EmptyState
+          icon={Search}
+          title="No matching applications"
+          description="Try adjusting your search or filters."
+          actionLabel="Clear Filters"
+          onAction={clearFilters}
+        />
       ) : (
         <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-3">
-          {applications.map((app) => (
+          {filtered.map((app) => (
             <motion.div key={app.id} variants={staggerItem}>
               <Card>
                 <CardContent className="flex flex-wrap items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">{app.job_title}</p>
-                    <p className="text-xs text-slate-500">{app.company_name}</p>
-                    {app.feedback_note && <p className="mt-1 text-xs text-slate-500 italic">"{app.feedback_note}"</p>}
+                  <div className="flex min-w-0 items-center gap-3">
+                    <CompanyLogo url={app.company_logo_url} name={app.company_name} />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{app.job_title}</p>
+                      <p className="truncate text-xs text-slate-500">{app.company_name}</p>
+                      <p className="mt-0.5 text-[11px] text-slate-400">
+                        {app.reference_no} · Applied {dayjs(app.created_at).format('MMM D, YYYY')} · Updated{' '}
+                        {dayjs(app.updated_at).format('MMM D, YYYY')}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <StatusBadge status={app.status} />
-                    {app.status === 'interview_scheduled' && (
-                      <Button size="sm" variant="secondary" asChild>
-                        <Link to="/jobseeker/interviews">View Interview</Link>
-                      </Button>
-                    )}
-                    {app.has_referral_letter && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={async () => {
-                          const res = await api.get(`/api/referral-letter/${app.id}`)
-                          window.open(res.data.data.pdf_url, '_blank')
-                        }}
-                      >
-                        <Download className="h-3.5 w-3.5" /> Referral Letter
-                      </Button>
-                    )}
-                    {(app.status === 'applied' || app.status === 'under_review') && (
-                      <Button size="sm" variant="ghost" onClick={() => setCancelTarget(app.id)}>
-                        <X className="h-3.5 w-3.5" /> Cancel
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={app.status} label={app.status_label} />
+                    <Button size="sm" variant="secondary" onClick={() => setDetailId(app.id)}>
+                      <Eye className="h-3.5 w-3.5" /> Details
+                    </Button>
+                    {WITHDRAWABLE.includes(app.status) && (
+                      <Button size="sm" variant="ghost" onClick={() => setWithdrawTarget(app.id)}>
+                        <X className="h-3.5 w-3.5" /> Withdraw
                       </Button>
                     )}
                   </div>
@@ -99,14 +339,16 @@ export default function JobseekerApplications() {
         </motion.div>
       )}
 
+      <ApplicationDetailDialog applicationId={detailId} onClose={() => setDetailId(null)} onWithdraw={(id) => setWithdrawTarget(id)} />
+
       <ConfirmDialog
-        open={!!cancelTarget}
-        onOpenChange={(open) => !open && setCancelTarget(null)}
-        title="Cancel this application?"
-        description="This action cannot be undone."
-        confirmLabel="Cancel Application"
+        open={!!withdrawTarget}
+        onOpenChange={(open) => !open && setWithdrawTarget(null)}
+        title="Withdraw this application?"
+        description="The employer will be notified. This action cannot be undone."
+        confirmLabel="Withdraw Application"
         danger
-        onConfirm={cancelApplication}
+        onConfirm={withdrawApplication}
       />
     </motion.div>
   )

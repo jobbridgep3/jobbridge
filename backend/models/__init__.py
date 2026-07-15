@@ -1,7 +1,7 @@
 """Import every model here so Flask-Migrate/Alembic can discover the full schema."""
 
 from models.announcement import Announcement
-from models.application import Application
+from models.application import Application, ApplicationStatusHistory
 from models.audit import AuditTrail
 from models.employer import EmployerCompany, EmployerCompanyDocument
 from models.employer_hr import EmployerHRDocument, EmployerHRProfile
@@ -33,6 +33,7 @@ __all__ = [
     "VacancyCategory",
     "VacancyScreeningQuestion",
     "Application",
+    "ApplicationStatusHistory",
     "Interview",
     "EmploymentRecord",
     "ReferralLetter",

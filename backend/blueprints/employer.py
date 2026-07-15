@@ -12,6 +12,7 @@ from models.user import User
 from models.vacancy import Vacancy, VacancyCategory, VacancyScreeningQuestion
 from schemas.employer_schemas import CompanyProfileSchema, HRProfileSchema
 from schemas.vacancy_schemas import VacancyWriteSchema
+from services.application_status_service import build_timeline, transition_application
 from services.audit_service import log_audit
 from services.email_service import send_new_vacancy_email
 from services.matching_service import rank_jobseekers_for_vacancy
@@ -796,11 +797,14 @@ def list_applicants():
 @jwt_required()
 @role_required("employer")
 def get_applicant(application_id):
+    company = _company()
     application = Application.query.get(application_id)
-    if not application:
+    if not application or not company or application.vacancy.employer_company_id != company.id:
         return fail("Applicant not found.", 404)
     result = application.to_dict()
     result["jobseeker_profile"] = application.jobseeker_profile.to_dict()
+    result["timeline"] = build_timeline(application)
+    result["interviews"] = [i.to_dict() for i in sorted(application.interviews, key=lambda i: i.scheduled_date or i.created_at)]
     return ok(result)
 
 
@@ -808,30 +812,25 @@ def get_applicant(application_id):
 @jwt_required()
 @role_required("employer")
 def update_applicant_status(application_id):
+    company = _company()
     application = Application.query.get(application_id)
-    if not application:
+    if not application or not company or application.vacancy.employer_company_id != company.id:
         return fail("Applicant not found.", 404)
     data = request.get_json(force=True) or {}
     new_status = data.get("status")
-    if new_status not in ("under_review", "hired", "rejected"):
+    if new_status not in ("under_review", "shortlisted", "background_verification", "hired", "rejected"):
         return fail("Invalid status.", 400)
 
-    before = {"status": application.status}
-    application.status = new_status
     if "feedback_note" in data:
         application.feedback_note = data["feedback_note"]
     if "employer_notes" in data:
         application.employer_notes = data["employer_notes"]
-    db.session.commit()
-    log_audit(User.query.get(get_jwt_identity()), "Update", "applications", application.id, before=before, after={"status": new_status})
 
-    jobseeker_user_id = application.jobseeker_profile.user_id
-    notify_user(
-        jobseeker_user_id, "application_status", f"Application status: {new_status.replace('_', ' ').title()}",
-        f"Your application for {application.vacancy.title} is now {new_status.replace('_', ' ')}.",
-        link="/jobseeker/applications", socket_event="application:status_update",
-        socket_payload={"application_id": str(application.id), "new_status": new_status},
-    )
+    actor = User.query.get(get_jwt_identity())
+    success, error = transition_application(application, new_status, actor, note=data.get("feedback_note"))
+    if not success:
+        db.session.rollback()
+        return fail(error, 400)
 
     if new_status == "hired":
         from blueprints.employment import create_employment_record_for_application
@@ -844,15 +843,20 @@ def update_applicant_status(application_id):
 @jwt_required()
 @role_required("employer")
 def bulk_reject():
+    company = _company()
+    if not company:
+        return fail("Company profile not found.", 404)
     data = request.get_json(force=True) or {}
     ids = data.get("application_ids", [])
-    apps = Application.query.filter(Application.id.in_(ids), Application.status.in_(("applied", "under_review"))).all()
-    for a in apps:
-        a.status = "rejected"
-    db.session.commit()
+    apps = (
+        Application.query.join(Vacancy)
+        .filter(Application.id.in_(ids), Vacancy.employer_company_id == company.id,
+                Application.status.in_(("applied", "under_review", "shortlisted")))
+        .all()
+    )
     actor = User.query.get(get_jwt_identity())
     for a in apps:
-        log_audit(actor, "Update", "applications", a.id, "Bulk rejected", after={"status": "rejected"})
+        transition_application(a, "rejected", actor, note="Bulk rejected")
     return ok(message=f"{len(apps)} applicant(s) rejected.")
 
 
