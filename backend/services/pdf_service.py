@@ -153,6 +153,42 @@ def generate_job_offer(
     return _render(body)
 
 
+def generate_jobfair_registration_form(
+    profile: dict, fair: dict, registration_number: str, qr_data_url: str, date_str: str,
+) -> bytes:
+    """Official job fair registration form: applicant info, registration number,
+    event details, and the attendance QR code (rendered from a data URL)."""
+    applicant_rows = f"""
+    <tr><th style="width:200px">Full Name</th><td>{_val(profile.get("full_name"))}</td></tr>
+    <tr><th>Contact Number</th><td>{_val(profile.get("contact_number"))}</td></tr>
+    <tr><th>Address</th><td>{_val(", ".join(filter(None, [profile.get("barangay"), profile.get("municipality"), profile.get("province")])))}</td></tr>
+    <tr><th>Preferred Position</th><td>{_val(profile.get("preferred_job_position"))}</td></tr>
+    """
+    event_rows = f"""
+    <tr><th style="width:200px">Event</th><td>{_esc(fair.get("name"))}</td></tr>
+    <tr><th>Date &amp; Time</th><td>{_val(fair.get("event_date_str"))}</td></tr>
+    <tr><th>Venue</th><td>{_val(fair.get("venue"))}</td></tr>
+    <tr><th>Contact Person</th><td>{_val(fair.get("contact_person"))}</td></tr>
+    <tr><th>Requirements</th><td>{_val(fair.get("requirements"), "None specified")}</td></tr>
+    """
+    body = f"""
+    <p>Date issued: {_esc(date_str)}</p>
+    <h2 style="color:#1e3a8a">Job Fair Registration Form</h2>
+    <p style="font-size:16px"><b>Registration No.:</b>
+    <span style="color:#1e3a8a;font-weight:bold">{_esc(registration_number)}</span></p>
+    <h3>Applicant Information</h3>
+    <table>{applicant_rows}</table>
+    <h3 style="margin-top:20px">Event Details</h3>
+    <table>{event_rows}</table>
+    <div style="text-align:center;margin-top:24px">
+      <p><b>Present this QR code at the venue for attendance:</b></p>
+      <img src="{qr_data_url}" alt="QR Code" width="170" height="170"/>
+    </div>
+    <div class="footer">JobBridge — PESO Pila, Laguna | Bring this form and a valid ID to the event.</div>
+    """
+    return _render(body)
+
+
 def generate_certificate(jobseeker_name: str, program_title: str, date_str: str) -> bytes:
     body = f"""
     <div style="text-align:center;margin-top:60px">

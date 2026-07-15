@@ -78,6 +78,22 @@ def get_jobfair(jobfair_id):
         booth = JobFairBooth.query.filter_by(jobfair_id=fair.id, employer_company_id=company.id).first() if company else None
         if booth:
             result["my_booth"] = booth.to_dict()
+
+    # Published vacancies of the participating employers, so attendees can browse
+    # openings before the event.
+    from models.vacancy import Vacancy
+    company_ids = [b.employer_company_id for b in fair.booths if b.status == "confirmed"]
+    if company_ids:
+        vacancies = (
+            Vacancy.query.filter(Vacancy.employer_company_id.in_(company_ids), Vacancy.status == "published")
+            .order_by(Vacancy.created_at.desc()).limit(50).all()
+        )
+        result["vacancies"] = [
+            {"id": str(v.id), "title": v.title, "company_name": v.employer_company.company_name, "job_type": v.job_type}
+            for v in vacancies
+        ]
+    else:
+        result["vacancies"] = []
     return ok(result)
 
 
@@ -145,6 +161,72 @@ def my_registrations():
     return ok([r.to_dict() for r in registrations])
 
 
+@jobfair_bp.get("/jobfair/<jobfair_id>/registration-form/pdf")
+@jwt_required()
+@role_required("jobseeker")
+def download_registration_form(jobfair_id):
+    from services.pdf_service import generate_jobfair_registration_form
+
+    profile = JobseekerProfile.query.filter_by(user_id=get_jwt_identity()).first()
+    fair = JobFair.query.get(jobfair_id)
+    registration = (
+        JobFairRegistration.query.filter_by(jobfair_id=jobfair_id, jobseeker_profile_id=profile.id).first()
+        if profile and fair else None
+    )
+    if not registration:
+        return fail("You are not registered for this job fair.", 404)
+
+    pdf = generate_jobfair_registration_form(
+        {
+            "full_name": profile.full_name,
+            "contact_number": profile.contact_number,
+            "barangay": profile.barangay,
+            "municipality": profile.municipality,
+            "province": profile.province,
+            "preferred_job_position": profile.preferred_job_position,
+        },
+        {
+            "name": fair.name,
+            "event_date_str": fair.event_date.strftime("%B %d, %Y %I:%M %p") if fair.event_date else "",
+            "venue": fair.venue,
+            "contact_person": fair.contact_person,
+            "requirements": fair.requirements,
+        },
+        registration.registration_number or "",
+        generate_qr_data_url(registration.qr_token),
+        now_manila().strftime("%B %d, %Y"),
+    )
+    return send_file(to_bytesio(pdf), mimetype="application/pdf", as_attachment=True, download_name="jobfair-registration.pdf")
+
+
+@jobfair_bp.get("/jobfair/<jobfair_id>/registrants")
+@jwt_required()
+@role_required("employer", "staff", "admin")
+def list_registrants(jobfair_id):
+    """Registered jobseekers of a fair — for participating employers and PESO."""
+    role = get_jwt().get("role")
+    fair = JobFair.query.get(jobfair_id)
+    if not fair:
+        return fail("Job fair not found.", 404)
+    if role == "employer":
+        company = EmployerCompany.query.filter_by(user_id=get_jwt_identity()).first()
+        booth = JobFairBooth.query.filter_by(jobfair_id=fair.id, employer_company_id=company.id, status="confirmed").first() if company else None
+        if not booth:
+            return fail("Register a booth for this job fair to view registrants.", 403)
+    registrants = [
+        {
+            "registration_number": r.registration_number,
+            "jobseeker_name": r.jobseeker_profile.full_name,
+            "municipality": r.jobseeker_profile.municipality,
+            "preferred_position": r.jobseeker_profile.preferred_job_position,
+            "attended": r.attended,
+            "registered_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in fair.registrations
+    ]
+    return ok(registrants)
+
+
 # ---------- Employer ----------
 
 @jobfair_bp.post("/jobfair/<jobfair_id>/register-booth")
@@ -169,6 +251,48 @@ def register_booth(jobfair_id):
     db.session.commit()
     log_audit(User.query.get(company.user_id), "Create", "jobfair_booths", booth.id, f"Booth for {fair.name}")
     return ok(booth.to_dict(), "Booth registered.", 201)
+
+
+@jobfair_bp.put("/jobfair/<jobfair_id>/booth")
+@jwt_required()
+@role_required("employer")
+def update_booth(jobfair_id):
+    company = EmployerCompany.query.filter_by(user_id=get_jwt_identity()).first()
+    booth = JobFairBooth.query.filter_by(jobfair_id=jobfair_id, employer_company_id=company.id).first() if company else None
+    if not booth:
+        return fail("Booth not found — register for this job fair first.", 404)
+    data = request.get_json(force=True) or {}
+    for field in ("booth_name", "description"):
+        if field in data:
+            setattr(booth, field, data[field])
+    if data.get("action") == "cancel":
+        booth.status = "cancelled"
+    elif data.get("action") == "confirm":
+        booth.status = "confirmed"
+    db.session.commit()
+    log_audit(User.query.get(company.user_id), "Update", "jobfair_booths", booth.id)
+    return ok(booth.to_dict(), "Booth updated.")
+
+
+@jobfair_bp.post("/jobfair/<jobfair_id>/booth/materials")
+@jwt_required()
+@role_required("employer")
+def upload_booth_material(jobfair_id):
+    company = EmployerCompany.query.filter_by(user_id=get_jwt_identity()).first()
+    booth = JobFairBooth.query.filter_by(jobfair_id=jobfair_id, employer_company_id=company.id).first() if company else None
+    if not booth:
+        return fail("Booth not found — register for this job fair first.", 404)
+    file = request.files.get("file")
+    if not file:
+        return fail("Attach a file.", 400)
+    file_bytes = file.read()
+    error = validate_upload_file(file_bytes, file.filename)
+    if error:
+        return fail(error, 400)
+    url = upload_file(file_bytes, file.filename, f"jobfairs/{jobfair_id}/booths/{booth.id}", file.content_type or "application/octet-stream")
+    booth.materials = (booth.materials or []) + [{"name": file.filename, "url": url}]
+    db.session.commit()
+    return ok(booth.to_dict(), "Material uploaded.")
 
 
 # ---------- Staff CRUD + lifecycle ----------
@@ -410,6 +534,87 @@ def scan_qr(jobfair_id):
         "scan_time": registration.scanned_at.isoformat(),
     })
     return ok(registration.to_dict(), "Attendance marked.")
+
+
+@staff_jobfair_bp.get("/<jobfair_id>/attendance")
+@jwt_required()
+@role_required("staff", "admin")
+def attendance_dashboard(jobfair_id):
+    """Live attendance dashboard: counts + scan log for the scanner screen."""
+    fair = JobFair.query.get(jobfair_id)
+    if not fair:
+        return fail("Job fair not found.", 404)
+    registrations = sorted(fair.registrations, key=lambda r: (r.scanned_at is None, r.scanned_at), reverse=False)
+    scanned = [r for r in registrations if r.attended]
+    return ok({
+        "jobfair": fair.to_dict(),
+        "total_registered": len(registrations),
+        "total_attended": len(scanned),
+        "attendance_rate": round(len(scanned) / len(registrations) * 100, 1) if registrations else 0,
+        "logs": [
+            {
+                "registration_number": r.registration_number,
+                "jobseeker_name": r.jobseeker_profile.full_name,
+                "attended": r.attended,
+                "scanned_at": r.scanned_at.isoformat() if r.scanned_at else None,
+            }
+            for r in sorted(fair.registrations, key=lambda r: r.scanned_at or r.created_at, reverse=True)
+        ],
+    })
+
+
+@staff_jobfair_bp.get("/<jobfair_id>/report")
+@jwt_required()
+@role_required("staff", "admin")
+def jobfair_report(jobfair_id):
+    """Participant / employer-participation / vacancy reports (Excel or PDF)."""
+    from models.vacancy import Vacancy
+
+    fair = JobFair.query.get(jobfair_id)
+    if not fair:
+        return fail("Job fair not found.", 404)
+    report_type = request.args.get("type", "participants")
+    fmt = request.args.get("format", "excel")
+
+    if report_type == "participants":
+        title = f"Participants — {fair.name}"
+        columns = ["Registration No.", "Jobseeker", "Municipality", "Preferred Position", "Registered", "Attended"]
+        rows = [
+            [
+                r.registration_number or "",
+                r.jobseeker_profile.full_name,
+                r.jobseeker_profile.municipality or "",
+                r.jobseeker_profile.preferred_job_position or "",
+                r.created_at.strftime("%b %d, %Y") if r.created_at else "",
+                "Yes" if r.attended else "No",
+            ]
+            for r in fair.registrations
+        ]
+    elif report_type == "employers":
+        title = f"Employer Participation — {fair.name}"
+        columns = ["Company", "Booth", "Status", "Published Vacancies"]
+        rows = []
+        for booth in fair.booths:
+            vacancy_count = Vacancy.query.filter_by(employer_company_id=booth.employer_company_id, status="published").count()
+            rows.append([booth.employer_company.company_name, booth.booth_name or "", booth.status, vacancy_count])
+    elif report_type == "vacancies":
+        title = f"Available Vacancies — {fair.name}"
+        columns = ["Company", "Position", "Employment Type", "Slots"]
+        company_ids = [b.employer_company_id for b in fair.booths if b.status == "confirmed"]
+        vacancies = (
+            Vacancy.query.filter(Vacancy.employer_company_id.in_(company_ids), Vacancy.status == "published").all()
+            if company_ids else []
+        )
+        rows = [[v.employer_company.company_name, v.title, v.job_type or "", v.num_slots or 1] for v in vacancies]
+    else:
+        return fail("Unknown report type.", 400)
+
+    log_audit(User.query.get(get_jwt_identity()), "Export", "jobfair", fair.id, f"{report_type} report")
+    if fmt == "pdf":
+        pdf_bytes = generate_table_report(title, columns, rows, now_manila().strftime("%B %d, %Y"))
+        return send_file(to_bytesio(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name=f"jobfair_{report_type}.pdf")
+    buf = build_excel_report(title, columns, rows)
+    return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name=f"jobfair_{report_type}.xlsx")
 
 
 @staff_jobfair_bp.get("/<jobfair_id>/attendance-report")

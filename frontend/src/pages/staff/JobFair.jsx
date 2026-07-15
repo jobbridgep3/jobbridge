@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
-import { Archive, Download, ImagePlus, Pencil, Plus, QrCode, Send, Trash2, XCircle } from 'lucide-react'
+import { Archive, Download, FileBarChart, FileDown, ImagePlus, Pencil, Plus, QrCode, Send, Trash2, XCircle } from 'lucide-react'
 import { useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
@@ -108,12 +108,21 @@ export default function StaffJobFair({ basePath = '/staff' }) {
     }
   }
 
-  const downloadAttendanceReport = async (fairId, format = 'excel') => {
+  const [reportsFair, setReportsFair] = useState(null)
+
+  const downloadReport = async (fairId, type, format) => {
     try {
-      await downloadFile(`/api/staff/jobfair/${fairId}/attendance-report`, {
-        params: { format },
-        filename: format === 'pdf' ? 'jobfair_attendance.pdf' : 'jobfair_attendance.xlsx',
-      })
+      if (type === 'attendance') {
+        await downloadFile(`/api/staff/jobfair/${fairId}/attendance-report`, {
+          params: { format },
+          filename: format === 'pdf' ? 'jobfair_attendance.pdf' : 'jobfair_attendance.xlsx',
+        })
+      } else {
+        await downloadFile(`/api/staff/jobfair/${fairId}/report`, {
+          params: { type, format },
+          filename: format === 'pdf' ? `jobfair_${type}.pdf` : `jobfair_${type}.xlsx`,
+        })
+      }
     } catch (err) {
       toast.error(await parseBlobError(err))
     }
@@ -240,9 +249,9 @@ export default function StaffJobFair({ basePath = '/staff' }) {
                         <Archive className="h-3.5 w-3.5" /> Archive
                       </Button>
                     )}
-                    {fair.registered_jobseekers > 0 && (
-                      <Button size="sm" variant="secondary" onClick={() => downloadAttendanceReport(fair.id)}>
-                        <Download className="h-3.5 w-3.5" /> Attendance
+                    {fair.status !== 'draft' && (
+                      <Button size="sm" variant="secondary" onClick={() => setReportsFair(fair)}>
+                        <FileBarChart className="h-3.5 w-3.5" /> Reports
                       </Button>
                     )}
                   </div>
@@ -330,6 +339,31 @@ export default function StaffJobFair({ basePath = '/staff' }) {
                 {saveFair.isPending ? 'Saving…' : editing ? 'Save Changes' : 'Create Draft'}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!reportsFair} onOpenChange={(open) => !open && setReportsFair(null)}>
+        <DialogContent title={reportsFair ? `Reports — ${reportsFair.name}` : 'Reports'}>
+          <div className="space-y-2">
+            {[
+              { type: 'attendance', label: 'Attendance Report' },
+              { type: 'participants', label: 'Participant Report' },
+              { type: 'employers', label: 'Employer Participation Report' },
+              { type: 'vacancies', label: 'Vacancy Report' },
+            ].map((r) => (
+              <div key={r.type} className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
+                <p className="text-sm font-medium text-slate-800">{r.label}</p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => downloadReport(reportsFair.id, r.type, 'excel')}>
+                    <Download className="h-3.5 w-3.5" /> Excel
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => downloadReport(reportsFair.id, r.type, 'pdf')}>
+                    <FileDown className="h-3.5 w-3.5" /> PDF
+                  </Button>
+                </div>
+              </div>
+            ))}
           </div>
         </DialogContent>
       </Dialog>
