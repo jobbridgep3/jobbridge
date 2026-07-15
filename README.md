@@ -68,3 +68,12 @@ Notably:
 | Employer | `/employer/*` | Self-register + Email OTP |
 | PESO Staff | `/staff/*` | Admin-created only (`/admin/staff/create`) |
 | Admin | `/admin/*` | Pre-seeded via `seed.py` — no registration page |
+
+## Core Workflows
+
+- **Application pipeline**: Applied → Under Review → Shortlisted → Interview Scheduled → Interview Completed → Background Verification → Job Offer → Hired/Rejected/Withdrawn. Every transition is validated centrally (`backend/services/application_status_service.py`), recorded in `application_status_history`, audited, and pushed to the jobseeker via website notification + Brevo email in real time.
+- **Interviews**: month/week/day calendar for jobseekers and employers; accept/decline with reason, jobseeker reschedule requests with employer approve/reject/suggest, results + scores, downloadable invitation PDFs, automatic 24-hour reminders, and staff-wide oversight with filtered Excel/PDF reports.
+- **Applicant tools**: per-application employer↔jobseeker messaging, additional-document requests with upload fulfillment, and job offers (PDF offer letters; jobseeker accepts → employer confirms Hire).
+- **Referral letters**: requested by the jobseeker (per-vacancy or general), reviewed by PESO staff (approve generates the official PDF), and auto-attached to the matching application at apply time.
+- **Employment monitoring**: hire auto-creates a Pending Deployment record with the offer's terms; lifecycle Pending Deployment → Active/Probationary → Regular → Contract Ended/Resigned/Terminated with full history, per-role analytics (retention, placement success, top employers, by municipality/industry), and Excel/PDF exports for all three roles.
+- **Job fairs**: staff create drafts → publish (notifies every jobseeker + employer by website + email) → QR-coded registration forms (PDF) → live attendance scanning dashboard → participant/employer/vacancy/attendance reports; employers manage booths and view registrants.

@@ -286,6 +286,7 @@ def accept_interview(interview_id):
         return fail("This interview can no longer be accepted.", 400)
     interview.status = "accepted"
     db.session.commit()
+    log_audit(User.query.get(profile.user_id), "Update", "interviews", interview.id, "Accepted by jobseeker")
 
     employer_user_id = interview.application.vacancy.employer_company.user_id
     notify_user(
@@ -310,6 +311,7 @@ def decline_interview(interview_id):
     interview.status = "declined"
     interview.decline_reason = data.get("reason")
     db.session.commit()
+    log_audit(User.query.get(profile.user_id), "Update", "interviews", interview.id, "Declined by jobseeker")
 
     employer_user_id = interview.application.vacancy.employer_company.user_id
     notify_user(
@@ -333,6 +335,7 @@ def complete_interview(interview_id):
     if "notes" in data:
         interview.notes = data["notes"]
     db.session.commit()
+    log_audit(User.query.get(company.user_id), "Update", "interviews", interview.id, "Marked completed")
 
     application = interview.application
     if application.status == "interview_scheduled":
