@@ -777,6 +777,50 @@ def matched_jobseekers(vacancy_id):
 
 # ---------- Applicant Management ----------
 
+def _applicants_query(company):
+    """Employer's applicants with the shared filter set (list + export)."""
+    query = (
+        Application.query.join(Vacancy)
+        .join(JobseekerProfile, Application.jobseeker_profile_id == JobseekerProfile.id)
+        .filter(Vacancy.employer_company_id == company.id)
+    )
+    if request.args.get("vacancy_id"):
+        query = query.filter(Application.vacancy_id == request.args["vacancy_id"])
+    if request.args.get("status"):
+        query = query.filter(Application.status == request.args["status"])
+    if request.args.get("position"):
+        query = query.filter(Vacancy.title.ilike(f"%{request.args['position']}%"))
+    if request.args.get("municipality"):
+        query = query.filter(JobseekerProfile.municipality.ilike(f"%{request.args['municipality']}%"))
+    if request.args.get("skill"):
+        like = f"%{request.args['skill']}%"
+        query = query.filter(
+            db.or_(
+                db.cast(JobseekerProfile.technical_skills, db.String).ilike(like),
+                db.cast(JobseekerProfile.soft_skills, db.String).ilike(like),
+            )
+        )
+    if request.args.get("education"):
+        from models.jobseeker import Education
+        query = query.filter(
+            JobseekerProfile.id.in_(
+                db.session.query(Education.profile_id).filter(
+                    Education.attainment_level.ilike(f"%{request.args['education']}%")
+                )
+            )
+        )
+    if request.args.get("min_match"):
+        try:
+            query = query.filter(Application.match_score >= float(request.args["min_match"]))
+        except ValueError:
+            pass
+    if request.args.get("date_from"):
+        query = query.filter(Application.created_at >= request.args["date_from"])
+    if request.args.get("date_to"):
+        query = query.filter(Application.created_at <= request.args["date_to"] + "T23:59:59")
+    return query
+
+
 @applicants_bp.get("")
 @jwt_required()
 @role_required("employer")
@@ -784,13 +828,39 @@ def list_applicants():
     company = _company()
     if not company:
         return ok([])
-    query = Application.query.join(Vacancy).filter(Vacancy.employer_company_id == company.id)
-    if request.args.get("vacancy_id"):
-        query = query.filter(Application.vacancy_id == request.args["vacancy_id"])
-    if request.args.get("status"):
-        query = query.filter(Application.status == request.args["status"])
-    apps = query.order_by(Application.created_at.desc()).all()
+    apps = _applicants_query(company).order_by(Application.created_at.desc()).all()
     return ok([a.to_dict() for a in apps])
+
+
+@applicants_bp.get("/export")
+@jwt_required()
+@role_required("employer")
+def export_applicants():
+    company = _company()
+    if not company:
+        return fail("Company profile not found.", 404)
+    apps = _applicants_query(company).order_by(Application.created_at.desc()).all()
+    columns = ["Applicant", "Position", "Municipality", "AI Match %", "Status", "Date Applied", "Last Updated"]
+    rows = [
+        [
+            a.jobseeker_profile.full_name,
+            a.vacancy.title,
+            a.jobseeker_profile.municipality or "",
+            a.match_score if a.match_score is not None else "",
+            a.status.replace("_", " ").title(),
+            a.created_at.strftime("%b %d, %Y") if a.created_at else "",
+            a.updated_at.strftime("%b %d, %Y") if a.updated_at else "",
+        ]
+        for a in apps
+    ]
+    log_audit(User.query.get(get_jwt_identity()), "Export", "applicants")
+    if request.args.get("format") == "pdf":
+        from services.pdf_service import generate_table_report, to_bytesio
+        pdf = generate_table_report(f"Applicants — {company.company_name}", columns, rows, now_manila().strftime("%B %d, %Y"))
+        return send_file(to_bytesio(pdf), mimetype="application/pdf", as_attachment=True, download_name="applicants.pdf")
+    from services.excel_service import build_excel_report
+    buf = build_excel_report("Applicants", columns, rows)
+    return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="applicants.xlsx")
 
 
 @applicants_bp.get("/<application_id>")
@@ -805,6 +875,9 @@ def get_applicant(application_id):
     result["jobseeker_profile"] = application.jobseeker_profile.to_dict()
     result["timeline"] = build_timeline(application)
     result["interviews"] = [i.to_dict() for i in sorted(application.interviews, key=lambda i: i.scheduled_date or i.created_at)]
+    result["document_requests"] = [r.to_dict() for r in application.document_requests]
+    result["job_offer"] = application.job_offer.to_dict() if application.job_offer else None
+    result["referral_letter"] = application.referral_letter.to_dict() if application.referral_letter else None
     return ok(result)
 
 

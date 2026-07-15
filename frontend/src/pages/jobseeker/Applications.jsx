@@ -1,8 +1,8 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
-import { Building2, Calendar, ClipboardList, Download, Eye, FileDown, Search, X } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { Building2, Calendar, ClipboardList, Download, Eye, FileDown, Search, Send, Upload, X } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
 
@@ -13,7 +13,7 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { DatePicker } from '../../components/ui/DatePicker'
 import { Dialog, DialogContent } from '../../components/ui/Dialog'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { Input, Label, Select } from '../../components/ui/Input'
+import { Input, Label, Select, Textarea } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -21,6 +21,7 @@ import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { downloadFile, parseBlobError } from '../../lib/download'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
+import { cn } from '../../lib/utils'
 
 const STATUS_OPTIONS = [
   { value: 'applied', label: 'Application Submitted' },
@@ -48,15 +49,180 @@ function CompanyLogo({ url, name }) {
   )
 }
 
+function MessagesPanel({ applicationId }) {
+  const queryClient = useQueryClient()
+  const [body, setBody] = useState('')
+  const { data: messages, isLoading } = useQuery({
+    queryKey: ['applications', applicationId, 'messages'],
+    queryFn: async () => (await api.get(`/api/applications/${applicationId}/messages`)).data.data,
+    enabled: !!applicationId,
+  })
+  useSocket({
+    'application:message': () => queryClient.invalidateQueries({ queryKey: ['applications', applicationId, 'messages'] }),
+  })
+  const send = useMutation({
+    mutationFn: () => api.post(`/api/applications/${applicationId}/messages`, { body: body.trim() }),
+    onSuccess: () => {
+      setBody('')
+      queryClient.invalidateQueries({ queryKey: ['applications', applicationId, 'messages'] })
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not send message.'),
+  })
+
+  return (
+    <div className="space-y-3">
+      <div className="max-h-64 space-y-2 overflow-y-auto rounded-lg bg-slate-50 p-3">
+        {isLoading ? (
+          <p className="text-sm text-slate-500">Loading…</p>
+        ) : !messages?.length ? (
+          <p className="py-4 text-center text-sm text-slate-500">No messages from the employer yet.</p>
+        ) : (
+          messages.map((m) => (
+            <div key={m.id} className={cn('flex', m.sender_role === 'jobseeker' ? 'justify-end' : 'justify-start')}>
+              <div
+                className={cn(
+                  'max-w-[75%] rounded-xl px-3 py-2 text-sm',
+                  m.sender_role === 'jobseeker' ? 'bg-primary-800 text-white' : 'border border-slate-200 bg-white text-slate-800',
+                )}
+              >
+                <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                <p className={cn('mt-1 text-[10px]', m.sender_role === 'jobseeker' ? 'text-primary-200' : 'text-slate-400')}>
+                  {dayjs(m.created_at).format('MMM D, h:mm A')}
+                </p>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+      <div className="flex gap-2">
+        <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write a message…" className="min-h-[44px] flex-1" />
+        <Button size="sm" onClick={() => send.mutate()} disabled={!body.trim() || send.isPending}>
+          <Send className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function DocumentRequestRow({ request, applicationId }) {
+  const queryClient = useQueryClient()
+  const fileRef = useRef(null)
+  const [uploading, setUploading] = useState(false)
+
+  const upload = async (file) => {
+    if (!file) return
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      await api.put(`/api/document-requests/${request.id}/submit`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+      toast.success('Document submitted — employer notified.')
+      queryClient.invalidateQueries({ queryKey: ['applications', applicationId] })
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Could not upload document.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3">
+      <div>
+        <p className="text-sm font-medium text-slate-800">{request.document_label}</p>
+        <p className="text-xs text-slate-500">
+          Requested {dayjs(request.created_at).format('MMM D, YYYY')}
+          {request.note ? ` · ${request.note}` : ''}
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <StatusBadge status={request.status} />
+        {request.status === 'pending' && (
+          <>
+            <input ref={fileRef} type="file" className="hidden" onChange={(e) => upload(e.target.files?.[0])} />
+            <Button size="sm" variant="secondary" onClick={() => fileRef.current?.click()} disabled={uploading}>
+              <Upload className="h-3.5 w-3.5" /> {uploading ? 'Uploading…' : 'Upload'}
+            </Button>
+          </>
+        )}
+        {request.submitted_document && (
+          <Button size="sm" variant="secondary" onClick={() => window.open(request.submitted_document.file_url, '_blank')}>
+            <Download className="h-3.5 w-3.5" /> View
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function OfferCard({ offer, applicationId }) {
+  const queryClient = useQueryClient()
+  const respond = useMutation({
+    mutationFn: (action) => api.put(`/api/offers/${offer.id}/respond`, { action }),
+    onSuccess: (_res, action) => {
+      toast.success(action === 'accept' ? 'Offer accepted — the employer has been notified!' : 'Offer declined — the employer has been notified.')
+      queryClient.invalidateQueries({ queryKey: ['applications', applicationId] })
+      queryClient.invalidateQueries({ queryKey: ['applications'] })
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not respond to offer.'),
+  })
+
+  return (
+    <div className="rounded-lg border border-primary-200 bg-primary-50/50 p-4">
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold text-slate-900">Job Offer — {offer.position}</h4>
+        <StatusBadge status={offer.status} label={offer.status === 'offered' ? 'Awaiting Your Response' : undefined} />
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3">
+        <div>
+          <p className="text-xs text-slate-500">Salary</p>
+          <p className="font-medium">{offer.salary_offer != null ? `PHP ${Number(offer.salary_offer).toLocaleString()}` : 'As discussed'}</p>
+        </div>
+        <div>
+          <p className="text-xs text-slate-500">Type</p>
+          <p className="font-medium capitalize">{offer.employment_type?.replace(/_/g, ' ') || '—'}</p>
+        </div>
+        <div>
+          <p className="text-xs text-slate-500">Start Date</p>
+          <p className="font-medium">{offer.start_date ? dayjs(offer.start_date).format('MMM D, YYYY') : 'To be arranged'}</p>
+        </div>
+      </div>
+      {offer.terms && <p className="mt-2 text-sm text-slate-600">{offer.terms}</p>}
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        {offer.pdf_url && (
+          <Button size="sm" variant="secondary" onClick={() => window.open(offer.pdf_url, '_blank')}>
+            <Download className="h-3.5 w-3.5" /> Offer Letter
+          </Button>
+        )}
+        {offer.status === 'offered' && (
+          <>
+            <Button size="sm" variant="ghost" onClick={() => respond.mutate('decline')} disabled={respond.isPending}>
+              Decline Offer
+            </Button>
+            <Button size="sm" onClick={() => respond.mutate('accept')} disabled={respond.isPending}>
+              Accept Offer
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ApplicationDetailDialog({ applicationId, onClose, onWithdraw }) {
+  const [tab, setTab] = useState('overview')
   const { data: detail, isLoading } = useQuery({
     queryKey: ['applications', applicationId],
     queryFn: async () => (await api.get(`/api/applications/${applicationId}`)).data.data,
     enabled: !!applicationId,
   })
 
+  const closeAndReset = () => {
+    setTab('overview')
+    onClose()
+  }
+
   return (
-    <Dialog open={!!applicationId} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={!!applicationId} onOpenChange={(open) => !open && closeAndReset()}>
       <DialogContent title="Application Details" className="max-w-2xl">
         {isLoading || !detail ? (
           <CardSkeleton />
@@ -73,6 +239,29 @@ function ApplicationDetailDialog({ applicationId, onClose, onWithdraw }) {
               </div>
             </div>
 
+            <div className="flex gap-1 rounded-lg border border-slate-200 p-1">
+              {[
+                { key: 'overview', label: 'Overview' },
+                { key: 'messages', label: 'Messages' },
+              ].map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setTab(t.key)}
+                  className={cn(
+                    'flex-1 rounded-md px-3 py-1.5 text-sm font-medium',
+                    tab === t.key ? 'bg-primary-800 text-white' : 'text-slate-600 hover:bg-slate-100',
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            {tab === 'messages' && <MessagesPanel applicationId={applicationId} />}
+
+            {tab === 'overview' && (
+              <>
             <div className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-lg bg-slate-50 p-4 text-sm sm:grid-cols-3">
               <div>
                 <p className="text-xs text-slate-500">Reference No.</p>
@@ -126,6 +315,23 @@ function ApplicationDetailDialog({ applicationId, onClose, onWithdraw }) {
               </div>
             )}
 
+            {detail.job_offer && detail.job_offer.status !== 'withdrawn' && (
+              <OfferCard offer={detail.job_offer} applicationId={applicationId} />
+            )}
+
+            {detail.document_requests?.length > 0 && (
+              <div>
+                <h4 className="mb-2 text-sm font-semibold text-slate-900">Requested Documents</h4>
+                <div className="space-y-2">
+                  {detail.document_requests
+                    .filter((r) => r.status !== 'cancelled')
+                    .map((r) => (
+                      <DocumentRequestRow key={r.id} request={r} applicationId={applicationId} />
+                    ))}
+                </div>
+              </div>
+            )}
+
             <div>
               <h4 className="mb-2 text-sm font-semibold text-slate-900">Application Timeline</h4>
               <ApplicationTimeline events={detail.timeline} />
@@ -148,6 +354,8 @@ function ApplicationDetailDialog({ applicationId, onClose, onWithdraw }) {
                 </Button>
               )}
             </div>
+              </>
+            )}
           </div>
         )}
       </DialogContent>
@@ -172,10 +380,11 @@ export default function JobseekerApplications() {
   })
 
   useSocket({
-    'application:status_update': () => {
-      queryClient.invalidateQueries({ queryKey: ['applications'] })
-    },
+    'application:status_update': () => queryClient.invalidateQueries({ queryKey: ['applications'] }),
     'referral:ready': () => queryClient.invalidateQueries({ queryKey: ['applications'] }),
+    'application:document_request': () => queryClient.invalidateQueries({ queryKey: ['applications'] }),
+    'offer:new': () => queryClient.invalidateQueries({ queryKey: ['applications'] }),
+    'offer:response': () => queryClient.invalidateQueries({ queryKey: ['applications'] }),
   })
 
   const companies = useMemo(

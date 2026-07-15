@@ -189,7 +189,8 @@ class JobseekerDocument(BaseModel):
 
     __table_args__ = (
         db.CheckConstraint(
-            "document_type IN ('government_id', 'id_photo_2x2', 'diploma', 'training_certificate', 'certificate_of_employment')",
+            "document_type IN ('government_id', 'id_photo_2x2', 'diploma', 'training_certificate', "
+            "'certificate_of_employment', 'additional')",
             name="ck_jobseeker_document_type",
         ),
     )

@@ -54,6 +54,7 @@ def create_app(config_object=Config):
 
 def _register_blueprints(app: Flask):
     from blueprints.admin import admin_bp
+    from blueprints.applicant_tools import applicant_tools_bp
     from blueprints.auth import account_bp, auth_bp
     from blueprints.announcements import announcements_bp
     from blueprints.chatbot import chatbot_bp
@@ -77,7 +78,7 @@ def _register_blueprints(app: Flask):
         health_bp, profile_bp, jobs_bp, interviews_bp, employment_bp,
         jobfair_bp, staff_jobfair_bp, programs_bp, training_bp, staff_training_bp,
         notifications_bp, settings_bp, admin_settings_bp,
-        employer_bp, company_bp, vacancies_bp, applicants_bp,
+        employer_bp, company_bp, vacancies_bp, applicants_bp, applicant_tools_bp,
         staff_bp, lmi_bp, admin_bp, announcements_bp, chatbot_bp, lookups_bp,
     ):
         app.register_blueprint(bp)

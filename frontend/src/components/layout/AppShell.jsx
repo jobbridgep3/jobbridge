@@ -45,6 +45,10 @@ export function AppShell() {
     'interview:reschedule_request': () => toast('New interview reschedule request', { icon: '🔁' }),
     'interview:reschedule_response': () => toast('Your reschedule request has a response', { icon: '🔁' }),
     'interview:result': () => toast('An interview result was recorded', { icon: '📝' }),
+    'application:message': () => toast('New message received', { icon: '💬' }),
+    'application:document_request': () => toast('Document request update', { icon: '📄' }),
+    'offer:new': () => toast.success('You received a job offer!'),
+    'offer:response': () => toast('A job offer has a response', { icon: '🤝' }),
     'vacancy:approved': () => toast.success('A vacancy was approved'),
     'vacancy:rejected': () => toast.error('A vacancy was returned for revision'),
     'vacancy:published': (payload) =>

@@ -35,6 +35,8 @@ const STATUS_MAP = {
   enrolled: { label: 'Enrolled', variant: 'info' },
   waitlisted: { label: 'Waitlisted', variant: 'warning' },
   attended: { label: 'Attended', variant: 'success' },
+  offered: { label: 'Offered', variant: 'warning' },
+  withdrawn: { label: 'Withdrawn', variant: 'default' },
   certificate_issued: { label: 'Certificate Issued', variant: 'success' },
 }
 

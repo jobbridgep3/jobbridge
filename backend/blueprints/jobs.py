@@ -187,6 +187,8 @@ def application_detail(application_id):
     )
     result["vacancy"] = vacancy.to_dict() if vacancy else None
     result["referral_letter"] = application.referral_letter.to_dict() if application.referral_letter else None
+    result["document_requests"] = [r.to_dict() for r in application.document_requests]
+    result["job_offer"] = application.job_offer.to_dict() if application.job_offer else None
     return ok(result)
 
 

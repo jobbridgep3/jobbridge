@@ -254,6 +254,67 @@ def send_announcement_email(to: str, title: str, body: str):
     return send_email(to, f"PESO Announcement: {title}", html)
 
 
+def send_application_message_email(to: str, sender_name: str, job_title: str, preview: str, recipient_role: str):
+    path = "/jobseeker/applications" if recipient_role == "jobseeker" else "/employer/applicants"
+    url = f"{current_app.config['FRONTEND_URL']}{path}"
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">New Message</h2>
+      <p><b>{sender_name}</b> sent you a message about the application for <b>{job_title}</b>:</p>
+      <blockquote style="border-left:3px solid #1e3a8a;margin:12px 0;padding:8px 12px;background:#f8fafc">{preview}</blockquote>
+      <p><a href="{url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">Reply on JobBridge</a></p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"New message — {job_title}", html)
+
+
+def send_document_request_email(to: str, full_name: str, job_title: str, company_name: str, document_label: str, note: str | None):
+    url = f"{current_app.config['FRONTEND_URL']}/jobseeker/applications"
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Additional Document Requested</h2>
+      <p>Hi {full_name},</p>
+      <p><b>{company_name}</b> is requesting an additional document for your application to <b>{job_title}</b>:</p>
+      <p style="font-size:16px;font-weight:bold;color:#1e3a8a">{document_label}</p>
+      {f"<p><b>Note:</b> {note}</p>" if note else ""}
+      <p><a href="{url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">Upload Document</a></p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"Document requested — {job_title}", html)
+
+
+def send_job_offer_email(to: str, full_name: str, job_title: str, company_name: str, position: str):
+    url = f"{current_app.config['FRONTEND_URL']}/jobseeker/applications"
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">You Received a Job Offer!</h2>
+      <p>Congratulations {full_name},</p>
+      <p><b>{company_name}</b> has extended you a job offer for the position of <b>{position}</b>
+      based on your application for <b>{job_title}</b>.</p>
+      <p><a href="{url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">Review the Offer</a></p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"Job offer — {position} at {company_name}", html)
+
+
+def send_offer_response_email(to: str, jobseeker_name: str, position: str, accepted: bool):
+    url = f"{current_app.config['FRONTEND_URL']}/employer/applicants"
+    verdict = "accepted" if accepted else "declined"
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Job Offer {verdict.title()}</h2>
+      <p><b>{jobseeker_name}</b> has <b>{verdict}</b> your job offer for <b>{position}</b>.</p>
+      {"<p>You can now mark the applicant as Hired from Applicant Management.</p>" if accepted else ""}
+      <p><a href="{url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">Open Applicant Management</a></p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"Offer {verdict} — {position}", html)
+
+
 def send_interview_rescheduled_email(to: str, job_title: str, company_name: str, when: str, mode: str, location: str | None):
     interviews_url = f"{current_app.config['FRONTEND_URL']}/jobseeker/interviews"
     html = f"""
