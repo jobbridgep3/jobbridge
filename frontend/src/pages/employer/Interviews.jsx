@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { motion } from 'framer-motion'
 import { CalendarDays, List } from 'lucide-react'
 import { useState } from 'react'
@@ -15,10 +16,13 @@ import { Dialog, DialogContent } from '../../components/ui/Dialog'
 import { Input, Label, Select, Textarea } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { TimePicker } from '../../components/ui/TimePicker'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
 import { cn } from '../../lib/utils'
+
+dayjs.extend(customParseFormat)
 
 const RESULT_OPTIONS = [
   { value: 'pending', label: 'Pending' },
@@ -32,6 +36,16 @@ function splitDT(iso) {
   if (!iso) return { date: '', time: '' }
   const d = dayjs(iso)
   return { date: d.format('YYYY-MM-DD'), time: d.format('HH:mm') }
+}
+
+/** editForm/suggestForm store time in 24h "HH:mm" (matching splitDT above and
+ * the backend's datetime.fromisoformat contract) — these only convert for the
+ * TimePicker's 12-hour "h:mm AM/PM" display/input format. */
+function to12h(time24) {
+  return time24 ? dayjs(time24, 'HH:mm').format('h:mm A') : ''
+}
+function to24h(time12) {
+  return time12 ? dayjs(time12, 'h:mm A').format('HH:mm') : ''
 }
 
 export default function EmployerInterviews() {
@@ -213,7 +227,7 @@ export default function EmployerInterviews() {
                     </div>
                     <div>
                       <Label>Time</Label>
-                      <Input type="time" value={suggestForm.time} onChange={(e) => setSuggestForm({ ...suggestForm, time: e.target.value })} />
+                      <TimePicker value={to12h(suggestForm.time)} onChange={(t) => setSuggestForm({ ...suggestForm, time: to24h(t) })} />
                     </div>
                     <Button
                       size="sm"
@@ -312,7 +326,7 @@ export default function EmployerInterviews() {
                     </div>
                     <div>
                       <Label>Time</Label>
-                      <Input type="time" value={editForm.time} onChange={(e) => setEditForm({ ...editForm, time: e.target.value })} />
+                      <TimePicker value={to12h(editForm.time)} onChange={(t) => setEditForm({ ...editForm, time: to24h(t) })} />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">

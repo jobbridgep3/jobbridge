@@ -39,6 +39,8 @@ import EmployerVacancies from './pages/employer/Vacancies'
 import EmployerVacancyForm from './pages/employer/VacancyForm'
 import EmployerApplicants from './pages/employer/Applicants'
 import EmployerApplicantDetail from './pages/employer/ApplicantDetail'
+import EmployerReferrals from './pages/employer/Referrals'
+import EmployerReferralDetail from './pages/employer/ReferralDetail'
 import EmployerInterviews from './pages/employer/Interviews'
 import EmployerJobFair from './pages/employer/JobFair'
 import EmployerEmployment from './pages/employer/Employment'
@@ -139,6 +141,8 @@ export default function App() {
             <Route path="vacancies/:id/edit" element={<EmployerVacancyForm />} />
             <Route path="applicants" element={<EmployerApplicants />} />
             <Route path="applicants/:id" element={<EmployerApplicantDetail />} />
+            <Route path="referrals" element={<EmployerReferrals />} />
+            <Route path="referrals/:id" element={<EmployerReferralDetail />} />
             <Route path="interviews" element={<EmployerInterviews />} />
             <Route path="jobfair" element={<EmployerJobFair />} />
             <Route path="employment" element={<EmployerEmployment />} />

@@ -424,6 +424,49 @@ def send_referral_decision_email(to: str, full_name: str, approved: bool, job_ti
     return send_email(to, subject, html)
 
 
+def send_referral_pending_employer_review_email(to: str, company_name: str, jobseeker_name: str, job_title: str):
+    url = f"{current_app.config['FRONTEND_URL']}/employer/referrals"
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">New Referral Received</h2>
+      <p>Hi {company_name},</p>
+      <p>PESO Pila, Laguna has referred <b>{jobseeker_name}</b> for your vacancy <b>{job_title}</b>.</p>
+      <p>Review their profile and referral letter in Referral Management to accept or decline.</p>
+      <p><a href="{url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">Review Referral</a></p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"New Referral — {jobseeker_name} for {job_title}", html)
+
+
+def send_employer_referral_decision_email(to: str, full_name: str, company_name: str, accepted: bool, job_title: str | None = None, rejection_reason: str | None = None):
+    url = f"{current_app.config['FRONTEND_URL']}/jobseeker/applications"
+    target = f" for <b>{job_title}</b>" if job_title else ""
+    if accepted:
+        subject = "Your referral was accepted"
+        body = f"""
+        <p>Hi {full_name},</p>
+        <p><b>{company_name}</b> has <b>accepted</b> your PESO referral{target} and added you to their applicant pipeline —
+        no need to apply again. You'll be notified of any next steps like interviews.</p>
+        <p><a href="{url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">View My Applications</a></p>
+        """
+    else:
+        subject = "Update on your referral"
+        body = f"""
+        <p>Hi {full_name},</p>
+        <p><b>{company_name}</b> was not able to move forward with your PESO referral{target}.</p>
+        {f"<p><b>Reason:</b> {rejection_reason}</p>" if rejection_reason else ""}
+        """
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Referral {'Accepted' if accepted else 'Update'}</h2>
+      {body}
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, subject, html)
+
+
 def send_interview_rescheduled_email(to: str, job_title: str, company_name: str, when: str, mode: str, location: str | None):
     interviews_url = f"{current_app.config['FRONTEND_URL']}/jobseeker/interviews"
     html = f"""

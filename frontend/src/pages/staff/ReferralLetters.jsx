@@ -73,6 +73,16 @@ export default function StaffReferralLetters() {
     { accessorKey: 'created_at', header: 'Requested', cell: ({ row }) => dayjs(row.original.created_at).format('MMM D, YYYY') },
     { accessorKey: 'status', header: 'Status', cell: ({ row }) => <StatusBadge status={row.original.status} label={row.original.status === 'requested' ? 'Pending Review' : undefined} /> },
     {
+      id: 'employer_status',
+      header: 'Employer Status',
+      cell: ({ row }) =>
+        row.original.vacancy_id && row.original.employer_status ? (
+          <StatusBadge status={row.original.employer_status} />
+        ) : (
+          <span className="text-slate-400">—</span>
+        ),
+    },
+    {
       id: 'actions',
       header: '',
       cell: ({ row }) => (

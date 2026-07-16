@@ -14,7 +14,7 @@ from models.referral import ReferralLetter
 from models.user import User
 from models.vacancy import Vacancy
 from services.audit_service import log_audit
-from services.email_service import send_referral_decision_email
+from services.email_service import send_referral_decision_email, send_referral_pending_employer_review_email
 from services.notification_service import notify_role, notify_user
 from services.pdf_service import generate_referral_letter
 from services.storage_service import upload_file
@@ -124,6 +124,27 @@ def approve_referral_letter(letter_id):
         socket_payload=letter.to_dict(),
     )
     send_referral_decision_email(jobseeker_user.email, profile.full_name, True, vacancy.title if vacancy else None)
+
+    # Vacancy-scoped referrals also become visible to that vacancy's employer —
+    # see blueprints/employer_referrals.py for the Accept/Reject flow.
+    if vacancy is not None:
+        from blueprints.employer_referrals import next_referral_number
+
+        letter.employer_status = "pending"
+        letter.referral_number = next_referral_number()
+        db.session.commit()
+        employer_user = User.query.get(vacancy.employer_company.user_id) if vacancy.employer_company else None
+        if employer_user:
+            notify_user(
+                employer_user.id, "referral_pending_review", "New Referral Received",
+                f"PESO referred {profile.full_name} for {vacancy.title}.",
+                link="/employer/referrals", socket_event="referral:employer_pending",
+                socket_payload=letter.to_dict(),
+            )
+            send_referral_pending_employer_review_email(
+                employer_user.email, vacancy.employer_company.company_name, profile.full_name, vacancy.title,
+            )
+
     return ok(letter.to_dict(), "Referral letter approved and generated.")
 
 
