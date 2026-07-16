@@ -5,6 +5,7 @@ import { Toaster } from 'react-hot-toast'
 import { BrowserRouter } from 'react-router-dom'
 
 import App from './App.jsx'
+import { ThemeInitializer } from './components/ThemeInitializer.jsx'
 import './index.css'
 import { queryClient } from './lib/queryClient'
 
@@ -12,6 +13,7 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <ThemeInitializer />
         <App />
         <Toaster
           position="top-right"

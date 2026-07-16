@@ -33,9 +33,20 @@ export function AppShell() {
   const location = useLocation()
   const breadcrumbItems = useBreadcrumbItems(user?.role)
 
+  const refreshUnreadCount = () => {
+    api.get('/api/notifications/unread-count').then((res) => setUnreadCount(res.data.data.count)).catch(() => {})
+  }
+
   useSocket({
     'notification:new': () => {
       incrementUnread()
+    },
+    'notification:bulk_updated': refreshUnreadCount,
+    'notification:archived': refreshUnreadCount,
+    'notification:bulk_deleted': refreshUnreadCount,
+    'announcement:published': (payload) => {
+      incrementUnread()
+      toast(`PESO Announcement: ${payload.title}`, { icon: '📢' })
     },
     'application:status_update': (payload) =>
       toast.success(`Application status updated: ${payload.status_label || payload.new_status?.replace(/_/g, ' ')}`),
@@ -66,14 +77,12 @@ export function AppShell() {
 
   useEffect(() => {
     if (!user) return
-    api
-      .get('/api/notifications')
-      .then((res) => setUnreadCount(res.data.data.filter((n) => !n.is_read).length))
-      .catch(() => {})
-  }, [user, setUnreadCount])
+    refreshUnreadCount()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex min-h-screen bg-surface-secondary">
       <Sidebar role={user?.role} />
       <div className="flex min-h-screen flex-1 flex-col">
         <Header breadcrumbItems={breadcrumbItems} />

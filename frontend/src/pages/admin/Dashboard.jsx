@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { fadeIn } from '../../lib/motion'
 import { AnalyticsCharts } from './dashboard/AnalyticsCharts'
+import { AnnouncementsWidget } from './dashboard/AnnouncementsWidget'
 import { DashboardExportDialog } from './dashboard/DashboardExportDialog'
 import { PendingActionsPanel } from './dashboard/PendingActionsPanel'
 import { QuickActions } from './dashboard/QuickActions'
@@ -24,6 +25,7 @@ export default function AdminDashboard() {
         <PendingActionsPanel />
         <RecentActivity />
       </div>
+      <AnnouncementsWidget />
     </motion.div>
   )
 }

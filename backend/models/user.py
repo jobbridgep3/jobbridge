@@ -17,6 +17,7 @@ class User(BaseModel):
     must_change_password = db.Column(db.Boolean, default=False, nullable=False)
     last_login_at = db.Column(db.DateTime(timezone=True), nullable=True)
     welcome_flow_sent_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    theme_preference = db.Column(db.String(10), default="system", nullable=False)
 
     jobseeker_profile = db.relationship(
         "JobseekerProfile", back_populates="user", uselist=False, cascade="all, delete-orphan"
@@ -44,6 +45,7 @@ class User(BaseModel):
             "is_verified": self.is_verified,
             "is_active": self.is_active,
             "must_change_password": self.must_change_password,
+            "theme_preference": self.theme_preference,
             "profile_picture_url": (
                 self.jobseeker_profile.profile_picture_url if self.jobseeker_profile
                 else self.employer_hr_profile.profile_picture_url if self.employer_hr_profile

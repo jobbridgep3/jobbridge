@@ -5,6 +5,7 @@ import {
 } from 'recharts'
 
 import { ChartCard } from '../../../components/ui/ChartCard'
+import { useChartGridColors } from '../../../config/chartTheme'
 import api from '../../../lib/axios'
 
 const BLUE = '#2563eb'
@@ -18,6 +19,7 @@ const STATUS_LABELS = {
 }
 
 export function AnalyticsCharts({ dateRange }) {
+  const { grid, axis } = useChartGridColors()
   const { data, isLoading } = useQuery({
     queryKey: ['employer', 'dashboard', 'analytics', dateRange],
     queryFn: async () => (
@@ -39,9 +41,9 @@ export function AnalyticsCharts({ dateRange }) {
       >
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={data?.applications_per_vacancy} layout="vertical" margin={{ left: 16 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis type="number" tick={{ fontSize: 12 }} stroke="#94a3b8" allowDecimals={false} />
-            <YAxis dataKey="vacancy" type="category" tick={{ fontSize: 12 }} stroke="#94a3b8" width={110} />
+            <CartesianGrid strokeDasharray="3 3" stroke={grid} />
+            <XAxis type="number" tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
+            <YAxis dataKey="vacancy" type="category" tick={{ fontSize: 12 }} stroke={axis} width={110} />
             <Tooltip />
             <Bar dataKey="count" name="Applications" fill={BLUE} radius={[0, 4, 4, 0]} />
           </BarChart>
@@ -82,9 +84,9 @@ export function AnalyticsCharts({ dateRange }) {
       >
         <ResponsiveContainer width="100%" height={280}>
           <AreaChart data={data?.monthly_applications}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#94a3b8" />
-            <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" allowDecimals={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke={grid} />
+            <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke={axis} />
+            <YAxis tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
             <Tooltip />
             <Area type="monotone" dataKey="count" name="Applications" stroke={BLUE} fill={BLUE} fillOpacity={0.15} strokeWidth={2} />
           </AreaChart>
@@ -100,9 +102,9 @@ export function AnalyticsCharts({ dateRange }) {
       >
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={data?.hiring_funnel}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="stage" tick={{ fontSize: 12 }} stroke="#94a3b8" />
-            <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" allowDecimals={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke={grid} />
+            <XAxis dataKey="stage" tick={{ fontSize: 12 }} stroke={axis} />
+            <YAxis tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
             <Tooltip />
             <Bar dataKey="count" name="Count" fill={BLUE} radius={[4, 4, 0, 0]} />
           </BarChart>

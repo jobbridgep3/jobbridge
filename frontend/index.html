@@ -7,6 +7,20 @@
     <meta name="description" content="JobBridge — Intelligent Job Matching & Employment Monitoring System for PESO Pila, Laguna" />
     <meta name="theme-color" content="#1e3a8a" />
     <title>JobBridge — PESO Pila, Laguna</title>
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('jobbridge-theme')
+          var resolved =
+            stored === 'dark' || stored === 'light'
+              ? stored
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light'
+          document.documentElement.classList.toggle('dark', resolved === 'dark')
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

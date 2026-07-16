@@ -9,9 +9,9 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: 'bg-primary-800 text-white hover:bg-primary-900 active:bg-primary-950',
-        secondary: 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50',
-        ghost: 'text-slate-600 hover:bg-slate-100',
+        primary: 'bg-primary-800 text-white hover:bg-primary-900 active:bg-primary-950 dark:bg-primary-600 dark:hover:bg-primary-500 dark:active:bg-primary-400',
+        secondary: 'bg-surface text-text-secondary border border-border-hover hover:bg-surface-hover',
+        ghost: 'text-text-secondary hover:bg-surface-hover',
         danger: 'bg-red-600 text-white hover:bg-red-700',
         link: 'text-primary-700 hover:underline underline-offset-4',
       },

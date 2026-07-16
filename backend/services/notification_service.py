@@ -3,9 +3,13 @@ from models.notification import Notification
 from sockets.events import emit_to_role, emit_to_user
 
 
-def notify_user(user_id, type_: str, title: str, message: str = None, link: str = None, socket_event: str = None, socket_payload: dict = None):
-    """Persists a Notification row and emits a real-time Socket.io event to that user."""
-    notif = Notification(user_id=user_id, type=type_, title=title, message=message, link=link)
+def notify_user(user_id, type_: str, title: str, message: str = None, link: str = None, socket_event: str = None, socket_payload: dict = None, priority: str = None):
+    """Persists a Notification row and emits a real-time Socket.io event to that user.
+
+    `priority` is optional and left unset by nearly every caller — the frontend derives a sensible
+    default from `type_` via a static map. Only pass it when the caller has an explicit priority of its
+    own to convey (e.g. an announcement's own priority field)."""
+    notif = Notification(user_id=user_id, type=type_, title=title, message=message, link=link, priority=priority)
     db.session.add(notif)
     db.session.commit()
 

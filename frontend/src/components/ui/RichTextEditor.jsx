@@ -13,8 +13,8 @@ function ToolbarButton({ active, onClick, children, label }) {
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       className={cn(
-        'rounded p-1.5 text-slate-500 hover:bg-slate-100',
-        active && 'bg-primary-100 text-primary-700'
+        'rounded p-1.5 text-text-muted hover:bg-surface-hover',
+        active && 'bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-200'
       )}
     >
       {children}
@@ -32,7 +32,7 @@ export function RichTextEditor({ value, onChange, placeholder, className }) {
     content: value || '',
     editorProps: {
       attributes: {
-        class: 'prose prose-sm max-w-none min-h-[120px] px-3 py-2 focus:outline-none',
+        class: 'prose prose-sm dark:prose-invert max-w-none min-h-[120px] px-3 py-2 focus:outline-none',
       },
     },
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
@@ -48,8 +48,8 @@ export function RichTextEditor({ value, onChange, placeholder, className }) {
   if (!editor) return null
 
   return (
-    <div className={cn('rounded-lg border border-slate-300 bg-white', className)}>
-      <div className="flex items-center gap-1 border-b border-slate-200 px-2 py-1.5">
+    <div className={cn('rounded-lg border border-border-hover bg-surface', className)}>
+      <div className="flex items-center gap-1 border-b border-border px-2 py-1.5">
         <ToolbarButton label="Bold" active={editor.isActive('bold')} onClick={() => editor.chain().focus().toggleBold().run()}>
           <Bold className="h-3.5 w-3.5" />
         </ToolbarButton>
@@ -59,7 +59,7 @@ export function RichTextEditor({ value, onChange, placeholder, className }) {
         <ToolbarButton label="Strikethrough" active={editor.isActive('strike')} onClick={() => editor.chain().focus().toggleStrike().run()}>
           <Strikethrough className="h-3.5 w-3.5" />
         </ToolbarButton>
-        <div className="mx-1 h-4 w-px bg-slate-200" />
+        <div className="mx-1 h-4 w-px bg-border" />
         <ToolbarButton label="Bullet list" active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()}>
           <List className="h-3.5 w-3.5" />
         </ToolbarButton>

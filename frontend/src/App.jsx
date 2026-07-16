@@ -12,6 +12,7 @@ import VerifyOtp from './pages/public/VerifyOtp'
 import ForgotPassword from './pages/public/ForgotPassword'
 import ResetPassword from './pages/public/ResetPassword'
 import CompleteProfile from './pages/public/CompleteProfile'
+import AnnouncementDetails from './pages/public/AnnouncementDetails'
 
 // Jobseeker
 import JobseekerDashboard from './pages/jobseeker/Dashboard'
@@ -103,6 +104,7 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/complete-profile" element={<CompleteProfile />} />
+      <Route path="/announcements/:id" element={<AnnouncementDetails />} />
 
       <Route element={<ProtectedRoute />}>
         {/* Jobseeker */}

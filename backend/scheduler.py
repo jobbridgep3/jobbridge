@@ -131,6 +131,45 @@ def _advance_jobfair_statuses(app):
             logger.info("APScheduler: job fairs — %d started, %d completed.", len(started), len(ended))
 
 
+def _auto_publish_scheduled_announcements(app):
+    """draft -> published once scheduled_publish_at arrives, running the same
+    notify+email pipeline as a manual publish."""
+    with app.app_context():
+        from models.announcement import Announcement
+        from services.announcement_notification_service import publish_and_notify
+        from utils.timezone import now_manila
+
+        due = Announcement.query.filter(
+            Announcement.status == "draft",
+            Announcement.scheduled_publish_at.isnot(None),
+            Announcement.scheduled_publish_at <= now_manila(),
+        ).all()
+        for announcement in due:
+            publish_and_notify(announcement)
+        if due:
+            logger.info("APScheduler: auto-published %d scheduled announcement(s).", len(due))
+
+
+def _auto_archive_expired_announcements(app):
+    """published -> archived once expires_at passes. Silent — no notification,
+    matching how other scheduler-driven state transitions in this app work."""
+    with app.app_context():
+        from extensions import db
+        from models.announcement import Announcement
+        from utils.timezone import now_manila
+
+        expired = Announcement.query.filter(
+            Announcement.status == "published",
+            Announcement.expires_at.isnot(None),
+            Announcement.expires_at <= now_manila(),
+        ).all()
+        for announcement in expired:
+            announcement.status = "archived"
+        if expired:
+            db.session.commit()
+            logger.info("APScheduler: auto-archived %d expired announcement(s).", len(expired))
+
+
 def init_scheduler(app):
     if scheduler.running:
         return
@@ -153,5 +192,13 @@ def init_scheduler(app):
     scheduler.add_job(
         lambda: _advance_jobfair_statuses(app),
         trigger="interval", hours=1, id="advance_jobfair_statuses", replace_existing=True,
+    )
+    scheduler.add_job(
+        lambda: _auto_publish_scheduled_announcements(app),
+        trigger="interval", hours=1, id="auto_publish_scheduled_announcements", replace_existing=True,
+    )
+    scheduler.add_job(
+        lambda: _auto_archive_expired_announcements(app),
+        trigger="interval", hours=1, id="auto_archive_expired_announcements", replace_existing=True,
     )
     scheduler.start()

@@ -6,6 +6,7 @@ import {
 
 import { ChartCard } from '../../../components/ui/ChartCard'
 import { StatCard } from '../../../components/ui/StatCard'
+import { useChartGridColors } from '../../../config/chartTheme'
 import api from '../../../lib/axios'
 
 const BLUE = '#2563eb'
@@ -13,6 +14,7 @@ const GREEN = '#16a34a'
 const SLATE = '#64748b'
 
 export function VacancyAnalytics() {
+  const { grid, axis } = useChartGridColors()
   const { data, isLoading } = useQuery({
     queryKey: ['staff', 'vacancies', 'analytics'],
     queryFn: async () => (await api.get('/api/staff/vacancies/analytics')).data.data,
@@ -35,9 +37,9 @@ export function VacancyAnalytics() {
         <ChartCard title="Vacancies per Month" icon={TrendingUp} isLoading={isLoading} isEmpty={!data?.vacancies_per_month?.some((d) => d.count)} emptyTitle="No data yet">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={data?.vacancies_per_month}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#94a3b8" />
-              <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" allowDecimals={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke={grid} />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke={axis} />
+              <YAxis tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
               <Tooltip />
               <Bar dataKey="count" fill={BLUE} radius={[4, 4, 0, 0]} />
             </BarChart>
@@ -47,9 +49,9 @@ export function VacancyAnalytics() {
         <ChartCard title="By Industry" icon={Briefcase} isLoading={isLoading} isEmpty={!data?.by_industry?.length} emptyTitle="No data yet">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={data?.by_industry} layout="vertical" margin={{ left: 16 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis type="number" tick={{ fontSize: 12 }} stroke="#94a3b8" allowDecimals={false} />
-              <YAxis dataKey="label" type="category" tick={{ fontSize: 12 }} stroke="#94a3b8" width={110} />
+              <CartesianGrid strokeDasharray="3 3" stroke={grid} />
+              <XAxis type="number" tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
+              <YAxis dataKey="label" type="category" tick={{ fontSize: 12 }} stroke={axis} width={110} />
               <Tooltip />
               <Bar dataKey="count" fill={GREEN} radius={[0, 4, 4, 0]} />
             </BarChart>
@@ -59,9 +61,9 @@ export function VacancyAnalytics() {
         <ChartCard title="By Municipality" icon={MapPin} isLoading={isLoading} isEmpty={!data?.by_municipality?.length} emptyTitle="No data yet">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={data?.by_municipality} layout="vertical" margin={{ left: 16 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis type="number" tick={{ fontSize: 12 }} stroke="#94a3b8" allowDecimals={false} />
-              <YAxis dataKey="label" type="category" tick={{ fontSize: 12 }} stroke="#94a3b8" width={110} />
+              <CartesianGrid strokeDasharray="3 3" stroke={grid} />
+              <XAxis type="number" tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
+              <YAxis dataKey="label" type="category" tick={{ fontSize: 12 }} stroke={axis} width={110} />
               <Tooltip />
               <Bar dataKey="count" fill={BLUE} radius={[0, 4, 4, 0]} />
             </BarChart>
@@ -84,9 +86,9 @@ export function VacancyAnalytics() {
         <ChartCard title="Top Employers" icon={Building2} isLoading={isLoading} isEmpty={!data?.top_employers?.length} emptyTitle="No data yet">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={data?.top_employers} layout="vertical" margin={{ left: 16 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis type="number" tick={{ fontSize: 12 }} stroke="#94a3b8" allowDecimals={false} />
-              <YAxis dataKey="label" type="category" tick={{ fontSize: 12 }} stroke="#94a3b8" width={110} />
+              <CartesianGrid strokeDasharray="3 3" stroke={grid} />
+              <XAxis type="number" tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
+              <YAxis dataKey="label" type="category" tick={{ fontSize: 12 }} stroke={axis} width={110} />
               <Tooltip />
               <Bar dataKey="count" fill={GREEN} radius={[0, 4, 4, 0]} />
             </BarChart>
@@ -96,9 +98,9 @@ export function VacancyAnalytics() {
         <ChartCard title="Applications per Vacancy" icon={Users} isLoading={isLoading} isEmpty={!data?.applications_per_vacancy?.length} emptyTitle="No applications yet">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={data?.applications_per_vacancy} layout="vertical" margin={{ left: 16 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis type="number" tick={{ fontSize: 12 }} stroke="#94a3b8" allowDecimals={false} />
-              <YAxis dataKey="label" type="category" tick={{ fontSize: 12 }} stroke="#94a3b8" width={110} />
+              <CartesianGrid strokeDasharray="3 3" stroke={grid} />
+              <XAxis type="number" tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
+              <YAxis dataKey="label" type="category" tick={{ fontSize: 12 }} stroke={axis} width={110} />
               <Tooltip />
               <Bar dataKey="count" fill={BLUE} radius={[0, 4, 4, 0]} />
             </BarChart>

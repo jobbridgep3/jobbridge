@@ -20,6 +20,19 @@ def update_notification_prefs():
     return ok(message="Notification preferences updated.")
 
 
+@settings_bp.put("/theme")
+@jwt_required()
+def update_theme():
+    data = request.get_json(force=True) or {}
+    theme = data.get("theme")
+    if theme not in ("light", "dark", "system"):
+        return fail("theme must be 'light', 'dark', or 'system'.", 400)
+    user = User.query.get(get_jwt_identity())
+    user.theme_preference = theme
+    db.session.commit()
+    return ok({"theme_preference": theme}, "Theme preference updated.")
+
+
 @settings_bp.put("/privacy")
 @jwt_required()
 @role_required("jobseeker")

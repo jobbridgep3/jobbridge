@@ -15,6 +15,10 @@ class Notification(BaseModel):
     message = db.Column(db.Text, nullable=True)
     link = db.Column(db.String(500), nullable=True)
     is_read = db.Column(db.Boolean, default=False, nullable=False)
+    is_archived = db.Column(db.Boolean, default=False, nullable=False)
+    priority = db.Column(db.String(10), nullable=True)  # normal|important|urgent — NULL falls back to the
+    # frontend's per-type TYPE_PRIORITY_MAP; only set explicitly by callers with a real reason to (e.g.
+    # announcement-sourced notifications inherit the announcement's own priority).
 
     def to_dict(self):
         return {
@@ -24,5 +28,7 @@ class Notification(BaseModel):
             "message": self.message,
             "link": self.link,
             "is_read": self.is_read,
+            "is_archived": self.is_archived,
+            "priority": self.priority,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

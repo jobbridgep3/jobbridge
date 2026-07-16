@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Ca
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { StatCard } from '../../components/ui/StatCard'
+import { CATEGORY_LABELS } from '../../config/announcementMeta'
 import api from '../../lib/axios'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
 import { useAuthStore } from '../../store/authStore'
@@ -134,10 +135,17 @@ export default function JobseekerDashboard() {
             <EmptyState title="No announcements yet" />
           ) : (
             announcements.slice(0, 3).map((a) => (
-              <div key={a.id} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0">
-                <p className="text-sm font-medium text-slate-900">{a.title}</p>
-                <p className="text-xs text-slate-500">{a.body}</p>
-              </div>
+              <Link
+                key={a.id}
+                to={`/announcements/${a.id}`}
+                className="block border-b border-border-subtle pb-3 last:border-0 last:pb-0 hover:opacity-80"
+              >
+                <div className="mb-1 flex items-center gap-2">
+                  <p className="text-sm font-medium text-text-primary">{a.title}</p>
+                  <Badge variant="primary">{CATEGORY_LABELS[a.category] || a.category}</Badge>
+                </div>
+                <p className="line-clamp-1 text-xs text-text-muted">{(a.body || '').replace(/<[^>]*>/g, ' ')}</p>
+              </Link>
             ))
           )}
         </CardContent>

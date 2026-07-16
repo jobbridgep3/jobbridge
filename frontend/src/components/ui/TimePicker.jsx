@@ -74,22 +74,22 @@ export function TimePicker({ value, onChange, placeholder = 'Select time', disab
           type="button"
           disabled={disabled}
           className={cn(
-            'flex h-10 w-full items-center justify-between rounded-lg border border-slate-300 bg-white px-3 text-left text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary-500 disabled:cursor-not-allowed disabled:bg-slate-50',
-            !value && 'text-slate-400',
+            'flex h-10 w-full items-center justify-between rounded-lg border border-border-hover bg-surface px-3 text-left text-sm text-text-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary-500 disabled:cursor-not-allowed disabled:bg-surface-secondary',
+            !value && 'text-text-muted',
             className
           )}
         >
           <span>{value || placeholder}</span>
-          <Clock className="h-4 w-4 shrink-0 text-slate-400" />
+          <Clock className="h-4 w-4 shrink-0 text-text-muted" />
         </button>
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content asChild align="start" sideOffset={6}>
-          <motion.div {...dropdownMenu} className="z-50 flex gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+          <motion.div {...dropdownMenu} className="z-50 flex gap-2 rounded-lg border border-border bg-surface p-3 shadow-lg">
             <select
               value={parts.hour || ''}
               onChange={(e) => update({ hour: Number(e.target.value) })}
-              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-primary-500"
+              className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-text-primary focus-visible:outline-2 focus-visible:outline-primary-500"
             >
               <option value="" disabled>Hr</option>
               {HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
@@ -97,7 +97,7 @@ export function TimePicker({ value, onChange, placeholder = 'Select time', disab
             <select
               value={parts.minute || ''}
               onChange={(e) => update({ minute: e.target.value })}
-              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-primary-500"
+              className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-text-primary focus-visible:outline-2 focus-visible:outline-primary-500"
             >
               <option value="" disabled>Min</option>
               {MINUTES.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -105,7 +105,7 @@ export function TimePicker({ value, onChange, placeholder = 'Select time', disab
             <select
               value={parts.period || ''}
               onChange={(e) => update({ period: e.target.value })}
-              className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-primary-500"
+              className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-text-primary focus-visible:outline-2 focus-visible:outline-primary-500"
             >
               <option value="" disabled>—</option>
               <option value="AM">AM</option>

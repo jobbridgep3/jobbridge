@@ -1,7 +1,7 @@
 import { cn } from '../../lib/utils'
 
 export function Skeleton({ className, style }) {
-  return <div className={cn('animate-pulse rounded-md bg-slate-200/80', className)} style={style} />
+  return <div className={cn('animate-pulse rounded-md bg-surface-hover', className)} style={style} />
 }
 
 export function TableSkeleton({ rows = 6, cols = 4 }) {
@@ -20,7 +20,7 @@ export function TableSkeleton({ rows = 6, cols = 4 }) {
 
 export function CardSkeleton() {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-[var(--shadow-card)]">
+    <div className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]">
       <Skeleton className="mb-3 h-4 w-1/3" />
       <Skeleton className="mb-2 h-3 w-full" />
       <Skeleton className="h-3 w-2/3" />
@@ -30,7 +30,7 @@ export function CardSkeleton() {
 
 export function ChartSkeleton({ height = 280 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-[var(--shadow-card)]">
+    <div className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow-card)]">
       <Skeleton className="mb-4 h-4 w-1/3" />
       <Skeleton className="w-full" style={{ height }} />
     </div>

@@ -6,7 +6,7 @@ export const Input = forwardRef(({ className, ...props }, ref) => (
   <input
     ref={ref}
     className={cn(
-      'flex h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary-500 disabled:cursor-not-allowed disabled:bg-slate-50',
+      'flex h-10 w-full rounded-lg border border-border-hover bg-surface px-3 text-sm text-text-primary placeholder:text-text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary-500 disabled:cursor-not-allowed disabled:bg-surface-secondary',
       className
     )}
     {...props}
@@ -18,7 +18,7 @@ export const Textarea = forwardRef(({ className, ...props }, ref) => (
   <textarea
     ref={ref}
     className={cn(
-      'flex w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary-500 disabled:cursor-not-allowed disabled:bg-slate-50',
+      'flex w-full rounded-lg border border-border-hover bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary-500 disabled:cursor-not-allowed disabled:bg-surface-secondary',
       className
     )}
     {...props}
@@ -27,7 +27,7 @@ export const Textarea = forwardRef(({ className, ...props }, ref) => (
 Textarea.displayName = 'Textarea'
 
 export const Label = forwardRef(({ className, ...props }, ref) => (
-  <label ref={ref} className={cn('mb-1.5 block text-sm font-medium text-slate-700', className)} {...props} />
+  <label ref={ref} className={cn('mb-1.5 block text-sm font-medium text-text-secondary', className)} {...props} />
 ))
 Label.displayName = 'Label'
 
@@ -35,7 +35,7 @@ export const Select = forwardRef(({ className, children, ...props }, ref) => (
   <select
     ref={ref}
     className={cn(
-      'flex h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary-500',
+      'flex h-10 w-full rounded-lg border border-border-hover bg-surface px-3 text-sm text-text-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary-500',
       className
     )}
     {...props}

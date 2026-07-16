@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { Monitor, Moon, Sun } from 'lucide-react'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
@@ -6,21 +7,30 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
-import { Input, Label } from '../../components/ui/Input'
+import { Label } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { PasswordInput } from '../../components/ui/PasswordInput'
 import { PasswordRequirements } from '../../components/ui/PasswordRequirements'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
 import { isStrongPassword } from '../../lib/passwordPolicy'
+import { cn } from '../../lib/utils'
 import { useAuthStore } from '../../store/authStore'
+import { useUiStore } from '../../store/uiStore'
+
+const THEME_OPTIONS = [
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+  { value: 'system', label: 'System', icon: Monitor },
+]
 
 export function SettingsPage({ showPrivacy = false, showDeactivate = false }) {
   const navigate = useNavigate()
   const logout = useAuthStore((s) => s.logout)
+  const theme = useUiStore((s) => s.theme)
+  const setTheme = useUiStore((s) => s.setTheme)
   const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
   const [saving, setSaving] = useState(false)
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('jobbridge-theme') === 'dark')
   const [confirmDeactivate, setConfirmDeactivate] = useState(false)
 
   const changePassword = async (e) => {
@@ -46,13 +56,6 @@ export function SettingsPage({ showPrivacy = false, showDeactivate = false }) {
     } finally {
       setSaving(false)
     }
-  }
-
-  const toggleDarkMode = () => {
-    const next = !darkMode
-    setDarkMode(next)
-    localStorage.setItem('jobbridge-theme', next ? 'dark' : 'light')
-    document.documentElement.classList.toggle('dark', next)
   }
 
   const deactivateAccount = async () => {
@@ -102,23 +105,32 @@ export function SettingsPage({ showPrivacy = false, showDeactivate = false }) {
         <CardHeader>
           <CardTitle>Preferences</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-slate-800">Dark Mode</p>
-              <p className="text-xs text-slate-500">Toggle the interface theme.</p>
+              <p className="text-sm font-medium text-text-primary">Theme</p>
+              <p className="text-xs text-text-muted">Choose how JobBridge looks. "System" follows your device setting.</p>
             </div>
-            <button
-              onClick={toggleDarkMode}
-              className={`h-6 w-11 rounded-full transition-colors ${darkMode ? 'bg-primary-700' : 'bg-slate-200'}`}
-            >
-              <span className={`block h-5 w-5 translate-x-0.5 rounded-full bg-white shadow transition-transform ${darkMode ? 'translate-x-5' : ''}`} />
-            </button>
+            <div className="flex rounded-lg border border-border p-0.5">
+              {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setTheme(value)}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium',
+                    theme === value ? 'bg-primary-800 text-white' : 'text-text-secondary hover:bg-surface-hover'
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" /> {label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-slate-800">Email Notifications</p>
-              <p className="text-xs text-slate-500">Receive email alerts for status changes and announcements.</p>
+              <p className="text-sm font-medium text-text-primary">Email Notifications</p>
+              <p className="text-xs text-text-muted">Receive email alerts for status changes and announcements.</p>
             </div>
             <button
               onClick={async () => {
@@ -139,7 +151,7 @@ export function SettingsPage({ showPrivacy = false, showDeactivate = false }) {
             <CardTitle>Privacy</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="mb-3 text-sm text-slate-500">Control what employers can see on your profile.</p>
+            <p className="mb-3 text-sm text-text-muted">Control what employers can see on your profile.</p>
             <Button
               variant="secondary"
               size="sm"
@@ -155,12 +167,12 @@ export function SettingsPage({ showPrivacy = false, showDeactivate = false }) {
       )}
 
       {showDeactivate && (
-        <Card className="border-red-200">
+        <Card className="border-red-200 dark:border-red-900">
           <CardHeader>
-            <CardTitle className="text-red-700">Danger Zone</CardTitle>
+            <CardTitle className="text-red-700 dark:text-red-400">Danger Zone</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="mb-3 text-sm text-slate-500">Deactivating your account removes your access. PESO Admin can reactivate it later.</p>
+            <p className="mb-3 text-sm text-text-muted">Deactivating your account removes your access. PESO Admin can reactivate it later.</p>
             <Button variant="danger" size="sm" onClick={() => setConfirmDeactivate(true)}>
               Deactivate Account
             </Button>

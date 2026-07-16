@@ -9,7 +9,7 @@ export function Card({ className, hover = false, ...props }) {
     : {}
   return (
     <Comp
-      className={cn('rounded-xl border border-slate-200 bg-white shadow-[var(--shadow-card)]', className)}
+      className={cn('rounded-xl border border-border bg-surface shadow-[var(--shadow-card)]', className)}
       {...hoverProps}
       {...props}
     />
@@ -17,11 +17,11 @@ export function Card({ className, hover = false, ...props }) {
 }
 
 export function CardHeader({ className, ...props }) {
-  return <div className={cn('flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4', className)} {...props} />
+  return <div className={cn('flex items-center justify-between gap-4 border-b border-border-subtle px-5 py-4', className)} {...props} />
 }
 
 export function CardTitle({ className, ...props }) {
-  return <h3 className={cn('text-sm font-semibold text-slate-900', className)} {...props} />
+  return <h3 className={cn('text-sm font-semibold text-text-primary', className)} {...props} />
 }
 
 export function CardContent({ className, ...props }) {

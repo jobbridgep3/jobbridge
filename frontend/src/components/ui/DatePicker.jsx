@@ -12,26 +12,26 @@ const dayPickerClassNames = {
   root: 'p-3',
   months: 'flex flex-col',
   month: 'space-y-3',
-  month_caption: 'flex items-center justify-center px-8 text-sm font-medium text-slate-900',
+  month_caption: 'flex items-center justify-center px-8 text-sm font-medium text-text-primary',
   dropdowns: 'flex items-center justify-center gap-1.5',
   dropdown_root: 'relative inline-flex items-center',
   dropdown: 'absolute inset-0 h-full w-full cursor-pointer opacity-0',
   months_dropdown: '',
   years_dropdown: '',
-  caption_label: 'inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-sm font-medium text-slate-900 hover:bg-slate-50',
+  caption_label: 'inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-sm font-medium text-text-primary hover:bg-surface-hover',
   nav: 'flex items-center justify-between absolute inset-x-1 top-3',
-  button_previous: 'h-7 w-7 rounded-md text-slate-500 hover:bg-slate-100 flex items-center justify-center disabled:opacity-30',
-  button_next: 'h-7 w-7 rounded-md text-slate-500 hover:bg-slate-100 flex items-center justify-center disabled:opacity-30',
+  button_previous: 'h-7 w-7 rounded-md text-text-muted hover:bg-surface-hover flex items-center justify-center disabled:opacity-30',
+  button_next: 'h-7 w-7 rounded-md text-text-muted hover:bg-surface-hover flex items-center justify-center disabled:opacity-30',
   month_grid: 'w-full border-collapse',
   weekdays: 'flex',
-  weekday: 'w-9 text-center text-xs font-medium text-slate-400',
+  weekday: 'w-9 text-center text-xs font-medium text-text-muted',
   week: 'flex w-full mt-1',
   day: 'h-9 w-9 text-center text-sm p-0 relative',
-  day_button: 'h-9 w-9 rounded-md text-slate-700 hover:bg-primary-50 flex items-center justify-center transition-colors',
+  day_button: 'h-9 w-9 rounded-md text-text-secondary hover:bg-primary-50 dark:hover:bg-primary-900/40 flex items-center justify-center transition-colors',
   selected: '[&>button]:bg-primary-800 [&>button]:text-white [&>button]:hover:bg-primary-900',
-  today: '[&>button]:font-semibold [&>button]:text-primary-700',
-  outside: '[&>button]:text-slate-300',
-  disabled: '[&>button]:text-slate-300 [&>button]:hover:bg-transparent [&>button]:cursor-not-allowed',
+  today: '[&>button]:font-semibold [&>button]:text-primary-700 dark:[&>button]:text-primary-300',
+  outside: '[&>button]:text-text-muted [&>button]:opacity-50',
+  disabled: '[&>button]:text-text-muted [&>button]:opacity-50 [&>button]:hover:bg-transparent [&>button]:cursor-not-allowed',
 }
 
 /** ISO "yyyy-mm-dd" <-> Date, matching what native <input type="date"> produced
@@ -65,18 +65,18 @@ export function DatePicker({ value, onChange, minDate, maxDate, placeholder = 'S
           type="button"
           disabled={disabled}
           className={cn(
-            'flex h-10 w-full items-center justify-between rounded-lg border border-slate-300 bg-white px-3 text-left text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary-500 disabled:cursor-not-allowed disabled:bg-slate-50',
-            !selected && 'text-slate-400',
+            'flex h-10 w-full items-center justify-between rounded-lg border border-border-hover bg-surface px-3 text-left text-sm text-text-primary focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary-500 disabled:cursor-not-allowed disabled:bg-surface-secondary',
+            !selected && 'text-text-muted',
             className
           )}
         >
           <span>{selected ? dayjs(selected).format('MMM D, YYYY') : placeholder}</span>
-          <CalendarDays className="h-4 w-4 shrink-0 text-slate-400" />
+          <CalendarDays className="h-4 w-4 shrink-0 text-text-muted" />
         </button>
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content asChild align="start" sideOffset={6}>
-          <motion.div {...dropdownMenu} className="z-50 rounded-lg border border-slate-200 bg-white shadow-lg">
+          <motion.div {...dropdownMenu} className="z-50 rounded-lg border border-border bg-surface shadow-lg">
             <DayPicker
               mode="single"
               captionLayout="dropdown"

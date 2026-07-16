@@ -9,6 +9,7 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
 import { AnalyticsCharts } from '../admin/dashboard/AnalyticsCharts'
+import { AnnouncementsWidget } from '../admin/dashboard/AnnouncementsWidget'
 import { DashboardExportDialog } from '../admin/dashboard/DashboardExportDialog'
 import { SummaryCards } from '../admin/dashboard/SummaryCards'
 
@@ -75,6 +76,7 @@ export default function StaffDashboard() {
           )}
         </CardContent>
       </Card>
+      <AnnouncementsWidget />
     </motion.div>
   )
 }

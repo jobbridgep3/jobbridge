@@ -17,6 +17,7 @@ import {
 } from 'recharts'
 
 import { ChartCard } from '../../../components/ui/ChartCard'
+import { useChartGridColors } from '../../../config/chartTheme'
 import api from '../../../lib/axios'
 
 const BLUE = '#2563eb'
@@ -43,6 +44,7 @@ const FUNNEL_COLORS = {
 }
 
 export function AnalyticsCharts({ apiBase = '/api/admin' }) {
+  const { grid, axis } = useChartGridColors()
   const { data, isLoading } = useQuery({
     queryKey: [apiBase, 'dashboard', 'analytics'],
     queryFn: async () => (await api.get(`${apiBase}/dashboard/analytics`)).data.data,
@@ -60,9 +62,9 @@ export function AnalyticsCharts({ apiBase = '/api/admin' }) {
       >
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={data?.monthly_registrations}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#94a3b8" />
-            <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" allowDecimals={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke={grid} />
+            <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke={axis} />
+            <YAxis tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
             <Tooltip />
             <Legend />
             <Line type="monotone" dataKey="jobseekers" name="Jobseekers" stroke={BLUE} strokeWidth={2} dot={{ r: 3 }} />
@@ -80,9 +82,9 @@ export function AnalyticsCharts({ apiBase = '/api/admin' }) {
       >
         <ResponsiveContainer width="100%" height={280}>
           <AreaChart data={data?.monthly_applications}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#94a3b8" />
-            <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" allowDecimals={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke={grid} />
+            <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke={axis} />
+            <YAxis tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
             <Tooltip />
             <Area type="monotone" dataKey="count" name="Applications" stroke={BLUE} fill={BLUE} fillOpacity={0.15} strokeWidth={2} />
           </AreaChart>
@@ -98,9 +100,9 @@ export function AnalyticsCharts({ apiBase = '/api/admin' }) {
       >
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={data?.employment_trends}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#94a3b8" />
-            <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" allowDecimals={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke={grid} />
+            <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke={axis} />
+            <YAxis tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
             <Tooltip />
             <Line type="monotone" dataKey="placements" name="Placements" stroke={BLUE} strokeWidth={2} dot={{ r: 3 }} />
           </LineChart>
@@ -116,9 +118,9 @@ export function AnalyticsCharts({ apiBase = '/api/admin' }) {
       >
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={data?.hiring_funnel?.map((d) => ({ ...d, label: FUNNEL_LABELS[d.status] || d.status }))}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#94a3b8" interval={0} angle={-20} textAnchor="end" height={60} />
-            <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" allowDecimals={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke={grid} />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke={axis} interval={0} angle={-20} textAnchor="end" height={60} />
+            <YAxis tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
             <Tooltip />
             <Bar dataKey="count" name="Applications" radius={[4, 4, 0, 0]}>
               {data?.hiring_funnel?.map((d) => (
@@ -138,9 +140,9 @@ export function AnalyticsCharts({ apiBase = '/api/admin' }) {
       >
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={data?.job_category_distribution} layout="vertical" margin={{ left: 16 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis type="number" tick={{ fontSize: 12 }} stroke="#94a3b8" allowDecimals={false} />
-            <YAxis dataKey="category" type="category" tick={{ fontSize: 12 }} stroke="#94a3b8" width={110} />
+            <CartesianGrid strokeDasharray="3 3" stroke={grid} />
+            <XAxis type="number" tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
+            <YAxis dataKey="category" type="category" tick={{ fontSize: 12 }} stroke={axis} width={110} />
             <Tooltip />
             <Bar dataKey="count" name="Active Vacancies" fill={BLUE} radius={[0, 4, 4, 0]} />
           </BarChart>
@@ -156,9 +158,9 @@ export function AnalyticsCharts({ apiBase = '/api/admin' }) {
       >
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={data?.top_skills} layout="vertical" margin={{ left: 16 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis type="number" tick={{ fontSize: 12 }} stroke="#94a3b8" allowDecimals={false} />
-            <YAxis dataKey="skill" type="category" tick={{ fontSize: 12 }} stroke="#94a3b8" width={110} />
+            <CartesianGrid strokeDasharray="3 3" stroke={grid} />
+            <XAxis type="number" tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
+            <YAxis dataKey="skill" type="category" tick={{ fontSize: 12 }} stroke={axis} width={110} />
             <Tooltip />
             <Bar dataKey="count" name="Vacancies Requesting" fill={BLUE} radius={[0, 4, 4, 0]} />
           </BarChart>

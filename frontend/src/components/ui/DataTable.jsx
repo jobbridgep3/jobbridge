@@ -30,10 +30,10 @@ export function DataTable({ columns, data, isLoading, searchPlaceholder = 'Searc
   const rows = table.getRowModel().rows
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-[var(--shadow-card)]">
-      <div className="flex items-center gap-3 border-b border-slate-100 p-4">
+    <div className="rounded-xl border border-border bg-surface shadow-[var(--shadow-card)]">
+      <div className="flex items-center gap-3 border-b border-border-subtle p-4">
         <div className="relative w-full max-w-xs">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
           <Input placeholder={searchPlaceholder} value={globalFilter} onChange={(e) => setGlobalFilter(e.target.value)} className="pl-9" />
         </div>
       </div>
@@ -45,7 +45,7 @@ export function DataTable({ columns, data, isLoading, searchPlaceholder = 'Searc
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <thead className="bg-surface-secondary text-xs uppercase tracking-wide text-text-muted">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header) => (
@@ -62,7 +62,7 @@ export function DataTable({ columns, data, isLoading, searchPlaceholder = 'Searc
                           ) : header.column.getIsSorted() === 'desc' ? (
                             <ArrowDown className="h-3 w-3" />
                           ) : (
-                            <ArrowUpDown className="h-3 w-3 text-slate-300" />
+                            <ArrowUpDown className="h-3 w-3 text-text-muted" />
                           ))}
                       </span>
                     </th>
@@ -70,11 +70,11 @@ export function DataTable({ columns, data, isLoading, searchPlaceholder = 'Searc
                 </tr>
               ))}
             </thead>
-            <motion.tbody variants={staggerContainer} initial="initial" animate="animate" className="divide-y divide-slate-100">
+            <motion.tbody variants={staggerContainer} initial="initial" animate="animate" className="divide-y divide-border-subtle">
               {rows.map((row) => (
-                <motion.tr key={row.id} variants={staggerItem} className="hover:bg-slate-50">
+                <motion.tr key={row.id} variants={staggerItem} className="hover:bg-surface-hover">
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-4 py-3 text-slate-700">
+                    <td key={cell.id} className="px-4 py-3 text-text-secondary">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}
