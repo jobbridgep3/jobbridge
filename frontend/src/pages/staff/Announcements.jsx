@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
-import { Archive, FileText, ImagePlus, Megaphone, Paperclip, Pencil, Pin, PinOff, Plus, Send, Trash2, Upload } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { Archive, Megaphone, Paperclip, Pencil, Pin, PinOff, Plus, Send, Trash2 } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 
 import { Badge } from '../../components/ui/Badge'
@@ -15,6 +15,7 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { AnnouncementForm } from '../../components/announcements/AnnouncementForm'
+import { AnnouncementPreview } from '../../components/announcements/AnnouncementPreview'
 import { CATEGORY_LABELS } from '../../config/announcementMeta'
 import api from '../../lib/axios'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
@@ -32,6 +33,7 @@ const EMPTY_FORM = {
   title: '', body: '', category: 'general', priority: 'normal', target_roles: ['public', 'jobseeker', 'employer', 'staff', 'admin'],
   scheduled_date: '', scheduled_time: '', expires_date: '',
 }
+const EMPTY_STAGED = { banner: null, images: [], pdf: null }
 
 function announcementToForm(a) {
   return {
@@ -52,13 +54,11 @@ export default function StaffAnnouncements() {
   const isAdmin = role === 'admin'
   const [statusTab, setStatusTab] = useState('')
   const [formOpen, setFormOpen] = useState(false)
+  const [formTab, setFormTab] = useState('edit') // 'edit' | 'preview'
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
+  const [staged, setStaged] = useState(EMPTY_STAGED)
   const [confirm, setConfirm] = useState(null) // { action, announcement }
-  const bannerRef = useRef(null)
-  const imagesRef = useRef(null)
-  const pdfRef = useRef(null)
-  const [uploadTarget, setUploadTarget] = useState(null)
 
   const { data: announcements, isLoading } = useQuery({
     queryKey: ['staff', 'announcements', statusTab],
@@ -77,19 +77,49 @@ export default function StaffAnnouncements() {
     expires_at: form.expires_date ? `${form.expires_date}T23:59:59` : null,
   })
 
+  const uploadStagedMedia = async (announcementId) => {
+    if (staged.banner) {
+      const fd = new FormData()
+      fd.append('file', staged.banner)
+      await api.post(`/api/announcements/${announcementId}/banner`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    }
+    for (const img of staged.images) {
+      const fd = new FormData()
+      fd.append('file', img)
+      await api.post(`/api/announcements/${announcementId}/images`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    }
+    if (staged.pdf) {
+      const fd = new FormData()
+      fd.append('file', staged.pdf)
+      await api.post(`/api/announcements/${announcementId}/attachment`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    }
+  }
+
   const saveMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async (publishNow) => {
       const payload = buildPayload()
-      const publishNow = !form.scheduled_date
-      if (editing) return api.put(`/api/announcements/${editing.id}`, { ...payload, publish_now: publishNow })
-      return api.post('/api/announcements', { ...payload, publish_now: publishNow })
+      const res = editing
+        ? await api.put(`/api/announcements/${editing.id}`, { ...payload, publish_now: publishNow })
+        : await api.post('/api/announcements', { ...payload, publish_now: publishNow })
+      const announcement = res.data.data
+      await uploadStagedMedia(announcement.id)
+      return { announcement, publishNow }
     },
-    onSuccess: () => {
-      toast.success(editing ? 'Announcement updated.' : form.scheduled_date ? 'Announcement scheduled.' : 'Announcement published.')
+    onSuccess: ({ publishNow }) => {
+      toast.success(publishNow ? 'Announcement published.' : form.scheduled_date ? 'Announcement scheduled.' : 'Draft saved.')
       setFormOpen(false)
       refresh()
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Could not save announcement.'),
+  })
+
+  const removeImage = useMutation({
+    mutationFn: (url) => api.delete(`/api/announcements/${editing.id}/images`, { data: { url } }),
+    onSuccess: (res) => {
+      setEditing(res.data.data)
+      refresh()
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not remove image.'),
   })
 
   const lifecycle = useMutation({
@@ -111,28 +141,16 @@ export default function StaffAnnouncements() {
   const openCreate = () => {
     setEditing(null)
     setForm(EMPTY_FORM)
+    setStaged(EMPTY_STAGED)
+    setFormTab('edit')
     setFormOpen(true)
   }
   const openEdit = (a) => {
     setEditing(a)
     setForm(announcementToForm(a))
+    setStaged(EMPTY_STAGED)
+    setFormTab('edit')
     setFormOpen(true)
-  }
-
-  const uploadFile = async (kind, file) => {
-    if (!file || !uploadTarget) return
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const path = kind === 'banner' ? 'banner' : kind === 'pdf' ? 'attachment' : 'images'
-      await api.post(`/api/announcements/${uploadTarget.id}/${path}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } })
-      toast.success('Uploaded.')
-      refresh()
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Upload failed.')
-    } finally {
-      setUploadTarget(null)
-    }
   }
 
   const confirmCopy = {
@@ -140,6 +158,18 @@ export default function StaffAnnouncements() {
     archive: { title: 'Archive this announcement?', description: 'It will no longer be visible to its audience.', label: 'Archive' },
     delete: { title: 'Delete this announcement?', description: 'This cannot be undone.', label: 'Delete' },
   }
+
+  const isPublishedAlready = editing?.status === 'published'
+  const canSave = form.title.trim() && form.body.trim() && form.target_roles.length > 0 && !saveMutation.isPending
+
+  const previewBannerUrl = useMemo(
+    () => (staged.banner ? URL.createObjectURL(staged.banner) : editing?.banner_url),
+    [staged.banner, editing?.banner_url]
+  )
+  const previewGalleryUrls = useMemo(
+    () => [...(editing?.gallery_images || []).map((img) => img.url), ...staged.images.map((f) => URL.createObjectURL(f))],
+    [editing?.gallery_images, staged.images]
+  )
 
   return (
     <motion.div {...fadeIn} className="space-y-4">
@@ -215,15 +245,6 @@ export default function StaffAnnouncements() {
                         {a.is_pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />} {a.is_pinned ? 'Unpin' : 'Pin'}
                       </Button>
                     )}
-                    <Button size="sm" variant="secondary" onClick={() => { setUploadTarget(a); bannerRef.current?.click() }}>
-                      <ImagePlus className="h-3.5 w-3.5" /> Banner
-                    </Button>
-                    <Button size="sm" variant="secondary" onClick={() => { setUploadTarget(a); imagesRef.current?.click() }}>
-                      <Upload className="h-3.5 w-3.5" /> Add Image
-                    </Button>
-                    <Button size="sm" variant="secondary" onClick={() => { setUploadTarget(a); pdfRef.current?.click() }}>
-                      <FileText className="h-3.5 w-3.5" /> PDF
-                    </Button>
                     <Button size="sm" variant="ghost" className="text-red-600" onClick={() => setConfirm({ action: 'delete', announcement: a })}>
                       <Trash2 className="h-3.5 w-3.5" /> Delete
                     </Button>
@@ -246,28 +267,57 @@ export default function StaffAnnouncements() {
         </motion.div>
       )}
 
-      <input ref={bannerRef} type="file" accept="image/*" className="hidden" onChange={(e) => uploadFile('banner', e.target.files?.[0])} />
-      <input ref={imagesRef} type="file" accept="image/*" className="hidden" onChange={(e) => uploadFile('image', e.target.files?.[0])} />
-      <input ref={pdfRef} type="file" accept="application/pdf" className="hidden" onChange={(e) => uploadFile('pdf', e.target.files?.[0])} />
-
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent title={editing ? 'Edit Announcement' : 'New Announcement'} className="max-w-2xl">
-          <div className="max-h-[70vh] overflow-y-auto pr-1">
-            <AnnouncementForm form={form} setForm={setForm} />
-            <div className="mt-4 flex justify-end">
-              <Button
-                onClick={() => saveMutation.mutate()}
-                disabled={!form.title.trim() || !form.body.trim() || !form.target_roles.length || saveMutation.isPending}
+          <div className="mb-3 flex rounded-lg border border-border p-0.5">
+            {['edit', 'preview'].map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setFormTab(t)}
+                className={cn(
+                  'flex-1 rounded-md px-3 py-1.5 text-xs font-medium capitalize',
+                  formTab === t ? 'bg-primary-800 text-white' : 'text-text-secondary hover:bg-surface-hover'
+                )}
               >
-                {saveMutation.isPending
-                  ? 'Saving…'
-                  : form.scheduled_date
-                    ? 'Schedule'
-                    : editing
-                      ? 'Save Changes'
-                      : 'Publish Now'}
+                {t}
+              </button>
+            ))}
+          </div>
+          <div className="max-h-[65vh] overflow-y-auto pr-1">
+            {formTab === 'edit' ? (
+              <AnnouncementForm
+                form={form}
+                setForm={setForm}
+                staged={staged}
+                setStaged={setStaged}
+                existingMedia={editing}
+                onRemoveImage={(url) => removeImage.mutate(url)}
+              />
+            ) : (
+              <AnnouncementPreview
+                form={form}
+                bannerUrl={previewBannerUrl}
+                galleryUrls={previewGalleryUrls}
+                pdfName={staged.pdf?.name || (editing?.pdf_url ? 'Attached PDF' : null)}
+              />
+            )}
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            {isPublishedAlready ? (
+              <Button onClick={() => saveMutation.mutate(false)} disabled={!canSave}>
+                {saveMutation.isPending ? 'Saving…' : 'Save Changes'}
               </Button>
-            </div>
+            ) : (
+              <>
+                <Button variant="secondary" onClick={() => saveMutation.mutate(false)} disabled={!canSave}>
+                  {saveMutation.isPending ? 'Saving…' : 'Save as Draft'}
+                </Button>
+                <Button onClick={() => saveMutation.mutate(true)} disabled={!canSave}>
+                  {saveMutation.isPending ? 'Publishing…' : 'Publish'}
+                </Button>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>
