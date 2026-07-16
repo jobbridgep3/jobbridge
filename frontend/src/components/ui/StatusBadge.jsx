@@ -12,6 +12,7 @@ const STATUS_MAP = {
   rejected: { label: 'Rejected', variant: 'danger' },
   cancelled: { label: 'Cancelled', variant: 'default' },
   pending: { label: 'Pending', variant: 'warning' },
+  confirmed: { label: 'Confirmed', variant: 'success' },
   active: { label: 'Active', variant: 'success' },
   closed: { label: 'Closed', variant: 'default' },
   terminated: { label: 'Terminated', variant: 'danger' },

@@ -10,9 +10,9 @@ from models.jobseeker import JobseekerProfile
 from models.notification import Notification
 from models.user import User
 from services.audit_service import log_audit
-from services.email_service import send_email, send_jobfair_published_email
+from services.email_service import send_email, send_jobfair_booth_status_email, send_jobfair_published_email
 from services.excel_service import build_excel_report
-from services.notification_service import notify_user
+from services.notification_service import notify_role, notify_user
 from services.pdf_service import generate_table_report, to_bytesio
 from services.qr_service import generate_qr_data_url
 from services.storage_service import upload_file, validate_upload_file
@@ -79,13 +79,19 @@ def get_jobfair(jobfair_id):
         if booth:
             result["my_booth"] = booth.to_dict()
 
-    # Published vacancies of the participating employers, so attendees can browse
-    # openings before the event.
+    # Vacancies the participating employers explicitly included in this fair
+    # ("Include in Job Fair"), so attendees can browse openings before the
+    # event. Also requires a still-confirmed booth, so a later-suspended
+    # booth's vacancies drop off without needing to clear every tag.
     from models.vacancy import Vacancy
     company_ids = [b.employer_company_id for b in fair.booths if b.status == "confirmed"]
     if company_ids:
         vacancies = (
-            Vacancy.query.filter(Vacancy.employer_company_id.in_(company_ids), Vacancy.status == "published")
+            Vacancy.query.filter(
+                Vacancy.tagged_for_jobfair_id == fair.id,
+                Vacancy.employer_company_id.in_(company_ids),
+                Vacancy.status == "published",
+            )
             .order_by(Vacancy.created_at.desc()).limit(50).all()
         )
         result["vacancies"] = [
@@ -237,20 +243,26 @@ def register_booth(jobfair_id):
     company = EmployerCompany.query.filter_by(user_id=get_jwt_identity()).first()
     if not fair or not company or fair.status not in ("published", "ongoing"):
         return fail("This job fair is not open for booth registration.", 400)
-    if fair.max_employer_slots and len([b for b in fair.booths if b.status != "cancelled"]) >= fair.max_employer_slots:
+    if company.accreditation_status != "accredited":
+        return fail("Your company must be PESO-accredited before participating in a job fair.", 403)
+    if fair.max_employer_slots and len([b for b in fair.booths if b.status not in ("cancelled", "rejected")]) >= fair.max_employer_slots:
         return fail("This job fair has no employer slots remaining.", 400)
     if JobFairBooth.query.filter_by(jobfair_id=fair.id, employer_company_id=company.id).first():
         return fail("Booth already registered.", 409)
     data = request.get_json(silent=True) or {}
     booth = JobFairBooth(
-        jobfair_id=fair.id, employer_company_id=company.id, status="confirmed",
+        jobfair_id=fair.id, employer_company_id=company.id, status="pending",
         booth_name=data.get("booth_name") or company.company_name,
         description=data.get("description"),
     )
     db.session.add(booth)
     db.session.commit()
-    log_audit(User.query.get(company.user_id), "Create", "jobfair_booths", booth.id, f"Booth for {fair.name}")
-    return ok(booth.to_dict(), "Booth registered.", 201)
+    log_audit(User.query.get(company.user_id), "Create", "jobfair_booths", booth.id, f"Booth request for {fair.name}", after={"status": "pending"})
+    notify_role("staff", "jobfair:booth_requested", {
+        "jobfair_id": str(fair.id), "jobfair_name": fair.name,
+        "booth_id": str(booth.id), "company_name": company.company_name,
+    })
+    return ok(booth.to_dict(), "Booth request submitted — pending PESO review.", 201)
 
 
 @jobfair_bp.put("/jobfair/<jobfair_id>/booth")
@@ -266,9 +278,11 @@ def update_booth(jobfair_id):
         if field in data:
             setattr(booth, field, data[field])
     if data.get("action") == "cancel":
-        booth.status = "cancelled"
-    elif data.get("action") == "confirm":
-        booth.status = "confirmed"
+        # Employer withdraws their own request/booth — staff review (approve/
+        # reject/suspend) is the only path back to "confirmed", so this never
+        # lets an employer self-confirm past that gate.
+        if booth.status in ("pending", "confirmed"):
+            booth.status = "cancelled"
     db.session.commit()
     log_audit(User.query.get(company.user_id), "Update", "jobfair_booths", booth.id)
     return ok(booth.to_dict(), "Booth updated.")
@@ -404,7 +418,7 @@ def publish_jobfair(jobfair_id):
         user = User.query.get(profile.user_id)
         if user and user.is_active:
             recipients.append((user, "jobseeker"))
-    for company in EmployerCompany.query.all():
+    for company in EmployerCompany.query.filter_by(accreditation_status="accredited").all():
         user = User.query.get(company.user_id)
         if user and user.is_active:
             recipients.append((user, "employer"))
@@ -421,6 +435,61 @@ def publish_jobfair(jobfair_id):
         send_jobfair_published_email(user.email, fair.name, when, fair.venue, deadline, role)
 
     return ok(fair.to_dict(), f"Job fair published — {len(recipients)} user(s) notified.")
+
+
+def _review_booth(jobfair_id, booth_id, new_status, required_remarks, from_statuses, socket_event, audit_action):
+    fair = JobFair.query.get(jobfair_id)
+    booth = JobFairBooth.query.filter_by(id=booth_id, jobfair_id=jobfair_id).first()
+    if not fair or not booth:
+        return fail("Booth request not found.", 404)
+    if booth.status not in from_statuses:
+        return fail(f"Cannot {audit_action.lower()} a booth from status '{booth.status}'.", 400)
+    data = request.get_json(silent=True) or {}
+    remarks = (data.get("remarks") or "").strip()
+    if required_remarks and not remarks:
+        return fail("A reason is required for this action.", 400)
+
+    before = {"status": booth.status}
+    booth.status = new_status
+    booth.review_remarks = remarks or None
+    booth.reviewed_by = get_jwt_identity()
+    booth.reviewed_at = now_manila()
+    db.session.commit()
+    log_audit(
+        User.query.get(get_jwt_identity()), audit_action, "jobfair_booths", booth.id,
+        f"{audit_action} booth for {fair.name}", before=before, after={"status": booth.status},
+    )
+
+    user = User.query.get(booth.employer_company.user_id)
+    notify_user(
+        user.id, "jobfair_booth_status", f"Job Fair Booth {audit_action}d",
+        f"Your booth request for {fair.name} was {new_status}." + (f" Reason: {remarks}" if remarks else ""),
+        link="/employer/jobfair", socket_event=socket_event,
+        socket_payload={"jobfair_id": str(fair.id), "booth_id": str(booth.id), "status": new_status},
+    )
+    send_jobfair_booth_status_email(user.email, booth.employer_company.company_name, fair.name, new_status, remarks or None)
+    return ok(booth.to_dict(), f"Booth {new_status}.")
+
+
+@staff_jobfair_bp.put("/<jobfair_id>/booths/<booth_id>/approve")
+@jwt_required()
+@role_required("staff", "admin")
+def approve_booth(jobfair_id, booth_id):
+    return _review_booth(jobfair_id, booth_id, "confirmed", False, ("pending",), "jobfair:booth_confirmed", "Approve")
+
+
+@staff_jobfair_bp.put("/<jobfair_id>/booths/<booth_id>/reject")
+@jwt_required()
+@role_required("staff", "admin")
+def reject_booth(jobfair_id, booth_id):
+    return _review_booth(jobfair_id, booth_id, "rejected", True, ("pending",), "jobfair:booth_rejected", "Reject")
+
+
+@staff_jobfair_bp.put("/<jobfair_id>/booths/<booth_id>/suspend")
+@jwt_required()
+@role_required("staff", "admin")
+def suspend_booth(jobfair_id, booth_id):
+    return _review_booth(jobfair_id, booth_id, "suspended", True, ("confirmed",), "jobfair:booth_suspended", "Suspend")
 
 
 @staff_jobfair_bp.post("/<jobfair_id>/archive")
@@ -592,19 +661,17 @@ def jobfair_report(jobfair_id):
         ]
     elif report_type == "employers":
         title = f"Employer Participation — {fair.name}"
-        columns = ["Company", "Booth", "Status", "Published Vacancies"]
+        columns = ["Company", "Booth", "Status", "Vacancies in Job Fair"]
         rows = []
         for booth in fair.booths:
-            vacancy_count = Vacancy.query.filter_by(employer_company_id=booth.employer_company_id, status="published").count()
+            vacancy_count = Vacancy.query.filter_by(
+                employer_company_id=booth.employer_company_id, tagged_for_jobfair_id=fair.id, status="published",
+            ).count()
             rows.append([booth.employer_company.company_name, booth.booth_name or "", booth.status, vacancy_count])
     elif report_type == "vacancies":
         title = f"Available Vacancies — {fair.name}"
         columns = ["Company", "Position", "Employment Type", "Slots"]
-        company_ids = [b.employer_company_id for b in fair.booths if b.status == "confirmed"]
-        vacancies = (
-            Vacancy.query.filter(Vacancy.employer_company_id.in_(company_ids), Vacancy.status == "published").all()
-            if company_ids else []
-        )
+        vacancies = Vacancy.query.filter(Vacancy.tagged_for_jobfair_id == fair.id, Vacancy.status == "published").all()
         rows = [[v.employer_company.company_name, v.title, v.job_type or "", v.num_slots or 1] for v in vacancies]
     else:
         return fail("Unknown report type.", 400)

@@ -72,6 +72,9 @@ class ProfileUpdateSchema(Schema):
     barangay = fields.String(allow_none=True)
     municipality = fields.String(allow_none=True)
     province = fields.String(allow_none=True)
+    region_code = fields.String(allow_none=True)
+    region_name = fields.String(allow_none=True)
+    zip_code = fields.String(allow_none=True)
 
     employment_status = fields.String(allow_none=True, validate=validate.OneOf(EMPLOYMENT_STATUSES))
     preferred_job_position = fields.String(allow_none=True)

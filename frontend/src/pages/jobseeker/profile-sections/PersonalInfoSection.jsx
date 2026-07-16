@@ -140,6 +140,14 @@ export function PersonalInfoSection({ form, setForm, onUploadPicture, uploadingP
             className={cn(missingKeys.has('province') && 'border-red-300 focus:border-red-400')}
           />
         </div>
+        <div>
+          <Label>Region</Label>
+          <Input value={form.region_name || ''} onChange={set('region_name')} placeholder="e.g. Region IV-A (CALABARZON)" />
+        </div>
+        <div>
+          <Label>ZIP Code</Label>
+          <Input value={form.zip_code || ''} onChange={set('zip_code')} placeholder="e.g. 4000" />
+        </div>
       </CardContent>
     </Card>
   )

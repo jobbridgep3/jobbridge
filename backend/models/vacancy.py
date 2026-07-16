@@ -119,6 +119,7 @@ class Vacancy(BaseModel):
 
     employer_company = db.relationship("EmployerCompany")
     category = db.relationship("VacancyCategory")
+    tagged_jobfair = db.relationship("JobFair", foreign_keys=[tagged_for_jobfair_id])
     applications = db.relationship("Application", back_populates="vacancy", cascade="all, delete-orphan")
     screening_questions = db.relationship(
         "VacancyScreeningQuestion", back_populates="vacancy", cascade="all, delete-orphan",
@@ -202,6 +203,8 @@ class Vacancy(BaseModel):
             "screening_questions": [q.to_dict() for q in self.screening_questions],
             "match_score": match_score,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "tagged_for_jobfair_id": str(self.tagged_for_jobfair_id) if self.tagged_for_jobfair_id else None,
+            "tagged_jobfair_name": self.tagged_jobfair.name if self.tagged_jobfair else None,
         }
 
 

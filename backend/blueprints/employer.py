@@ -9,15 +9,16 @@ from models.employer_hr import HR_DOCUMENT_TYPES, EmployerHRDocument, EmployerHR
 from models.interview import Interview
 from models.jobseeker import JobseekerProfile
 from models.user import User
+from models.jobfair import JobFairBooth
 from models.vacancy import Vacancy, VacancyCategory, VacancyScreeningQuestion
 from schemas.employer_schemas import CompanyProfileSchema, HRProfileSchema
 from schemas.vacancy_schemas import VacancyWriteSchema
 from services.application_status_service import build_timeline, transition_application
 from services.audit_service import log_audit
-from services.email_service import send_new_vacancy_email
 from services.matching_service import rank_jobseekers_for_vacancy
-from services.notification_service import notify_role, notify_user
+from services.notification_service import notify_role
 from services.profile_completion_service import COMPANY_REQUIRED_FIELDS, HR_REQUIRED_FIELDS, compute_completion
+from services.vacancy_notification_service import notify_jobseekers_of_new_vacancy
 from services.vacancy_state_service import can_transition
 from utils.decorators import role_required
 from utils.responses import fail, ok
@@ -158,6 +159,47 @@ def employer_dashboard_export_pdf():
     pdf_bytes = build_employer_dashboard_pdf(company, request.args, actor.email)
     log_audit(actor, "Export", "employer_dashboard")
     return send_file(to_bytesio(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name="dashboard_report.pdf")
+
+
+@employer_bp.get("/jobfair/participations")
+@jwt_required()
+@role_required("employer")
+def employer_jobfair_participations():
+    from services.employer_jobfair_service import build_participations
+
+    company = _company()
+    if not company:
+        return fail("Company profile not found.", 404)
+    return ok(build_participations(company))
+
+
+@employer_bp.get("/jobfair/export/excel")
+@jwt_required()
+@role_required("employer")
+def employer_jobfair_export_excel():
+    from services.employer_jobfair_service import build_participations_excel
+
+    company = _company()
+    if not company:
+        return fail("Company profile not found.", 404)
+    buf = build_participations_excel(company)
+    log_audit(User.query.get(company.user_id), "Export", "employer_jobfair_participations")
+    return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="jobfair_participations.xlsx")
+
+
+@employer_bp.get("/jobfair/export/pdf")
+@jwt_required()
+@role_required("employer")
+def employer_jobfair_export_pdf():
+    from services.employer_jobfair_service import build_participations_pdf
+    from services.pdf_service import to_bytesio
+
+    company = _company()
+    if not company:
+        return fail("Company profile not found.", 404)
+    pdf_bytes = build_participations_pdf(company, now_manila().strftime("%Y-%m-%d"))
+    log_audit(User.query.get(company.user_id), "Export", "employer_jobfair_participations")
+    return send_file(to_bytesio(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name="jobfair_participations.pdf")
 
 
 @employer_bp.get("/profile")
@@ -635,35 +677,41 @@ def publish_vacancy(vacancy_id):
     db.session.commit()
     log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, "Published", before=before, after={"status": vacancy.status})
 
-    # Notify jobseekers whose profile reasonably matches this vacancy — a
-    # persisted in-app notification + email each, using the same matching
-    # engine that powers the employer's "AI-Suggested Matched Jobseekers"
-    # panel. Capped candidate pool mirrors that endpoint's existing precedent.
-    #
-    # Threshold kept low deliberately: this is TF-IDF cosine similarity over
-    # just two short documents (one profile, one vacancy), which produces
-    # much lower absolute scores than intuition suggests even for a strong
-    # match — confirmed empirically, a jobseeker whose skills were an exact
-    # 1:1 match for required_skills scored only ~14/100, while unrelated or
-    # empty-skills profiles reliably score 0. A higher threshold (e.g. 20)
-    # silently excluded genuine matches — exactly the reported "no
-    # notifications are being sent" symptom.
-    MATCH_THRESHOLD = 5
-    candidates = JobseekerProfile.query.filter_by(is_verified_by_staff=True).limit(500).all()
-    matched = [(p, score) for p, score in rank_jobseekers_for_vacancy(vacancy, candidates) if score >= MATCH_THRESHOLD]
-    for profile, _score in matched:
-        notify_user(
-            profile.user_id, "vacancy_published", "New Job Opportunity!",
-            f"{vacancy.title} at {company.company_name} has just been posted. Click to view and apply.",
-            link=f"/jobseeker/jobs/{vacancy.id}", socket_event="vacancy:published",
-            socket_payload={"vacancy_id": str(vacancy.id), "title": vacancy.title, "company_name": company.company_name},
-        )
-        send_new_vacancy_email(User.query.get(profile.user_id).email, profile.full_name, vacancy, company)
-    # Broad, unpersisted ping so anyone currently browsing the Jobs list sees
-    # the new posting live, regardless of whether they matched.
-    notify_role("jobseeker", "vacancy:new", {"vacancy_id": str(vacancy.id), "title": vacancy.title})
+    notify_jobseekers_of_new_vacancy(vacancy, company)
 
     return ok(vacancy.to_dict(), "Vacancy published.")
+
+
+@vacancies_bp.put("/<vacancy_id>/jobfair")
+@jwt_required()
+@role_required("employer")
+def assign_vacancy_jobfair(vacancy_id):
+    """"Include in Job Fair" — tags/untags a published vacancy so it appears
+    on the Jobseeker Job Fair page under this company, instead of creating a
+    duplicate vacancy. Requires a confirmed booth for that fair."""
+    company = _company()
+    vacancy = Vacancy.query.get(vacancy_id)
+    if not vacancy or not company or vacancy.employer_company_id != company.id or vacancy.deleted_at:
+        return fail("Vacancy not found.", 404)
+    if vacancy.status != "published":
+        return fail("Only published vacancies can be included in a job fair.", 400)
+
+    data = request.get_json(force=True) or {}
+    jobfair_id = data.get("jobfair_id") or None
+    if jobfair_id:
+        booth = JobFairBooth.query.filter_by(jobfair_id=jobfair_id, employer_company_id=company.id, status="confirmed").first()
+        if not booth:
+            return fail("Your booth for that job fair must be confirmed before assigning vacancies.", 403)
+
+    before = {"tagged_for_jobfair_id": str(vacancy.tagged_for_jobfair_id) if vacancy.tagged_for_jobfair_id else None}
+    vacancy.tagged_for_jobfair_id = jobfair_id
+    db.session.commit()
+    log_audit(
+        User.query.get(company.user_id), "Update", "vacancies", vacancy.id, "Job fair assignment changed",
+        before=before, after={"tagged_for_jobfair_id": jobfair_id},
+    )
+    message = "Vacancy included in the job fair." if jobfair_id else "Vacancy removed from the job fair."
+    return ok(vacancy.to_dict(), message)
 
 
 @vacancies_bp.post("/<vacancy_id>/close")

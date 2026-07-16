@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Download, FileText, Send } from 'lucide-react'
 import { useState } from 'react'
@@ -15,20 +16,26 @@ import { Dialog, DialogContent } from '../../components/ui/Dialog'
 import { Input, Label, Select, Textarea } from '../../components/ui/Input'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { TimePicker } from '../../components/ui/TimePicker'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
 import { cn } from '../../lib/utils'
 
-/** Splits/joins a datetime-local string ("yyyy-mm-ddThh:mm") into its date
- * ("yyyy-mm-dd") and time ("hh:mm") parts for the DatePicker + time Input pair. */
+dayjs.extend(customParseFormat)
+
+/** Splits/joins a datetime-local string ("yyyy-mm-ddThh:mm", 24-hour — the
+ * format the backend stores/parses) into its date ("yyyy-mm-dd") part and a
+ * time part in TimePicker's 12-hour "h:mm AM/PM" display format. */
 function splitScheduledDate(value) {
-  const [date = '', time = ''] = (value || '').split('T')
+  const [date = '', time24 = ''] = (value || '').split('T')
+  const time = time24 ? dayjs(time24, 'HH:mm').format('h:mm A') : ''
   return { date, time }
 }
 function joinScheduledDate(date, time) {
   if (!date) return ''
-  return `${date}T${time || '00:00'}`
+  const time24 = time ? dayjs(time, 'h:mm A').format('HH:mm') : '00:00'
+  return `${date}T${time24}`
 }
 
 /* Mirrors the backend transition map (services/application_status_service.py) so we
@@ -506,13 +513,12 @@ export default function EmployerApplicantDetail() {
               </div>
               <div>
                 <Label>Time</Label>
-                <Input
-                  type="time"
+                <TimePicker
                   value={splitScheduledDate(interviewForm.scheduled_date).time}
-                  onChange={(e) =>
+                  onChange={(time) =>
                     setInterviewForm({
                       ...interviewForm,
-                      scheduled_date: joinScheduledDate(splitScheduledDate(interviewForm.scheduled_date).date, e.target.value),
+                      scheduled_date: joinScheduledDate(splitScheduledDate(interviewForm.scheduled_date).date, time),
                     })
                   }
                 />

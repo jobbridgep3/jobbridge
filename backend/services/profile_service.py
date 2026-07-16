@@ -16,7 +16,8 @@ SINGLE_INSTANCE_DOCUMENT_TYPES = tuple(t for t in DOCUMENT_TYPES if t != "traini
 
 PROFILE_SCALAR_FIELDS = (
     "full_name", "contact_number", "date_of_birth", "gender", "civil_status", "nationality",
-    "barangay", "municipality", "province", "employment_status", "preferred_job_position",
+    "barangay", "municipality", "province", "region_code", "region_name", "zip_code",
+    "employment_status", "preferred_job_position",
     "preferred_industry", "preferred_work_location", "expected_salary", "employment_type",
     "technical_skills", "soft_skills", "languages_spoken", "certifications",
 )

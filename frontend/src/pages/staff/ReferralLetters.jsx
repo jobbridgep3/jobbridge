@@ -79,8 +79,13 @@ export default function StaffReferralLetters() {
         <div className="flex justify-end gap-2">
           {row.original.status === 'requested' && (
             <>
-              <Button size="sm" onClick={() => approve.mutate(row.original.id)} disabled={approve.isPending}>
-                <Check className="h-3.5 w-3.5" /> Approve
+              <Button
+                size="sm"
+                onClick={() => approve.mutate(row.original.id)}
+                disabled={approve.isPending && approve.variables === row.original.id}
+              >
+                <Check className="h-3.5 w-3.5" />
+                {approve.isPending && approve.variables === row.original.id ? 'Approving…' : 'Approve'}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setRejectTarget(row.original)}>
                 <X className="h-3.5 w-3.5" /> Reject
@@ -142,10 +147,10 @@ export default function StaffReferralLetters() {
               <Button
                 variant="danger"
                 size="sm"
-                disabled={!rejectReason.trim() || reject.isPending}
+                disabled={!rejectReason.trim() || (reject.isPending && reject.variables?.id === rejectTarget?.id)}
                 onClick={() => reject.mutate({ id: rejectTarget.id, reason: rejectReason.trim() })}
               >
-                Reject Request
+                {reject.isPending && reject.variables?.id === rejectTarget?.id ? 'Rejecting…' : 'Reject Request'}
               </Button>
             </div>
           </div>

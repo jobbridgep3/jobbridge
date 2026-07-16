@@ -71,7 +71,7 @@ export default function JobseekerJobFairDetail() {
       </Link>
 
       <Card className="overflow-hidden">
-        {fair.banner_url && <img src={fair.banner_url} alt={fair.name} className="max-h-56 w-full object-cover" />}
+        {fair.banner_url && <img src={fair.banner_url} alt={fair.name} className="aspect-[16/9] w-full bg-slate-100 object-contain" />}
         <CardContent className="space-y-5">
           <div>
             <h1 className="text-xl font-semibold text-slate-900">{fair.name}</h1>

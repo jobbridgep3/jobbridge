@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
-import { Archive, Download, FileBarChart, FileDown, ImagePlus, Pencil, Plus, QrCode, Send, Trash2, XCircle } from 'lucide-react'
+import { Archive, Check, Download, FileBarChart, FileDown, ImagePlus, Pencil, Plus, QrCode, Send, Store, Trash2, X, XCircle } from 'lucide-react'
 import { useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
@@ -55,6 +55,109 @@ function fairToForm(fair) {
   }
 }
 
+function BoothsDialog({ fair, onClose }) {
+  const queryClient = useQueryClient()
+  const [remarksTarget, setRemarksTarget] = useState(null) // { booth, action: 'reject' | 'suspend' }
+  const [remarks, setRemarks] = useState('')
+
+  const { data: detail, isLoading } = useQuery({
+    queryKey: ['jobfair', fair.id, 'detail'],
+    queryFn: async () => (await api.get(`/api/jobfair/${fair.id}`)).data.data,
+  })
+  const booths = detail?.booths || []
+
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['jobfair', fair.id, 'detail'] })
+    queryClient.invalidateQueries({ queryKey: ['jobfair'] })
+  }
+
+  const review = useMutation({
+    mutationFn: ({ boothId, action, reason }) =>
+      api.put(`/api/staff/jobfair/${fair.id}/booths/${boothId}/${action}`, reason ? { remarks: reason } : undefined),
+    onSuccess: (res) => {
+      toast.success(res.data?.message || 'Booth updated.')
+      setRemarksTarget(null)
+      setRemarks('')
+      refresh()
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not update booth.'),
+  })
+
+  const isRowPending = (boothId) => review.isPending && review.variables?.boothId === boothId
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent title={`Manage Booths — ${fair.name}`} className="max-w-2xl">
+        {isLoading ? (
+          <CardSkeleton />
+        ) : !booths.length ? (
+          <p className="py-4 text-center text-sm text-slate-500">No booth requests for this job fair yet.</p>
+        ) : (
+          <div className="max-h-[65vh] space-y-2 overflow-y-auto pr-1">
+            {booths.map((b) => (
+              <div key={b.id} className="rounded-lg border border-slate-200 p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">{b.company_name}</p>
+                    <p className="text-xs text-slate-500">{b.booth_name}</p>
+                  </div>
+                  <StatusBadge status={b.status} />
+                </div>
+                {b.review_remarks && <p className="mt-1 text-xs text-red-600">Reason: {b.review_remarks}</p>}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {b.status === 'pending' && (
+                    <>
+                      <Button size="sm" disabled={isRowPending(b.id)} onClick={() => review.mutate({ boothId: b.id, action: 'approve' })}>
+                        <Check className="h-3.5 w-3.5" /> {isRowPending(b.id) ? 'Approving…' : 'Approve'}
+                      </Button>
+                      <Button size="sm" variant="danger" onClick={() => setRemarksTarget({ booth: b, action: 'reject' })}>
+                        <X className="h-3.5 w-3.5" /> Reject
+                      </Button>
+                    </>
+                  )}
+                  {b.status === 'confirmed' && (
+                    <Button size="sm" variant="danger" onClick={() => setRemarksTarget({ booth: b, action: 'suspend' })}>
+                      <X className="h-3.5 w-3.5" /> Suspend
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+
+      <Dialog open={!!remarksTarget} onOpenChange={(open) => !open && setRemarksTarget(null)}>
+        <DialogContent title={remarksTarget?.action === 'reject' ? 'Reject Booth Request' : 'Suspend Booth'}>
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">
+              {remarksTarget?.action === 'reject' ? 'Rejecting' : 'Suspending'} the booth for <b>{remarksTarget?.booth.company_name}</b>.
+              The employer will be notified with your reason.
+            </p>
+            <div>
+              <Label>Reason</Label>
+              <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Why is this booth being rejected/suspended?" />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setRemarksTarget(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={!remarks.trim() || isRowPending(remarksTarget?.booth.id)}
+                onClick={() => review.mutate({ boothId: remarksTarget.booth.id, action: remarksTarget.action, reason: remarks.trim() })}
+              >
+                {isRowPending(remarksTarget?.booth.id) ? 'Submitting…' : remarksTarget?.action === 'reject' ? 'Reject Booth' : 'Suspend Booth'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </Dialog>
+  )
+}
+
 export default function StaffJobFair({ basePath = '/staff' }) {
   const queryClient = useQueryClient()
   const [statusTab, setStatusTab] = useState('')
@@ -71,7 +174,7 @@ export default function StaffJobFair({ basePath = '/staff' }) {
   })
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['jobfair'] })
-  useSocket({ 'jobfair:qr_scanned': refresh })
+  useSocket({ 'jobfair:qr_scanned': refresh, 'jobfair:booth_requested': refresh })
 
   const saveFair = useMutation({
     mutationFn: () => (editing ? api.put(`/api/staff/jobfair/${editing.id}`, form) : api.post('/api/staff/jobfair', form)),
@@ -109,6 +212,7 @@ export default function StaffJobFair({ basePath = '/staff' }) {
   }
 
   const [reportsFair, setReportsFair] = useState(null)
+  const [boothsFair, setBoothsFair] = useState(null)
 
   const downloadReport = async (fairId, type, format) => {
     try {
@@ -183,7 +287,7 @@ export default function StaffJobFair({ basePath = '/staff' }) {
           {fairs.map((fair) => (
             <motion.div key={fair.id} variants={staggerItem}>
               <Card className="overflow-hidden">
-                {fair.banner_url && <img src={fair.banner_url} alt={fair.name} className="h-32 w-full object-cover" />}
+                {fair.banner_url && <img src={fair.banner_url} alt={fair.name} className="aspect-[16/9] w-full bg-slate-100 object-contain" />}
                 <CardContent>
                   <div className="mb-2 flex items-start justify-between gap-2">
                     <h3 className="text-sm font-semibold text-slate-900">{fair.name}</h3>
@@ -252,6 +356,11 @@ export default function StaffJobFair({ basePath = '/staff' }) {
                     {fair.status !== 'draft' && (
                       <Button size="sm" variant="secondary" onClick={() => setReportsFair(fair)}>
                         <FileBarChart className="h-3.5 w-3.5" /> Reports
+                      </Button>
+                    )}
+                    {fair.status !== 'draft' && (
+                      <Button size="sm" variant="secondary" onClick={() => setBoothsFair(fair)}>
+                        <Store className="h-3.5 w-3.5" /> Manage Booths
                       </Button>
                     )}
                   </div>
@@ -367,6 +476,8 @@ export default function StaffJobFair({ basePath = '/staff' }) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {boothsFair && <BoothsDialog fair={boothsFair} onClose={() => setBoothsFair(null)} />}
 
       <ConfirmDialog
         open={!!confirm}

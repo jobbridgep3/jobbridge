@@ -244,6 +244,8 @@ export default function StaffJobseekerDetail({ basePath = '/staff' }) {
               {row('Civil Status', profile.civil_status)}
               {row('Nationality', profile.nationality)}
               <div className="col-span-2 sm:col-span-4">{row('Address', profile.address)}</div>
+              {row('Region', profile.region_name)}
+              {row('ZIP Code', profile.zip_code)}
             </div>
           )}
         </CardContent>
@@ -378,7 +380,23 @@ export default function StaffJobseekerDetail({ basePath = '/staff' }) {
             <CardHeader>
               <CardTitle>Applications</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-4">
+              {profile.application_stats && (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  {[
+                    ['Total', profile.application_stats.total],
+                    ['Active', profile.application_stats.active],
+                    ['Interviews', profile.application_stats.interviews],
+                    ['Hired', profile.application_stats.hired],
+                    ['Rejected', profile.application_stats.rejected],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-center">
+                      <p className="text-lg font-semibold text-slate-900">{value}</p>
+                      <p className="text-xs text-slate-500">{label}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
               {!profile.applications?.length ? (
                 <p className="text-sm text-slate-400">No applications submitted.</p>
               ) : (

@@ -6,7 +6,7 @@ from extensions import db
 from models.base import BaseModel
 
 JOBFAIR_STATUSES = ("draft", "published", "ongoing", "completed", "cancelled", "archived")
-BOOTH_STATUSES = ("pending", "confirmed", "cancelled")
+BOOTH_STATUSES = ("pending", "confirmed", "cancelled", "rejected", "suspended")
 
 
 class JobFair(BaseModel):
@@ -96,13 +96,17 @@ class JobFairBooth(BaseModel):
 
     jobfair_id = db.Column(UUID(as_uuid=True), db.ForeignKey("jobfairs.id"), nullable=False)
     employer_company_id = db.Column(UUID(as_uuid=True), db.ForeignKey("employer_companies.id"), nullable=False)
-    status = db.Column(db.String(20), default="confirmed", nullable=False)
+    status = db.Column(db.String(20), default="pending", nullable=False)
     booth_name = db.Column(db.String(255), nullable=True)
     description = db.Column(db.Text, nullable=True)
     materials = db.Column(db.JSON, default=list)  # [{"name": ..., "url": ...}] banners / promo files
+    review_remarks = db.Column(db.Text, nullable=True)
+    reviewed_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=True)
+    reviewed_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     jobfair = db.relationship("JobFair", back_populates="booths")
     employer_company = db.relationship("EmployerCompany")
+    reviewed_by_user = db.relationship("User", foreign_keys=[reviewed_by])
 
     __table_args__ = (
         db.UniqueConstraint("jobfair_id", "employer_company_id", name="uq_jobfair_employer"),
@@ -121,4 +125,7 @@ class JobFairBooth(BaseModel):
             "booth_name": self.booth_name,
             "description": self.description,
             "materials": self.materials or [],
+            "review_remarks": self.review_remarks,
+            "reviewed_at": self.reviewed_at.isoformat() if self.reviewed_at else None,
+            "reviewed_by_name": self.reviewed_by_user.email if self.reviewed_by_user else None,
         }

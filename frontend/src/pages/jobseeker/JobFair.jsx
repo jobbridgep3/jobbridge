@@ -87,7 +87,7 @@ export default function JobseekerJobFair() {
               <motion.div key={fair.id} variants={staggerItem}>
                 <Card hover className="overflow-hidden">
                   <Link to={`/jobseeker/jobfair/${fair.id}`} className="block">
-                    {fair.banner_url && <img src={fair.banner_url} alt={fair.name} className="h-28 w-full object-cover" />}
+                    {fair.banner_url && <img src={fair.banner_url} alt={fair.name} className="aspect-[16/9] w-full bg-slate-100 object-contain" />}
                     <div className="p-5">
                       <div className="mb-2 flex items-start justify-between gap-2">
                         <h3 className="text-sm font-semibold text-slate-900">{fair.name}</h3>

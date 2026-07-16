@@ -13,12 +13,13 @@ from models.employer import COMPANY_MANDATORY_DOCUMENT_TYPES, EmployerCompany, E
 from models.employer_hr import EmployerHRDocument, EmployerHRProfile
 from models.employment import EmploymentRecord
 from models.interview import Interview
-from models.jobseeker import JobseekerProfile
+from models.jobseeker import DOCUMENT_TYPE_LABELS, DOCUMENT_TYPES, JobseekerProfile
 from models.program import ProgramApplication
 from models.referral import ReferralLetter
 from models.user import User
 from models.vacancy import Vacancy
 from schemas.jobseeker_schemas import ProfileUpdateSchema
+from services.application_stats_service import bucket_application_stats
 from services.audit_service import log_audit
 from services.dashboard_service import (
     build_analytics,
@@ -41,6 +42,7 @@ from services.profile_completion_service import COMPANY_REQUIRED_FIELDS, compute
 from services.profile_service import apply_document_upload, apply_profile_update, find_document
 from services.storage_service import upload_file
 from services.user_deletion_service import employer_dependent_counts, jobseeker_dependent_counts
+from services.vacancy_notification_service import notify_jobseekers_of_new_vacancy
 from services.vacancy_query_service import build_vacancy_query
 from services.vacancy_state_service import can_transition
 from sockets.events import emit_to_role
@@ -138,7 +140,9 @@ def get_jobseeker(profile_id):
     user = User.query.get(profile.user_id)
     result = profile.to_dict(include_email=user.email)
     result["is_active"] = user.is_active
-    result["applications"] = [a.to_dict() for a in Application.query.filter_by(jobseeker_profile_id=profile.id).all()]
+    applications = Application.query.filter_by(jobseeker_profile_id=profile.id).all()
+    result["applications"] = [a.to_dict() for a in applications]
+    result["application_stats"] = bucket_application_stats(applications)
     return ok(result)
 
 
@@ -245,9 +249,14 @@ def delete_jobseeker(profile_id):
 
 
 JOBSEEKER_EXPORT_COLUMNS = [
-    "Full Name", "Email", "Contact Number", "Address", "Barangay", "Municipality", "Province",
-    "Date Registered", "Highest Educational Attainment", "Technical Skills", "Soft Skills", "Certifications",
-    "Employment Status", "Resume Status", "Verification Status", "Active Status", "Profile Completion",
+    "Full Name", "Email", "Contact Number", "Date of Birth", "Age", "Gender", "Civil Status", "Nationality",
+    "Address", "Barangay", "Municipality", "Province", "Region", "ZIP Code",
+    "Date Registered", "Highest Educational Attainment",
+    "Employment Status", "Preferred Job Position", "Preferred Industry", "Preferred Work Location",
+    "Expected Salary", "Technical Skills", "Soft Skills", "Languages Spoken", "Certifications", "Tags",
+    "Resume Status", *[f"{DOCUMENT_TYPE_LABELS[dt]} Status" for dt in DOCUMENT_TYPES],
+    "Verification Status", "Active Status", "Profile Completion",
+    "Total Applications", "Interviews", "Hired", "Rejected", "Active Applications",
 ]
 
 
@@ -287,15 +296,25 @@ def _jobseeker_export_rows(args):
     rows = []
     for p, u in _jobseeker_export_query(args).all():
         highest_education = max(p.educations, key=lambda e: e.graduation_year or 0).attainment_level if p.educations else ""
+        uploaded_types = {d.document_type for d in p.documents}
+        applications = Application.query.filter_by(jobseeker_profile_id=p.id).all()
+        stats = bucket_application_stats(applications)
         rows.append([
-            p.full_name, u.email, p.contact_number or "", p.address or "",
-            p.barangay or "", p.municipality or "", p.province or "",
+            p.full_name, u.email, p.contact_number or "",
+            p.date_of_birth.isoformat() if p.date_of_birth else "", p.age() if p.age() is not None else "",
+            p.gender or "", p.civil_status or "", p.nationality or "",
+            p.address or "", p.barangay or "", p.municipality or "", p.province or "", p.region_name or "", p.zip_code or "",
             p.created_at.strftime("%Y-%m-%d"), highest_education or "",
-            ", ".join(p.technical_skills or []), ", ".join(p.soft_skills or []), ", ".join(p.certifications or []),
-            p.employment_status or "", "Uploaded" if p.resume_url else "Not Uploaded",
+            p.employment_status or "", p.preferred_job_position or "", p.preferred_industry or "",
+            p.preferred_work_location or "", p.expected_salary or "",
+            ", ".join(p.technical_skills or []), ", ".join(p.soft_skills or []),
+            ", ".join(p.languages_spoken or []), ", ".join(p.certifications or []), ", ".join(p.tags or []),
+            "Uploaded" if p.resume_url else "Not Uploaded",
+            *["Uploaded" if dt in uploaded_types else "Not Uploaded" for dt in DOCUMENT_TYPES],
             "Verified" if p.is_verified_by_staff else "Unverified",
             "Active" if u.is_active else "Inactive",
             f"{p.profile_completion()}%",
+            stats["total"], stats["interviews"], stats["hired"], stats["rejected"], stats["active"],
         ])
     return rows
 
@@ -992,6 +1011,9 @@ def reactivate_vacancy(vacancy_id):
     notify_user(vacancy.employer_company.user_id, "vacancy_reactivated", "Vacancy Reactivated",
                 f"{vacancy.title} has been reactivated and is published again.",
                 socket_event="vacancy:approved", socket_payload={"vacancy_id": str(vacancy.id)})
+    # Reactivation makes the vacancy newly visible again, same as a fresh
+    # publish from the jobseeker's perspective — re-run matching/notify/email.
+    notify_jobseekers_of_new_vacancy(vacancy, vacancy.employer_company)
     log_audit(User.query.get(get_jwt_identity()), "Update", "vacancies", vacancy.id, "Reactivated", before=before, after=after)
     return ok(vacancy.to_dict(), "Vacancy reactivated.")
 
@@ -1129,6 +1151,9 @@ def staff_create_vacancy():
     db.session.add(vacancy)
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Create", "vacancies", vacancy.id, "Manual walk-in vacancy entry")
+    company = EmployerCompany.query.get(company_id)
+    if company:
+        notify_jobseekers_of_new_vacancy(vacancy, company)
     return ok(vacancy.to_dict(), "Vacancy added.", 201)
 
 

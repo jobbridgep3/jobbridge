@@ -38,6 +38,9 @@ class JobseekerProfile(BaseModel):
     barangay = db.Column(db.String(150), nullable=True)
     municipality = db.Column(db.String(150), nullable=True)
     province = db.Column(db.String(150), nullable=True)
+    region_code = db.Column(db.String(10), nullable=True)
+    region_name = db.Column(db.String(150), nullable=True)
+    zip_code = db.Column(db.String(10), nullable=True)
     profile_picture_url = db.Column(db.String(1000), nullable=True)
 
     # Employment Information
@@ -105,6 +108,9 @@ class JobseekerProfile(BaseModel):
             "barangay": self.barangay,
             "municipality": self.municipality,
             "province": self.province,
+            "region_code": self.region_code,
+            "region_name": self.region_name,
+            "zip_code": self.zip_code,
             "profile_picture_url": self.profile_picture_url,
             "employment_status": self.employment_status,
             "preferred_job_position": self.preferred_job_position,

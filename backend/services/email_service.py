@@ -345,6 +345,40 @@ def send_jobfair_update_email(to: str, fair_name: str, change_summary: str):
     return send_email(to, f"Job fair update — {fair_name}", html)
 
 
+def send_jobfair_booth_status_email(to: str, company_name: str, fair_name: str, status: str, remarks: str | None = None):
+    url = f"{current_app.config['FRONTEND_URL']}/employer/jobfair"
+    if status == "confirmed":
+        subject = f"Booth confirmed — {fair_name}"
+        body = f"""
+        <p>Hi {company_name},</p>
+        <p>Your booth request for <b>{fair_name}</b> has been <b>approved</b> by PESO Pila, Laguna.</p>
+        <p>You can now assign your approved vacancies to this job fair from your Job Fair page.</p>
+        """
+    elif status == "rejected":
+        subject = f"Booth request update — {fair_name}"
+        body = f"""
+        <p>Hi {company_name},</p>
+        <p>Your booth request for <b>{fair_name}</b> was <b>not approved</b> by PESO Pila, Laguna.</p>
+        {f"<p><b>Reason:</b> {remarks}</p>" if remarks else ""}
+        """
+    else:  # suspended
+        subject = f"Booth suspended — {fair_name}"
+        body = f"""
+        <p>Hi {company_name},</p>
+        <p>Your booth for <b>{fair_name}</b> has been <b>suspended</b> by PESO Pila, Laguna.</p>
+        {f"<p><b>Reason:</b> {remarks}</p>" if remarks else ""}
+        """
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Job Fair Booth Update</h2>
+      {body}
+      <p><a href="{url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">View Job Fair</a></p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, subject, html)
+
+
 def send_employment_status_email(to: str, full_name: str, position: str, employer_name: str, status_label: str, note: str | None = None):
     url = f"{current_app.config['FRONTEND_URL']}/jobseeker/employment"
     html = f"""
