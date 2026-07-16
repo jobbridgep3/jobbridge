@@ -32,15 +32,30 @@ class Config:
     # --- Database (SQLAlchemy -> Supabase Postgres via session pooler) ---
     SQLALCHEMY_DATABASE_URI = _require("DATABASE_URL")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    # NOTE: do not set "poolclass" here. Flask-SQLAlchemy merges this dict onto
-    # extensions.py's `engine_options` via dict.update(), so any "poolclass" key here
-    # — even explicit None — clobbers extensions.py's NullPool. SQLAlchemy's
-    # create_engine() treats poolclass=None as "unspecified" and silently falls back
-    # to the default QueuePool(pool_size=5, max_overflow=10): up to 15 real
-    # connections from this ONE worker process alone, which was exactly exhausting
-    # Supabase's session-pooler budget (error: "max clients ... pool_size: 15").
+    # Single source of truth for pool config — extensions.py no longer sets any
+    # engine_options of its own, so there's no dict-merge ambiguity. History:
+    # (1) an earlier incident had a bare "poolclass": None here, which SQLAlchemy
+    #     treats as "unspecified" and silently falls back to QueuePool's defaults
+    #     (pool_size=5, max_overflow=10) = up to 15 connections from this ONE
+    #     worker alone, exhausting Supabase's 15-connection session-pooler cap by
+    #     itself.
+    # (2) the fix for that moved to NullPool (every checkout opens a brand-new
+    #     connection), which has NO client-side ceiling at all — it relies
+    #     entirely on Supabase's pooler to reject connection #16 rather than
+    #     queue, so any burst of concurrent DB-touching work (e.g. several
+    #     APScheduler jobs firing in the same instant, see scheduler.py) could
+    #     still blow past 15 and crash ordinary requests with EMAXCONNSESSION.
+    # This bounded pool fixes both: a real ceiling (well under 15, leaving
+    # headroom for scheduler bursts) *and* a timeout so requests queue briefly
+    # instead of erroring instantly. Tune pool_size/max_overflow up if Render
+    # logs show "QueuePool limit ... reached, connection timed out"; tune down
+    # if EMAXCONNSESSION still appears.
     SQLALCHEMY_ENGINE_OPTIONS = {
-        "pool_pre_ping": True,
+        "pool_size": 5,
+        "max_overflow": 3,       # 8-connection ceiling for this one worker
+        "pool_timeout": 10,      # queue up to 10s for a free connection instead of erroring instantly
+        "pool_pre_ping": True,   # detect stale connections
+        "pool_recycle": 280,     # recycle before Supabase's idle/statement timeout
     }
 
     # --- JWT ---

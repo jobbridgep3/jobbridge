@@ -177,28 +177,33 @@ def init_scheduler(app):
         lambda: _generate_monthly_lmi_report(app),
         trigger="cron", day=1, hour=0, id="monthly_lmi_report", replace_existing=True,
     )
+    # Distinct minute per job (rather than trigger="interval", hours=1 for all of
+    # them) — interval jobs added within microseconds of each other at boot all
+    # compute the same first-fire time, so they used to fire simultaneously every
+    # hour: 6 concurrent DB sessions at once, on top of ordinary request traffic,
+    # was a direct contributor to the EMAXCONNSESSION connection-pool crash.
     scheduler.add_job(
         lambda: _auto_publish_vacancies(app),
-        trigger="interval", hours=1, id="auto_publish_vacancies", replace_existing=True,
+        trigger="cron", minute=0, id="auto_publish_vacancies", replace_existing=True,
     )
     scheduler.add_job(
         lambda: _auto_close_vacancies(app),
-        trigger="interval", hours=1, id="auto_close_vacancies", replace_existing=True,
+        trigger="cron", minute=10, id="auto_close_vacancies", replace_existing=True,
     )
     scheduler.add_job(
         lambda: _send_interview_reminders(app),
-        trigger="interval", hours=1, id="send_interview_reminders", replace_existing=True,
+        trigger="cron", minute=20, id="send_interview_reminders", replace_existing=True,
     )
     scheduler.add_job(
         lambda: _advance_jobfair_statuses(app),
-        trigger="interval", hours=1, id="advance_jobfair_statuses", replace_existing=True,
+        trigger="cron", minute=30, id="advance_jobfair_statuses", replace_existing=True,
     )
     scheduler.add_job(
         lambda: _auto_publish_scheduled_announcements(app),
-        trigger="interval", hours=1, id="auto_publish_scheduled_announcements", replace_existing=True,
+        trigger="cron", minute=40, id="auto_publish_scheduled_announcements", replace_existing=True,
     )
     scheduler.add_job(
         lambda: _auto_archive_expired_announcements(app),
-        trigger="interval", hours=1, id="auto_archive_expired_announcements", replace_existing=True,
+        trigger="cron", minute=50, id="auto_archive_expired_announcements", replace_existing=True,
     )
     scheduler.start()

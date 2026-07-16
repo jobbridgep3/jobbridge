@@ -4,11 +4,16 @@ from flask_limiter import Limiter
 from flask_migrate import Migrate
 from flask_socketio import SocketIO
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.pool import NullPool
 
 from utils.client_ip import get_client_ip
 
-db = SQLAlchemy(engine_options={"poolclass": NullPool, "pool_pre_ping": True})
+# No hardcoded engine_options here — Config.SQLALCHEMY_ENGINE_OPTIONS (config.py)
+# is the single source of truth for pool settings. Flask-SQLAlchemy dict-merges
+# whatever's passed here with app.config, so splitting pool config across both
+# files is exactly what caused two prior incidents (a poolclass=None override
+# silently reverting to QueuePool defaults, then NullPool having no connection
+# ceiling at all) — see config.py for the full story and current settings.
+db = SQLAlchemy()
 migrate = Migrate()
 jwt = JWTManager()
 cors = CORS()
