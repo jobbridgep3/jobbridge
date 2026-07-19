@@ -153,7 +153,14 @@ export default function EmployerEmployment() {
           <button
             key={t.key}
             type="button"
-            onClick={() => setStatusTab(t.key)}
+            // Deferred to a fresh macrotask: setting this synchronously, in the
+            // same tick as the click, re-renders DataTable's isLoading/rows in
+            // the same commit as the click event and can hang the tab
+            // indefinitely (verified via a live reproduction — no console
+            // error, since it isn't a React render loop). Same underlying
+            // class of issue as DatePicker.jsx's onSelect; see its comment for
+            // the mechanism confirmed there.
+            onClick={() => setTimeout(() => setStatusTab(t.key), 0)}
             className={cn(
               'rounded-md px-3 py-1.5 text-xs font-medium',
               statusTab === t.key ? 'bg-primary-800 text-white' : 'text-slate-600 hover:bg-slate-100',
