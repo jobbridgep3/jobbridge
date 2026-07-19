@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
 import { Check, Download, X } from 'lucide-react'
@@ -25,6 +25,7 @@ export default function StaffReferralLetters() {
   const { data: letters, isLoading } = useQuery({
     queryKey: ['staff', 'referral-letters', statusFilter],
     queryFn: async () => (await api.get('/api/staff/referral-letters', { params })).data.data,
+    placeholderData: keepPreviousData,
   })
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['staff', 'referral-letters'] })

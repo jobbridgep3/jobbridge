@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
 import { Download, FileDown } from 'lucide-react'
@@ -27,6 +27,7 @@ export default function StaffInterviews() {
   const { data: interviews, isLoading } = useQuery({
     queryKey: ['staff', 'interviews', activeParams],
     queryFn: async () => (await api.get('/api/staff/interviews', { params: activeParams })).data.data,
+    placeholderData: keepPreviousData,
   })
 
   const columns = [
