@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 import api from '../lib/axios'
+import { useAuthStore } from './authStore'
 
 // Source of truth for the *choice* ('light'/'dark'/'system') is the raw
 // 'jobbridge-theme' localStorage key — not zustand's own persist blob —
@@ -49,6 +50,9 @@ export const useUiStore = create(
         localStorage.setItem('jobbridge-theme', theme)
         applyTheme(resolvedTheme)
         set({ theme, resolvedTheme })
+        // Keep authStore's cached user in sync so a stale theme_preference
+        // doesn't get force-reapplied by ThemeInitializer on the next refresh.
+        useAuthStore.getState().updateUser({ theme_preference: theme })
         if (persistToServer) {
           api.put('/api/settings/theme', { theme }).catch(() => {})
         }

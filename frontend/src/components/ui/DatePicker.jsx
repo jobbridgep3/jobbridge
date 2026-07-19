@@ -2,6 +2,7 @@ import * as PopoverPrimitive from '@radix-ui/react-popover'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
 import { CalendarDays } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { DayPicker } from 'react-day-picker'
 import 'react-day-picker/style.css'
 
@@ -51,15 +52,19 @@ function toIso(date) {
  * (same shape native <input type="date"> used) so it's a drop-in replacement.
  */
 export function DatePicker({ value, onChange, minDate, maxDate, placeholder = 'Select date', disabled, className }) {
-  const selected = toDate(value)
-  const min = toDate(minDate)
-  const max = toDate(maxDate)
-  const matcher = []
-  if (min) matcher.push({ before: min })
-  if (max) matcher.push({ after: max })
+  const [open, setOpen] = useState(false)
+  const selected = useMemo(() => toDate(value), [value])
+  const matcher = useMemo(() => {
+    const min = toDate(minDate)
+    const max = toDate(maxDate)
+    const m = []
+    if (min) m.push({ before: min })
+    if (max) m.push({ after: max })
+    return m.length ? m : undefined
+  }, [minDate, maxDate])
 
   return (
-    <PopoverPrimitive.Root>
+    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
       <PopoverPrimitive.Trigger asChild>
         <button
           type="button"
@@ -84,8 +89,8 @@ export function DatePicker({ value, onChange, minDate, maxDate, placeholder = 'S
               endMonth={new Date(new Date().getFullYear() + 10, 11)}
               selected={selected}
               defaultMonth={selected}
-              onSelect={(date) => onChange(toIso(date))}
-              disabled={matcher.length ? matcher : undefined}
+              onSelect={(date) => { onChange(toIso(date)); setOpen(false) }}
+              disabled={matcher}
               classNames={dayPickerClassNames}
             />
           </motion.div>

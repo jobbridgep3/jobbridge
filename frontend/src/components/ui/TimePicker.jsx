@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { dropdownMenu } from '../../lib/motion'
 import { cn } from '../../lib/utils'
+import { Button } from './Button'
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 1)
 const MINUTES = ['00', '15', '30', '45']
@@ -43,6 +44,7 @@ export function TimePicker({ value, onChange, placeholder = 'Select time', disab
   // event handler rather than from inside a setParts() updater callback,
   // which React disallows (updater functions run during render and must be
   // side-effect-free).
+  const [open, setOpen] = useState(false)
   const [parts, setParts] = useState(() => parseTime(value))
   const partsRef = useRef(parts)
   const initializedRef = useRef(!!value)
@@ -68,7 +70,7 @@ export function TimePicker({ value, onChange, placeholder = 'Select time', disab
   }
 
   return (
-    <PopoverPrimitive.Root>
+    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
       <PopoverPrimitive.Trigger asChild>
         <button
           type="button"
@@ -85,32 +87,37 @@ export function TimePicker({ value, onChange, placeholder = 'Select time', disab
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content asChild align="start" sideOffset={6}>
-          <motion.div {...dropdownMenu} className="z-50 flex gap-2 rounded-lg border border-border bg-surface p-3 shadow-lg">
-            <select
-              value={parts.hour || ''}
-              onChange={(e) => update({ hour: Number(e.target.value) })}
-              className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-text-primary focus-visible:outline-2 focus-visible:outline-primary-500"
-            >
-              <option value="" disabled>Hr</option>
-              {HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
-            </select>
-            <select
-              value={parts.minute || ''}
-              onChange={(e) => update({ minute: e.target.value })}
-              className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-text-primary focus-visible:outline-2 focus-visible:outline-primary-500"
-            >
-              <option value="" disabled>Min</option>
-              {MINUTES.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-            <select
-              value={parts.period || ''}
-              onChange={(e) => update({ period: e.target.value })}
-              className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-text-primary focus-visible:outline-2 focus-visible:outline-primary-500"
-            >
-              <option value="" disabled>—</option>
-              <option value="AM">AM</option>
-              <option value="PM">PM</option>
-            </select>
+          <motion.div {...dropdownMenu} className="z-50 flex flex-col gap-2 rounded-lg border border-border bg-surface p-3 shadow-lg">
+            <div className="flex gap-2">
+              <select
+                value={parts.hour || ''}
+                onChange={(e) => update({ hour: Number(e.target.value) })}
+                className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-text-primary focus-visible:outline-2 focus-visible:outline-primary-500"
+              >
+                <option value="" disabled>Hr</option>
+                {HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
+              </select>
+              <select
+                value={parts.minute || ''}
+                onChange={(e) => update({ minute: e.target.value })}
+                className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-text-primary focus-visible:outline-2 focus-visible:outline-primary-500"
+              >
+                <option value="" disabled>Min</option>
+                {MINUTES.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+              <select
+                value={parts.period || ''}
+                onChange={(e) => update({ period: e.target.value })}
+                className="h-9 rounded-md border border-border bg-surface px-2 text-sm text-text-primary focus-visible:outline-2 focus-visible:outline-primary-500"
+              >
+                <option value="" disabled>—</option>
+                <option value="AM">AM</option>
+                <option value="PM">PM</option>
+              </select>
+            </div>
+            <Button type="button" size="sm" onClick={() => setOpen(false)} className="self-end">
+              Done
+            </Button>
           </motion.div>
         </PopoverPrimitive.Content>
       </PopoverPrimitive.Portal>

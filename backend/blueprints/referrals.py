@@ -82,7 +82,10 @@ def my_referral_letters():
 @jwt_required()
 @role_required("staff", "admin")
 def staff_list_referral_letters():
-    query = ReferralLetter.query
+    query = ReferralLetter.query.options(
+        db.joinedload(ReferralLetter.jobseeker_profile),
+        db.joinedload(ReferralLetter.vacancy).joinedload(Vacancy.employer_company),
+    )
     if request.args.get("status"):
         query = query.filter_by(status=request.args["status"])
     letters = query.order_by(ReferralLetter.created_at.desc()).all()
