@@ -94,7 +94,22 @@ export function DatePicker({ value, onChange, minDate, maxDate, placeholder = 'S
               endMonth={new Date(new Date().getFullYear() + 10, 11)}
               selected={selected}
               defaultMonth={selected}
-              onSelect={(date) => { onChange(toIso(date)); setOpen(false) }}
+              // react-day-picker's own day-click handler synchronously calls its
+              // internal setFocused(day) for roving-tabindex support, which
+              // schedules DayButton's useEffect to call day.focus(). If our
+              // onChange also updates the controlled `selected` prop in that
+              // same tick/commit, DayPicker's own focus-management effect and
+              // the fresh `selected` prop can enter a native focus/blur
+              // reentrancy loop that hangs the tab indefinitely — verified via
+              // a live reproduction; it produces no React warning since it's
+              // not a render loop, just raw DOM focus-event dispatch. Closing
+              // the popover first unmounts DayPicker before that effect can
+              // fire, and deferring onChange to a fresh macrotask keeps our
+              // state update from ever landing in the same commit as it.
+              onSelect={(date) => {
+                setOpen(false)
+                setTimeout(() => onChange(toIso(date)), 0)
+              }}
               disabled={matcher}
               classNames={dayPickerClassNames}
             />
