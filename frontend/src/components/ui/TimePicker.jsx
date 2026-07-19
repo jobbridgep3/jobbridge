@@ -1,11 +1,12 @@
 import * as PopoverPrimitive from '@radix-ui/react-popover'
 import { motion } from 'framer-motion'
 import { Clock } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 
 import { dropdownMenu } from '../../lib/motion'
 import { cn } from '../../lib/utils'
 import { Button } from './Button'
+import { DialogContainerContext } from './Dialog'
 
 const HOURS = Array.from({ length: 12 }, (_, i) => i + 1)
 const MINUTES = ['00', '15', '30', '45']
@@ -45,6 +46,7 @@ export function TimePicker({ value, onChange, placeholder = 'Select time', disab
   // which React disallows (updater functions run during render and must be
   // side-effect-free).
   const [open, setOpen] = useState(false)
+  const dialogContainer = useContext(DialogContainerContext)
   const [parts, setParts] = useState(() => parseTime(value))
   const partsRef = useRef(parts)
   const initializedRef = useRef(!!value)
@@ -85,7 +87,7 @@ export function TimePicker({ value, onChange, placeholder = 'Select time', disab
           <Clock className="h-4 w-4 shrink-0 text-text-muted" />
         </button>
       </PopoverPrimitive.Trigger>
-      <PopoverPrimitive.Portal>
+      <PopoverPrimitive.Portal container={dialogContainer || undefined}>
         <PopoverPrimitive.Content asChild align="start" sideOffset={6}>
           <motion.div {...dropdownMenu} className="z-50 flex flex-col gap-2 rounded-lg border border-border bg-surface p-3 shadow-lg">
             <div className="flex gap-2">

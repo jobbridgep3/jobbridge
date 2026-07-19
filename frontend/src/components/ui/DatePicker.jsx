@@ -3,12 +3,13 @@ import dayjs from 'dayjs'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { motion } from 'framer-motion'
 import { CalendarDays } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useContext, useMemo, useState } from 'react'
 import { DayPicker } from 'react-day-picker'
 import 'react-day-picker/style.css'
 
 import { dropdownMenu } from '../../lib/motion'
 import { cn } from '../../lib/utils'
+import { DialogContainerContext } from './Dialog'
 
 dayjs.extend(customParseFormat)
 
@@ -56,6 +57,7 @@ function toIso(date) {
  */
 export function DatePicker({ value, onChange, minDate, maxDate, placeholder = 'Select date', disabled, className }) {
   const [open, setOpen] = useState(false)
+  const dialogContainer = useContext(DialogContainerContext)
   const selected = useMemo(() => toDate(value), [value])
   const matcher = useMemo(() => {
     const min = toDate(minDate)
@@ -82,7 +84,7 @@ export function DatePicker({ value, onChange, minDate, maxDate, placeholder = 'S
           <CalendarDays className="h-4 w-4 shrink-0 text-text-muted" />
         </button>
       </PopoverPrimitive.Trigger>
-      <PopoverPrimitive.Portal>
+      <PopoverPrimitive.Portal container={dialogContainer || undefined}>
         <PopoverPrimitive.Content asChild align="start" sideOffset={6}>
           <motion.div {...dropdownMenu} className="z-50 rounded-lg border border-border bg-surface shadow-lg">
             <DayPicker

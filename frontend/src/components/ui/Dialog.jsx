@@ -1,6 +1,7 @@
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { motion } from 'framer-motion'
 import { X } from 'lucide-react'
+import { createContext, useState } from 'react'
 
 import { modalContent, modalOverlay } from '../../lib/motion'
 import { cn } from '../../lib/utils'
@@ -8,7 +9,17 @@ import { cn } from '../../lib/utils'
 export const Dialog = DialogPrimitive.Root
 export const DialogTrigger = DialogPrimitive.Trigger
 
+/** The nearest ancestor DialogContent's own DOM node, or null outside any
+ * Dialog. Radix Dialog's trapped FocusScope only recognizes focus targets
+ * that are DOM descendants of this node — a Popover (e.g. DatePicker/
+ * TimePicker) that portals to document.body by default lands outside it,
+ * so the Dialog keeps yanking focus back and fights the Popover's own
+ * interaction. Consumers that need a nested Popover/Select to actually work
+ * read this context and pass it as that Popover's Portal `container`. */
+export const DialogContainerContext = createContext(null)
+
 export function DialogContent({ className, children, title, description, ...props }) {
+  const [container, setContainer] = useState(null)
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay asChild>
@@ -16,6 +27,7 @@ export function DialogContent({ className, children, title, description, ...prop
       </DialogPrimitive.Overlay>
       <DialogPrimitive.Content asChild {...props}>
         <motion.div
+          ref={setContainer}
           {...modalContent}
           className={cn(
             'fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl bg-surface p-6 shadow-xl',
@@ -33,7 +45,7 @@ export function DialogContent({ className, children, title, description, ...prop
               <X className="h-4 w-4" />
             </DialogPrimitive.Close>
           </div>
-          {children}
+          <DialogContainerContext.Provider value={container}>{children}</DialogContainerContext.Provider>
         </motion.div>
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>

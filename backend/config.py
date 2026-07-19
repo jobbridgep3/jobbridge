@@ -50,13 +50,22 @@ class Config:
     # instead of erroring instantly. Tune pool_size/max_overflow up if Render
     # logs show "QueuePool limit ... reached, connection timed out"; tune down
     # if EMAXCONNSESSION still appears.
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        "pool_size": 5,
-        "max_overflow": 3,       # 8-connection ceiling for this one worker
-        "pool_timeout": 10,      # queue up to 10s for a free connection instead of erroring instantly
-        "pool_pre_ping": True,   # detect stale connections
-        "pool_recycle": 280,     # recycle before Supabase's idle/statement timeout
-    }
+    # pool_size/max_overflow/pool_timeout are QueuePool-specific — SQLAlchemy
+    # defaults SQLite (e.g. the CI sanity check's "sqlite:///:memory:") to
+    # StaticPool, which raises a TypeError if handed QueuePool-only kwargs.
+    # Production always uses the real Postgres DATABASE_URL, so this only
+    # trims options for CI/local sqlite runs and never changes prod behavior.
+    SQLALCHEMY_ENGINE_OPTIONS = (
+        {"pool_pre_ping": True}
+        if SQLALCHEMY_DATABASE_URI.startswith("sqlite")
+        else {
+            "pool_size": 5,
+            "max_overflow": 3,       # 8-connection ceiling for this one worker
+            "pool_timeout": 10,      # queue up to 10s for a free connection instead of erroring instantly
+            "pool_pre_ping": True,   # detect stale connections
+            "pool_recycle": 280,     # recycle before Supabase's idle/statement timeout
+        }
+    )
 
     # --- JWT ---
     JWT_SECRET_KEY = _require("JWT_SECRET_KEY")
