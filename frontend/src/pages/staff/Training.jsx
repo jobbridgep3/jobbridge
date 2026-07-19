@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { motion } from 'framer-motion'
 import { Award, Download, Plus } from 'lucide-react'
 import { useState } from 'react'
@@ -7,14 +8,29 @@ import toast from 'react-hot-toast'
 
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent } from '../../components/ui/Card'
+import { DatePicker } from '../../components/ui/DatePicker'
 import { Dialog, DialogContent } from '../../components/ui/Dialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Label, Textarea } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { CardSkeleton } from '../../components/ui/Skeleton'
+import { TimePicker } from '../../components/ui/TimePicker'
 import api from '../../lib/axios'
 import { downloadFile, parseBlobError } from '../../lib/download'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
+
+dayjs.extend(customParseFormat)
+
+function splitScheduledDate(value) {
+  const [date = '', time24 = ''] = (value || '').split('T')
+  const time = time24 ? dayjs(time24, 'HH:mm').format('h:mm A') : ''
+  return { date, time }
+}
+function joinScheduledDate(date, time) {
+  if (!date) return ''
+  const time24 = time ? dayjs(time, 'h:mm A').format('HH:mm') : '00:00'
+  return `${date}T${time24}`
+}
 
 export default function StaffTraining() {
   const queryClient = useQueryClient()
@@ -110,7 +126,16 @@ export default function StaffTraining() {
             </div>
             <div>
               <Label>Schedule</Label>
-              <Input type="datetime-local" value={form.schedule} onChange={(e) => setForm({ ...form, schedule: e.target.value })} />
+              <div className="grid grid-cols-2 gap-3">
+                <DatePicker
+                  value={splitScheduledDate(form.schedule).date}
+                  onChange={(date) => setForm({ ...form, schedule: joinScheduledDate(date, splitScheduledDate(form.schedule).time) })}
+                />
+                <TimePicker
+                  value={splitScheduledDate(form.schedule).time}
+                  onChange={(time) => setForm({ ...form, schedule: joinScheduledDate(splitScheduledDate(form.schedule).date, time) })}
+                />
+              </div>
             </div>
             <div>
               <Label>Max Slots</Label>

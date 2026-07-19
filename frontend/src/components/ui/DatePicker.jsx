@@ -1,5 +1,6 @@
 import * as PopoverPrimitive from '@radix-ui/react-popover'
 import dayjs from 'dayjs'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { motion } from 'framer-motion'
 import { CalendarDays } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -8,6 +9,8 @@ import 'react-day-picker/style.css'
 
 import { dropdownMenu } from '../../lib/motion'
 import { cn } from '../../lib/utils'
+
+dayjs.extend(customParseFormat)
 
 const dayPickerClassNames = {
   root: 'p-3',

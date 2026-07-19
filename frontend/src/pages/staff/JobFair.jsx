@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { motion } from 'framer-motion'
 import { Archive, Check, Download, FileBarChart, FileDown, ImagePlus, Pencil, Plus, QrCode, Send, Store, Trash2, X, XCircle } from 'lucide-react'
 import { useRef, useState } from 'react'
@@ -9,17 +10,32 @@ import { Link } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { DatePicker } from '../../components/ui/DatePicker'
 import { Dialog, DialogContent } from '../../components/ui/Dialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Label, Textarea } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { TimePicker } from '../../components/ui/TimePicker'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { downloadFile, parseBlobError } from '../../lib/download'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
 import { cn } from '../../lib/utils'
+
+dayjs.extend(customParseFormat)
+
+function splitScheduledDate(value) {
+  const [date = '', time24 = ''] = (value || '').split('T')
+  const time = time24 ? dayjs(time24, 'HH:mm').format('h:mm A') : ''
+  return { date, time }
+}
+function joinScheduledDate(date, time) {
+  if (!date) return ''
+  const time24 = time ? dayjs(time, 'h:mm A').format('HH:mm') : '00:00'
+  return `${date}T${time24}`
+}
 
 const STATUS_TABS = [
   { key: '', label: 'All' },
@@ -394,23 +410,48 @@ export default function StaffJobFair({ basePath = '/staff' }) {
                 <Input value={form.municipality} onChange={(e) => setForm({ ...form, municipality: e.target.value })} placeholder="e.g. Pila" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Starts</Label>
-                <Input type="datetime-local" value={form.event_date} onChange={(e) => setForm({ ...form, event_date: e.target.value })} />
+            <div>
+              <Label>Starts</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <DatePicker
+                  value={splitScheduledDate(form.event_date).date}
+                  onChange={(date) => setForm({ ...form, event_date: joinScheduledDate(date, splitScheduledDate(form.event_date).time) })}
+                />
+                <TimePicker
+                  value={splitScheduledDate(form.event_date).time}
+                  onChange={(time) => setForm({ ...form, event_date: joinScheduledDate(splitScheduledDate(form.event_date).date, time) })}
+                />
               </div>
-              <div>
-                <Label>Ends (optional)</Label>
-                <Input type="datetime-local" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} />
+            </div>
+            <div>
+              <Label>Ends (optional)</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <DatePicker
+                  value={splitScheduledDate(form.end_time).date}
+                  onChange={(date) => setForm({ ...form, end_time: joinScheduledDate(date, splitScheduledDate(form.end_time).time) })}
+                />
+                <TimePicker
+                  value={splitScheduledDate(form.end_time).time}
+                  onChange={(time) => setForm({ ...form, end_time: joinScheduledDate(splitScheduledDate(form.end_time).date, time) })}
+                />
               </div>
             </div>
             <div>
               <Label>Registration Deadline (optional)</Label>
-              <Input
-                type="datetime-local"
-                value={form.registration_deadline}
-                onChange={(e) => setForm({ ...form, registration_deadline: e.target.value })}
-              />
+              <div className="grid grid-cols-2 gap-3">
+                <DatePicker
+                  value={splitScheduledDate(form.registration_deadline).date}
+                  onChange={(date) =>
+                    setForm({ ...form, registration_deadline: joinScheduledDate(date, splitScheduledDate(form.registration_deadline).time) })
+                  }
+                />
+                <TimePicker
+                  value={splitScheduledDate(form.registration_deadline).time}
+                  onChange={(time) =>
+                    setForm({ ...form, registration_deadline: joinScheduledDate(splitScheduledDate(form.registration_deadline).date, time) })
+                  }
+                />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>

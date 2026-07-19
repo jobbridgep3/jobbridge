@@ -3,7 +3,7 @@ import dayjs from 'dayjs'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { motion } from 'framer-motion'
 import { CalendarDays, List } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 
 import { Button } from '../../components/ui/Button'
@@ -141,14 +141,18 @@ export default function EmployerInterviews() {
     onError: (err) => toast.error(err.response?.data?.message || 'Could not respond to request.'),
   })
 
-  const events = (interviews || []).map((iv) => ({
-    id: iv.id,
-    date: iv.scheduled_date,
-    title: iv.jobseeker_name || 'Interview',
-    subtitle: iv.job_title,
-    status: iv.status,
-    meta: iv,
-  }))
+  const events = useMemo(
+    () =>
+      (interviews || []).map((iv) => ({
+        id: iv.id,
+        date: iv.scheduled_date,
+        title: iv.jobseeker_name || 'Interview',
+        subtitle: iv.job_title,
+        status: iv.status,
+        meta: iv,
+      })),
+    [interviews],
+  )
 
   const columns = [
     { accessorKey: 'jobseeker_name', header: 'Applicant' },

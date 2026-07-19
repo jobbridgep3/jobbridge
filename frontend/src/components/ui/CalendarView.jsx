@@ -94,12 +94,21 @@ function MonthGrid({ cursor, events, onEventClick, onDayClick }) {
 function WeekGrid({ cursor, events, onEventClick, onDayClick }) {
   const start = cursor.startOf('week')
   const days = Array.from({ length: 7 }, (_, i) => start.add(i, 'day'))
+  const byDay = useMemo(() => {
+    const map = {}
+    for (const e of events) {
+      const key = dayjs(e.date).format('YYYY-MM-DD')
+      ;(map[key] ||= []).push(e)
+    }
+    for (const key of Object.keys(map)) {
+      map[key].sort((a, b) => dayjs(a.date).valueOf() - dayjs(b.date).valueOf())
+    }
+    return map
+  }, [events])
   return (
     <div className="grid grid-cols-7">
       {days.map((day) => {
-        const dayEvents = events
-          .filter((e) => dayjs(e.date).isSame(day, 'day'))
-          .sort((a, b) => dayjs(a.date).valueOf() - dayjs(b.date).valueOf())
+        const dayEvents = byDay[day.format('YYYY-MM-DD')] || []
         const isToday = day.isSame(dayjs(), 'day')
         return (
           <div key={day.format('YYYY-MM-DD')} className="min-h-[220px] border-r border-border-subtle last:border-r-0">
@@ -127,9 +136,13 @@ function WeekGrid({ cursor, events, onEventClick, onDayClick }) {
 }
 
 function DayList({ cursor, events, onEventClick }) {
-  const dayEvents = events
-    .filter((e) => dayjs(e.date).isSame(cursor, 'day'))
-    .sort((a, b) => dayjs(a.date).valueOf() - dayjs(b.date).valueOf())
+  const dayEvents = useMemo(
+    () =>
+      events
+        .filter((e) => dayjs(e.date).isSame(cursor, 'day'))
+        .sort((a, b) => dayjs(a.date).valueOf() - dayjs(b.date).valueOf()),
+    [events, cursor],
+  )
   if (!dayEvents.length) {
     return <p className="py-12 text-center text-sm text-text-muted">Nothing scheduled on {cursor.format('MMMM D, YYYY')}.</p>
   }

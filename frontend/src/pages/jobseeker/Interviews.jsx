@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { motion } from 'framer-motion'
 import { Building2, CalendarCheck, Clock, Download, Link2, MapPin, User } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 
 import { Button } from '../../components/ui/Button'
@@ -10,16 +11,29 @@ import { CalendarView } from '../../components/ui/CalendarView'
 import { DatePicker } from '../../components/ui/DatePicker'
 import { Dialog, DialogContent } from '../../components/ui/Dialog'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { Input, Label, Textarea } from '../../components/ui/Input'
+import { Label, Textarea } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { TimePicker } from '../../components/ui/TimePicker'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { downloadFile, parseBlobError } from '../../lib/download'
 import { fadeIn } from '../../lib/motion'
 
+dayjs.extend(customParseFormat)
+
 const RESULT_LABELS = { passed: 'Passed', failed: 'Failed', shortlisted: 'Shortlisted', hired: 'Hired' }
+
+/** reschedule.time is stored as 24h "HH:mm" (matching the backend's
+ * datetime.fromisoformat contract) — these only convert for the TimePicker's
+ * 12-hour "h:mm AM/PM" display/input format. */
+function to12h(time24) {
+  return time24 ? dayjs(time24, 'HH:mm').format('h:mm A') : ''
+}
+function to24h(time12) {
+  return time12 ? dayjs(time12, 'h:mm A').format('HH:mm') : ''
+}
 
 function DetailRow({ icon: Icon, label, children }) {
   return (
@@ -103,14 +117,18 @@ export default function JobseekerInterviews() {
     }
   }
 
-  const events = (interviews || []).map((iv) => ({
-    id: iv.id,
-    date: iv.scheduled_date,
-    title: iv.job_title || 'Interview',
-    subtitle: iv.company_name,
-    status: iv.status,
-    meta: iv,
-  }))
+  const events = useMemo(
+    () =>
+      (interviews || []).map((iv) => ({
+        id: iv.id,
+        date: iv.scheduled_date,
+        title: iv.job_title || 'Interview',
+        subtitle: iv.company_name,
+        status: iv.status,
+        meta: iv,
+      })),
+    [interviews],
+  )
 
   const canRespond = selected && ['pending', 'rescheduled'].includes(selected.status)
   const canReschedule = selected && !['cancelled', 'completed', 'declined'].includes(selected.status)
@@ -218,7 +236,7 @@ export default function JobseekerInterviews() {
                     </div>
                     <div>
                       <Label>Preferred Time</Label>
-                      <Input type="time" value={reschedule.time} onChange={(e) => setReschedule({ ...reschedule, time: e.target.value })} />
+                      <TimePicker value={to12h(reschedule.time)} onChange={(t) => setReschedule({ ...reschedule, time: to24h(t) })} />
                     </div>
                   </div>
                   <div>
