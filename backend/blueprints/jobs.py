@@ -22,7 +22,7 @@ jobs_bp = Blueprint("jobs", __name__, url_prefix="/api")
 @jobs_bp.get("/jobs")
 @jwt_required(optional=True)
 def list_jobs():
-    query = Vacancy.query.filter_by(status="published")
+    query = Vacancy.query.filter_by(status="published").filter(Vacancy.deleted_at.is_(None))
 
     keyword = request.args.get("q")
     if keyword:
@@ -55,7 +55,7 @@ def recommended_jobs():
     profile = JobseekerProfile.query.filter_by(user_id=get_jwt_identity()).first()
     if not profile:
         return fail("Profile not found.", 404)
-    vacancies = Vacancy.query.filter_by(status="published").all()
+    vacancies = Vacancy.query.filter_by(status="published").filter(Vacancy.deleted_at.is_(None)).all()
     ranked = rank_vacancies_for_jobseeker(profile, vacancies)[:5]
     return ok([v.to_dict(match_score=score) for v, score in ranked])
 
@@ -64,7 +64,7 @@ def recommended_jobs():
 @jwt_required(optional=True)
 def get_job(vacancy_id):
     vacancy = Vacancy.query.get(vacancy_id)
-    if not vacancy:
+    if not vacancy or vacancy.deleted_at:
         return fail("Job not found.", 404)
 
     score = None
@@ -87,7 +87,7 @@ def apply_to_job():
     data = request.get_json(force=True) or {}
     vacancy_id = data.get("vacancy_id")
     vacancy = Vacancy.query.get(vacancy_id) if vacancy_id else None
-    if not vacancy or vacancy.status != "published":
+    if not vacancy or vacancy.status != "published" or vacancy.deleted_at:
         return fail("This job is not currently accepting applications.", 400)
 
     profile = JobseekerProfile.query.filter_by(user_id=get_jwt_identity()).first()
