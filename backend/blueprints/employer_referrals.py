@@ -126,6 +126,8 @@ def accept_referral(referral_id):
         db.session.add(application)
         db.session.commit()
         record_initial_history(application, employer_user)
+    elif application.referral_letter and application.referral_letter.id != referral.id:
+        return fail("This applicant already has a referral letter attached to this application.", 409)
 
     before = {"employer_status": referral.employer_status}
     referral.application_id = application.id
