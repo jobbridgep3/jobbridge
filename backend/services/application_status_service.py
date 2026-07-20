@@ -18,7 +18,7 @@ ALLOWED_TRANSITIONS = {
     "applied": {"under_review", "shortlisted", "interview_scheduled", "hired", "rejected", "cancelled"},
     "under_review": {"shortlisted", "interview_scheduled", "background_verification", "offer_extended", "hired", "rejected", "cancelled"},
     "shortlisted": {"under_review", "interview_scheduled", "background_verification", "offer_extended", "hired", "rejected"},
-    "interview_scheduled": {"interview_completed", "background_verification", "offer_extended", "hired", "rejected"},
+    "interview_scheduled": {"shortlisted", "interview_completed", "background_verification", "offer_extended", "hired", "rejected"},
     "interview_completed": {"shortlisted", "interview_scheduled", "background_verification", "offer_extended", "hired", "rejected"},
     "background_verification": {"offer_extended", "hired", "rejected"},
     "offer_extended": {"hired", "rejected"},

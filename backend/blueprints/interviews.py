@@ -261,8 +261,17 @@ def cancel_interview(interview_id):
 
     interview.status = "cancelled"
     interview.cancel_reason = reason
+
+    actor = User.query.get(company.user_id)
+    application = interview.application
+    if application.status == "interview_scheduled":
+        # notify=False: the interview_cancelled notification/email below covers it.
+        success, error = transition_application(application, "shortlisted", actor, note=f"Interview cancelled: {reason}", notify=False)
+        if not success:
+            db.session.rollback()
+            return fail(error, 400)
     db.session.commit()
-    log_audit(User.query.get(company.user_id), "Update", "interviews", interview.id, "Cancelled")
+    log_audit(actor, "Update", "interviews", interview.id, "Cancelled")
 
     jobseeker = interview.application.jobseeker_profile
     jobseeker_user = User.query.get(jobseeker.user_id)
@@ -313,8 +322,18 @@ def decline_interview(interview_id):
     data = request.get_json(force=True) or {}
     interview.status = "declined"
     interview.decline_reason = data.get("reason")
+
+    actor = User.query.get(profile.user_id)
+    application = interview.application
+    if application.status == "interview_scheduled":
+        note = f"Interview declined: {interview.decline_reason}" if interview.decline_reason else "Interview declined by jobseeker"
+        # notify=False: the interview_declined notification below covers it.
+        success, error = transition_application(application, "shortlisted", actor, note=note, notify=False)
+        if not success:
+            db.session.rollback()
+            return fail(error, 400)
     db.session.commit()
-    log_audit(User.query.get(profile.user_id), "Update", "interviews", interview.id, "Declined by jobseeker")
+    log_audit(actor, "Update", "interviews", interview.id, "Declined by jobseeker")
 
     employer_user_id = interview.application.vacancy.employer_company.user_id
     notify_user(
