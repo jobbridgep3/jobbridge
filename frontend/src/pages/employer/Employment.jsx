@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
 import { Download, FileDown, TrendingUp, UserCheck, Users, UserX } from 'lucide-react'
@@ -56,6 +56,7 @@ export default function EmployerEmployment() {
   const { data: records, isLoading } = useQuery({
     queryKey: ['employment', 'my-hires', statusTab],
     queryFn: async () => (await api.get('/api/employment/my-hires', { params: statusTab ? { status: statusTab } : {} })).data.data,
+    placeholderData: keepPreviousData,
   })
   const { data: analytics } = useQuery({
     queryKey: ['employment', 'analytics'],

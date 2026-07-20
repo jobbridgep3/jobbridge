@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { Download, Eye } from 'lucide-react'
 import { useState } from 'react'
@@ -50,6 +50,7 @@ export default function StaffEmployers({ basePath = '/staff' }) {
   const { data, isLoading } = useQuery({
     queryKey: ['staff', 'employers', activeParams],
     queryFn: async () => (await api.get('/api/staff/employers', { params: activeParams })).data.data,
+    placeholderData: keepPreviousData,
   })
 
   const employers = data?.items || []

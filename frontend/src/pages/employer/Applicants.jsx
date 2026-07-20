@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
 import { Download, Eye, FileDown } from 'lucide-react'
@@ -44,6 +44,7 @@ export default function EmployerApplicants() {
   const { data: applicants, isLoading } = useQuery({
     queryKey: ['applicants', activeParams],
     queryFn: async () => (await api.get('/api/applicants', { params: activeParams })).data.data,
+    placeholderData: keepPreviousData,
   })
 
   useSocket({ 'application:new': () => queryClient.invalidateQueries({ queryKey: ['applicants'] }) })

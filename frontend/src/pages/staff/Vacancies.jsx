@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
   BarChart3, Briefcase, CheckCircle2, Clock, Download, Eye, FileX, MoreHorizontal, ShieldCheck, XCircle,
@@ -57,6 +57,7 @@ export default function StaffVacancies({ basePath = '/staff' }) {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['staff', 'vacancies', activeParams],
     queryFn: async () => (await api.get('/api/staff/vacancies', { params: activeParams })).data.data,
+    placeholderData: keepPreviousData,
   })
   const { data: summary } = useQuery({
     queryKey: ['staff', 'vacancies', 'summary'],

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { ArrowDownAZ, ArrowUpAZ, Download } from 'lucide-react'
 import { useState } from 'react'
@@ -42,6 +42,7 @@ export default function AdminAuditTrail() {
   const { data, isLoading } = useQuery({
     queryKey: ['admin', 'audit', activeParams],
     queryFn: async () => (await api.get('/api/admin/audit', { params: activeParams })).data.data,
+    placeholderData: keepPreviousData,
   })
 
   const entries = data?.items || []
