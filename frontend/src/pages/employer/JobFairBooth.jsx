@@ -10,7 +10,6 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Input, Select } from '../../components/ui/Input'
-import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatCard } from '../../components/ui/StatCard'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useSocket } from '../../hooks/useSocket'
@@ -166,80 +165,82 @@ export default function EmployerJobFairBooth() {
         <ArrowLeft className="h-4 w-4" /> Back to Job Fairs
       </Link>
 
-      {isLoading ? (
-        <CardSkeleton />
-      ) : error ? (
+      {error && (
         <Card>
           <CardContent>
-            <p className="py-4 text-center text-sm text-slate-500">
+            <p className="py-2 text-center text-sm text-slate-500">
               {error.response?.data?.message || 'Could not load your booth.'}
             </p>
           </CardContent>
         </Card>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 gap-4">
-            <StatCard label="Registered" value={visitors.length} icon={Users} tone="primary" />
-            <StatCard label="Checked In" value={checkedInCount} icon={UserCheck} tone="success" />
+      )}
+
+      <div className="grid grid-cols-2 gap-4">
+        <StatCard label="Registered" value={isLoading || error ? '–' : visitors.length} icon={Users} tone="primary" />
+        <StatCard label="Checked In" value={isLoading || error ? '–' : checkedInCount} icon={UserCheck} tone="success" />
+      </div>
+
+      <Card>
+        <CardContent>
+          <h1 className="mb-3 text-lg font-semibold text-slate-900">
+            My Booth{data?.booth ? ` — ${data.booth.booth_name || data.booth.company_name}` : ''}
+          </h1>
+          <div id={SCANNER_ELEMENT_ID} className="mx-auto w-full max-w-sm overflow-hidden rounded-lg" />
+          <div className="mx-auto mt-4 flex max-w-sm gap-2">
+            <Input
+              placeholder="Or enter the jobseeker's QR token manually…"
+              value={manualToken}
+              onChange={(e) => setManualToken(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && manualToken.trim()) {
+                  submitToken(manualToken.trim())
+                  setManualToken('')
+                }
+              }}
+            />
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!manualToken.trim()}
+              onClick={() => {
+                submitToken(manualToken.trim())
+                setManualToken('')
+              }}
+            >
+              <KeyRound className="h-3.5 w-3.5" /> Check In
+            </Button>
           </div>
+        </CardContent>
+      </Card>
 
-          <Card>
-            <CardContent>
-              <h1 className="mb-3 text-lg font-semibold text-slate-900">My Booth — {data.booth.booth_name || data.booth.company_name}</h1>
-              <div id={SCANNER_ELEMENT_ID} className="mx-auto w-full max-w-sm overflow-hidden rounded-lg" />
-              <div className="mx-auto mt-4 flex max-w-sm gap-2">
-                <Input
-                  placeholder="Or enter the jobseeker's QR token manually…"
-                  value={manualToken}
-                  onChange={(e) => setManualToken(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && manualToken.trim()) {
-                      submitToken(manualToken.trim())
-                      setManualToken('')
-                    }
-                  }}
-                />
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={!manualToken.trim()}
-                  onClick={() => {
-                    submitToken(manualToken.trim())
-                    setManualToken('')
-                  }}
-                >
-                  <KeyRound className="h-3.5 w-3.5" /> Check In
-                </Button>
+      {!error && (
+        <Card>
+          <CardContent>
+            <h2 className="mb-2 text-sm font-semibold text-slate-800">Registered Jobseekers</h2>
+            {isLoading ? (
+              <p className="py-6 text-center text-sm text-slate-500">Loading…</p>
+            ) : !visitors.length ? (
+              <p className="py-6 text-center text-sm text-slate-500">No one has registered for your booth yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {visitors.map((v) => (
+                  <VisitorRow
+                    key={v.id}
+                    visit={v}
+                    jobfairId={id}
+                    vacancies={publishedVacancies}
+                    onLinked={(applicationId) => navigate(`/employer/applicants/${applicationId}`)}
+                  />
+                ))}
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent>
-              <h2 className="mb-2 text-sm font-semibold text-slate-800">Registered Jobseekers</h2>
-              {!visitors.length ? (
-                <p className="py-6 text-center text-sm text-slate-500">No one has registered for your booth yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {visitors.map((v) => (
-                    <VisitorRow
-                      key={v.id}
-                      visit={v}
-                      jobfairId={id}
-                      vacancies={publishedVacancies}
-                      onLinked={(applicationId) => navigate(`/employer/applicants/${applicationId}`)}
-                    />
-                  ))}
-                </div>
-              )}
-              {!publishedVacancies.length && visitors.some((v) => !v.application_id) && (
-                <p className="mt-3 flex items-center gap-1.5 text-xs text-amber-600">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Publish a vacancy to start managing applicants from this booth.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </>
+            )}
+            {!isLoading && !publishedVacancies.length && visitors.some((v) => !v.application_id) && (
+              <p className="mt-3 flex items-center gap-1.5 text-xs text-amber-600">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Publish a vacancy to start managing applicants from this booth.
+              </p>
+            )}
+          </CardContent>
+        </Card>
       )}
     </motion.div>
   )
