@@ -9,7 +9,6 @@ import toast from 'react-hot-toast'
 import { Button } from '../../components/ui/Button'
 import { CalendarView } from '../../components/ui/CalendarView'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
-import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { DataTable } from '../../components/ui/DataTable'
 import { DatePicker } from '../../components/ui/DatePicker'
 import { Dialog, DialogContent } from '../../components/ui/Dialog'
@@ -52,8 +51,8 @@ export default function EmployerInterviews() {
   const queryClient = useQueryClient()
   const [viewMode, setViewMode] = useState('calendar') // calendar | table
   const [selected, setSelected] = useState(null)
-  const [panel, setPanel] = useState('details') // details | edit | result
-  const [cancelTarget, setCancelTarget] = useState(null)
+  const [panel, setPanel] = useState('details') // details | edit | result | cancel
+  const [cancelReason, setCancelReason] = useState('')
   const [editForm, setEditForm] = useState({})
   const [resultForm, setResultForm] = useState({ result: 'pending', score: '', notes: '' })
   const [suggestFor, setSuggestFor] = useState(null) // reschedule request being answered with a suggestion
@@ -81,6 +80,7 @@ export default function EmployerInterviews() {
   const closeDialog = () => {
     setSelected(null)
     setPanel('details')
+    setCancelReason('')
   }
 
   const openEdit = (iv) => {
@@ -112,7 +112,7 @@ export default function EmployerInterviews() {
   })
 
   const cancelInterview = useMutation({
-    mutationFn: (id) => api.put(`/api/interviews/${id}/cancel`),
+    mutationFn: ({ id, reason }) => api.put(`/api/interviews/${id}/cancel`, { reason }),
     onSuccess: () => {
       toast.success('Interview cancelled — applicant notified.')
       refresh()
@@ -309,6 +309,11 @@ export default function EmployerInterviews() {
                   <b>Declined:</b> {selected.decline_reason}
                 </p>
               )}
+              {selected.status === 'cancelled' && selected.cancel_reason && (
+                <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+                  <b>Cancellation reason:</b> {selected.cancel_reason}
+                </p>
+              )}
               {selected.result !== 'pending' && (
                 <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
                   <b>Result:</b> <span className="capitalize">{selected.result}</span>
@@ -440,6 +445,32 @@ export default function EmployerInterviews() {
                 </div>
               )}
 
+              {panel === 'cancel' && (
+                <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+                  <div>
+                    <Label>Reason for cancelling</Label>
+                    <Textarea
+                      value={cancelReason}
+                      onChange={(e) => setCancelReason(e.target.value)}
+                      placeholder="Let the applicant know why this interview is being cancelled…"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => setPanel('details')}>
+                      Back
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      disabled={!cancelReason.trim() || cancelInterview.isPending}
+                      onClick={() => cancelInterview.mutate({ id: selected.id, reason: cancelReason.trim() })}
+                    >
+                      Cancel Interview
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {panel === 'details' && (
                 <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
                   {editable && (
@@ -450,7 +481,7 @@ export default function EmployerInterviews() {
                       <Button size="sm" variant="secondary" onClick={() => openResult(selected)}>
                         Record Result
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setCancelTarget(selected.id)}>
+                      <Button size="sm" variant="ghost" onClick={() => setPanel('cancel')}>
                         Cancel Interview
                       </Button>
                     </>
@@ -466,19 +497,6 @@ export default function EmployerInterviews() {
           )}
         </DialogContent>
       </Dialog>
-
-      <ConfirmDialog
-        open={!!cancelTarget}
-        onOpenChange={(open) => !open && setCancelTarget(null)}
-        title="Cancel this interview?"
-        description="The applicant will be notified by email and website notification."
-        confirmLabel="Cancel Interview"
-        danger
-        onConfirm={() => {
-          cancelInterview.mutate(cancelTarget)
-          setCancelTarget(null)
-        }}
-      />
     </motion.div>
   )
 }

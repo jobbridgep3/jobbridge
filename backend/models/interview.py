@@ -22,6 +22,7 @@ class Interview(BaseModel):
     score = db.Column(db.SmallInteger, nullable=True)  # 0-100
     notes = db.Column(db.Text, nullable=True)  # internal, employer-only
     decline_reason = db.Column(db.Text, nullable=True)
+    cancel_reason = db.Column(db.Text, nullable=True)
     reminder_sent_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     application = db.relationship("Application", back_populates="interviews")
@@ -54,6 +55,7 @@ class Interview(BaseModel):
             "result": self.result,
             "score": self.score,
             "decline_reason": self.decline_reason,
+            "cancel_reason": self.cancel_reason,
             "pending_reschedule_request": pending_request.to_dict() if pending_request else None,
         }
         if include_notes:

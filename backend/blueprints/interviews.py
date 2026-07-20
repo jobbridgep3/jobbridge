@@ -255,9 +255,12 @@ def cancel_interview(interview_id):
         return fail("This interview is already closed.", 400)
 
     data = request.get_json(force=True) or {}
+    reason = (data.get("reason") or "").strip()
+    if not reason:
+        return fail("A reason is required to cancel an interview.", 400)
+
     interview.status = "cancelled"
-    if data.get("reason"):
-        interview.notes = ((interview.notes or "") + f"\nCancelled: {data['reason']}").strip()
+    interview.cancel_reason = reason
     db.session.commit()
     log_audit(User.query.get(company.user_id), "Update", "interviews", interview.id, "Cancelled")
 
@@ -267,10 +270,10 @@ def cancel_interview(interview_id):
         jobseeker.user_id, "interview_cancelled", "Interview Cancelled",
         f"{company.company_name} cancelled the interview for {interview.application.vacancy.title}.",
         link="/jobseeker/interviews", socket_event="interview:cancelled",
-        socket_payload={"interview_id": str(interview.id)},
+        socket_payload={"interview_id": str(interview.id), "reason": reason},
     )
     send_interview_cancelled_email(
-        jobseeker_user.email, interview.application.vacancy.title, company.company_name, data.get("reason"),
+        jobseeker_user.email, interview.application.vacancy.title, company.company_name, reason,
     )
     return ok(interview.to_dict(), "Interview cancelled.")
 

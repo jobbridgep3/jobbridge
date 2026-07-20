@@ -200,6 +200,11 @@ export default function JobseekerInterviews() {
                   <b>Decline reason:</b> {selected.decline_reason}
                 </p>
               )}
+              {selected.status === 'cancelled' && selected.cancel_reason && (
+                <p className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+                  <b>Cancelled by employer:</b> {selected.cancel_reason}
+                </p>
+              )}
 
               {panel === 'decline' && (
                 <div className="space-y-3 rounded-lg border border-slate-200 p-3">
