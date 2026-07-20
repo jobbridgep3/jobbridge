@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
-import { CalendarDays, Download, MapPinned, Paperclip, Upload, Users } from 'lucide-react'
+import { CalendarDays, Download, MapPinned, Paperclip, Store, Upload, Users } from 'lucide-react'
 import { useRef, useState } from 'react'
 import toast from 'react-hot-toast'
+import { Link } from 'react-router-dom'
 
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent } from '../../components/ui/Card'
@@ -358,6 +359,11 @@ export default function EmployerJobFair() {
                     )}
                     <Button size="sm" variant="secondary" onClick={() => setBoothFair(fair)}>
                       Manage Booth
+                    </Button>
+                    <Button size="sm" variant="secondary" asChild>
+                      <Link to={`/employer/jobfair/${fair.id}/booth`}>
+                        <Store className="h-3.5 w-3.5" /> My Booth
+                      </Link>
                     </Button>
                     <Button size="sm" variant="secondary" onClick={() => setRegistrantsFair(fair)}>
                       <Users className="h-3.5 w-3.5" /> Applicants

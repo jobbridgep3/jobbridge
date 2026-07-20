@@ -107,6 +107,7 @@ class JobFairBooth(BaseModel):
     jobfair = db.relationship("JobFair", back_populates="booths")
     employer_company = db.relationship("EmployerCompany")
     reviewed_by_user = db.relationship("User", foreign_keys=[reviewed_by])
+    visits = db.relationship("JobFairBoothVisit", back_populates="booth", cascade="all, delete-orphan")
 
     __table_args__ = (
         db.UniqueConstraint("jobfair_id", "employer_company_id", name="uq_jobfair_employer"),
@@ -128,4 +129,50 @@ class JobFairBooth(BaseModel):
             "review_remarks": self.review_remarks,
             "reviewed_at": self.reviewed_at.isoformat() if self.reviewed_at else None,
             "reviewed_by_name": self.reviewed_by_user.email if self.reviewed_by_user else None,
+            "visitor_count": len(self.visits),
+            "checked_in_count": sum(1 for v in self.visits if v.checked_in),
+        }
+
+
+class JobFairBoothVisit(BaseModel):
+    """A jobseeker registering interest in a specific employer's booth (distinct
+    from JobFairRegistration, which is fair-wide). Check-in reuses the jobseeker's
+    existing fair QR token — see scan_booth_qr in blueprints/jobfair.py."""
+    __tablename__ = "jobfair_booth_visits"
+
+    jobfair_id = db.Column(UUID(as_uuid=True), db.ForeignKey("jobfairs.id"), nullable=False)
+    booth_id = db.Column(UUID(as_uuid=True), db.ForeignKey("jobfair_booths.id"), nullable=False)
+    jobseeker_profile_id = db.Column(UUID(as_uuid=True), db.ForeignKey("jobseeker_profiles.id"), nullable=False)
+    application_id = db.Column(UUID(as_uuid=True), db.ForeignKey("applications.id"), nullable=True)
+    checked_in = db.Column(db.Boolean, default=False, nullable=False)
+    checked_in_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    booth = db.relationship("JobFairBooth", back_populates="visits")
+    jobseeker_profile = db.relationship("JobseekerProfile")
+    application = db.relationship("Application")
+
+    __table_args__ = (db.UniqueConstraint("booth_id", "jobseeker_profile_id", name="uq_booth_visit_jobseeker"),)
+
+    def to_dict(self):
+        from models.application import APPLICATION_STATUS_LABELS
+
+        profile = self.jobseeker_profile
+        application = self.application
+        return {
+            "id": str(self.id),
+            "jobfair_id": str(self.jobfair_id),
+            "booth_id": str(self.booth_id),
+            "jobseeker_profile_id": str(self.jobseeker_profile_id),
+            "jobseeker_name": profile.full_name if profile else None,
+            "is_verified_by_staff": profile.is_verified_by_staff if profile else False,
+            "resume_url": profile.resume_url if profile else None,
+            "preferred_position": profile.preferred_job_position if profile else None,
+            "municipality": profile.municipality if profile else None,
+            "contact_number": profile.contact_number if profile else None,
+            "checked_in": self.checked_in,
+            "checked_in_at": self.checked_in_at.isoformat() if self.checked_in_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "application_id": str(self.application_id) if self.application_id else None,
+            "application_status": application.status if application else None,
+            "application_status_label": APPLICATION_STATUS_LABELS.get(application.status, application.status) if application else None,
         }

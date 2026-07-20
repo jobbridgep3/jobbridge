@@ -45,6 +45,18 @@ export default function JobseekerJobFairDetail() {
     onError: (err) => toast.error(err.response?.data?.message || 'Could not register.'),
   })
 
+  const [visitingBoothId, setVisitingBoothId] = useState(null)
+  const visitBoothMutation = useMutation({
+    mutationFn: (boothId) => api.post(`/api/jobfair/${id}/booths/${boothId}/visit`),
+    onMutate: (boothId) => setVisitingBoothId(boothId),
+    onSuccess: (res) => {
+      toast.success(res.data?.message || 'Registered for this booth!')
+      queryClient.invalidateQueries({ queryKey: ['jobfair', id] })
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not register for this booth.'),
+    onSettled: () => setVisitingBoothId(null),
+  })
+
   const downloadForm = async () => {
     setDownloading(true)
     try {
@@ -135,13 +147,35 @@ export default function JobseekerJobFairDetail() {
 
           <div>
             <h2 className="mb-2 text-sm font-semibold text-slate-800">Participating Employers</h2>
-            <div className="flex flex-wrap gap-2">
-              {fair.booths?.length ? (
-                fair.booths.map((b) => <Badge key={b.id}>{b.booth_name || b.company_name}</Badge>)
-              ) : (
-                <p className="text-sm text-slate-400">No employers registered yet.</p>
-              )}
-            </div>
+            {fair.booths?.length ? (
+              <div className="space-y-2">
+                {fair.booths.map((b) => {
+                  const visited = fair.visited_booth_ids?.includes(b.id)
+                  return (
+                    <div key={b.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 p-3">
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">{b.booth_name || b.company_name}</p>
+                        {b.description && <p className="text-xs text-slate-500">{b.description}</p>}
+                      </div>
+                      {visited ? (
+                        <Badge variant="success">Registered ✓</Badge>
+                      ) : registration ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={visitBoothMutation.isPending && visitingBoothId === b.id}
+                          onClick={() => visitBoothMutation.mutate(b.id)}
+                        >
+                          {visitBoothMutation.isPending && visitingBoothId === b.id ? 'Registering…' : 'Register to Booth'}
+                        </Button>
+                      ) : null}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">No employers registered yet.</p>
+            )}
           </div>
 
           {fair.vacancies?.length > 0 && (

@@ -8,7 +8,7 @@ from models.employer import EmployerCompany, EmployerCompanyDocument
 from models.employer_hr import EmployerHRDocument, EmployerHRProfile
 from models.employment import EmploymentRecord, EmploymentStatusHistory
 from models.interview import Interview, InterviewRescheduleRequest
-from models.jobfair import JobFair, JobFairBooth, JobFairRegistration
+from models.jobfair import JobFair, JobFairBooth, JobFairBoothVisit, JobFairRegistration
 from models.jobseeker import Education, JobseekerDocument, JobseekerProfile, WorkExperience
 from models.notification import Notification
 from models.otp import OtpCode
@@ -46,6 +46,7 @@ __all__ = [
     "JobFair",
     "JobFairRegistration",
     "JobFairBooth",
+    "JobFairBoothVisit",
     "TrainingProgram",
     "TrainingEnrollment",
     "ProgramApplication",

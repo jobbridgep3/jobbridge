@@ -63,6 +63,7 @@ export const TYPE_ICON_MAP = {
   jobfair_updated: Users,
   jobfair_booth_status: Users,
   jobfair_cancelled: Users,
+  jobfair_booth_visit: Users,
   new_applicant: UserPlus,
   program_status: FileText,
   referral_ready: FileText,

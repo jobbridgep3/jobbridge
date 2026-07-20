@@ -4,14 +4,23 @@ from flask import Blueprint, request, send_file
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 
 from extensions import db
+from models.application import Application
 from models.employer import EmployerCompany
-from models.jobfair import JobFair, JobFairBooth, JobFairRegistration
+from models.jobfair import JobFair, JobFairBooth, JobFairBoothVisit, JobFairRegistration
 from models.jobseeker import JobseekerProfile
 from models.notification import Notification
 from models.user import User
+from models.vacancy import Vacancy
+from services.application_status_service import record_initial_history
 from services.audit_service import log_audit
-from services.email_service import send_email, send_jobfair_booth_status_email, send_jobfair_published_email
+from services.email_service import (
+    send_email,
+    send_jobfair_booth_status_email,
+    send_jobfair_booth_visit_email,
+    send_jobfair_published_email,
+)
 from services.excel_service import build_excel_report
+from services.matching_service import match_score
 from services.notification_service import notify_role, notify_user
 from services.pdf_service import generate_table_report, to_bytesio
 from services.qr_service import generate_qr_data_url
@@ -73,6 +82,10 @@ def get_jobfair(jobfair_id):
         )
         if registration:
             result["my_registration"] = {**registration.to_dict(), "qr_data_url": generate_qr_data_url(registration.qr_token)}
+        result["visited_booth_ids"] = (
+            [str(v.booth_id) for v in JobFairBoothVisit.query.filter_by(jobseeker_profile_id=profile.id).join(JobFairBooth).filter(JobFairBooth.jobfair_id == fair.id).all()]
+            if profile else []
+        )
     elif role == "employer":
         company = EmployerCompany.query.filter_by(user_id=get_jwt_identity()).first()
         booth = JobFairBooth.query.filter_by(jobfair_id=fair.id, employer_company_id=company.id).first() if company else None
@@ -151,6 +164,40 @@ def register_jobfair(jobfair_id):
         {**registration.to_dict(), "qr_data_url": qr_data_url},
         f"Registered! Your registration number is {registration.registration_number}.", 201,
     )
+
+
+@jobfair_bp.post("/jobfair/<jobfair_id>/booths/<booth_id>/visit")
+@jwt_required()
+@role_required("jobseeker")
+def register_booth_visit(jobfair_id, booth_id):
+    fair = JobFair.query.get(jobfair_id)
+    booth = JobFairBooth.query.filter_by(id=booth_id, jobfair_id=jobfair_id).first()
+    if not fair or not booth or fair.status not in ("published", "ongoing") or booth.status != "confirmed":
+        return fail("This booth is not open for registration.", 400)
+    profile = JobseekerProfile.query.filter_by(user_id=get_jwt_identity()).first()
+    if not profile:
+        return fail("Complete your profile first.", 400)
+    if not JobFairRegistration.query.filter_by(jobfair_id=fair.id, jobseeker_profile_id=profile.id).first():
+        return fail("Register for the job fair first.", 400)
+    if JobFairBoothVisit.query.filter_by(booth_id=booth.id, jobseeker_profile_id=profile.id).first():
+        return fail("Already registered for this booth.", 409)
+
+    visit = JobFairBoothVisit(jobfair_id=fair.id, booth_id=booth.id, jobseeker_profile_id=profile.id)
+    db.session.add(visit)
+    db.session.commit()
+    log_audit(User.query.get(profile.user_id), "Create", "jobfair_booth_visits", visit.id, f"Registered for booth {booth.booth_name}")
+
+    employer_user = User.query.get(booth.employer_company.user_id)
+    notify_user(
+        employer_user.id, "jobfair_booth_visit", "Booth Registration",
+        f"{profile.full_name} has registered for your booth at {fair.name}.",
+        link=f"/employer/jobfair/{fair.id}/booth", socket_event="jobfair:booth_visit",
+        socket_payload={"jobfair_id": str(fair.id), "booth_id": str(booth.id), "visit_id": str(visit.id)},
+    )
+    send_jobfair_booth_visit_email(
+        employer_user.email, booth.employer_company.company_name, fair.name, profile.full_name, profile.preferred_job_position,
+    )
+    return ok(visit.to_dict(), "Registered for this booth!", 201)
 
 
 @jobfair_bp.get("/jobfair/my-registrations")
@@ -307,6 +354,89 @@ def upload_booth_material(jobfair_id):
     booth.materials = (booth.materials or []) + [{"name": file.filename, "url": url}]
     db.session.commit()
     return ok(booth.to_dict(), "Material uploaded.")
+
+
+def _employer_confirmed_booth(jobfair_id):
+    """The requesting employer's own confirmed booth for this fair, or None."""
+    company = EmployerCompany.query.filter_by(user_id=get_jwt_identity()).first()
+    if not company:
+        return None, None
+    booth = JobFairBooth.query.filter_by(jobfair_id=jobfair_id, employer_company_id=company.id, status="confirmed").first()
+    return booth, company
+
+
+@jobfair_bp.get("/jobfair/<jobfair_id>/booth/visitors")
+@jwt_required()
+@role_required("employer")
+def list_booth_visitors(jobfair_id):
+    booth, _ = _employer_confirmed_booth(jobfair_id)
+    if not booth:
+        return fail("You don't have a confirmed booth for this job fair.", 403)
+    visits = JobFairBoothVisit.query.filter_by(booth_id=booth.id).order_by(JobFairBoothVisit.created_at.desc()).all()
+    return ok({
+        "booth": booth.to_dict(),
+        "visitors": [v.to_dict() for v in visits],
+    })
+
+
+@jobfair_bp.post("/jobfair/<jobfair_id>/booth/scan-qr")
+@jwt_required()
+@role_required("employer")
+def scan_booth_qr(jobfair_id):
+    booth, _ = _employer_confirmed_booth(jobfair_id)
+    if not booth:
+        return fail("You don't have a confirmed booth for this job fair.", 403)
+    data = request.get_json(force=True) or {}
+    token = data.get("qr_token")
+    registration = JobFairRegistration.query.filter_by(jobfair_id=jobfair_id, qr_token=token).first()
+    if not registration:
+        return fail("Invalid QR code for this job fair.", 404)
+    visit = JobFairBoothVisit.query.filter_by(booth_id=booth.id, jobseeker_profile_id=registration.jobseeker_profile_id).first()
+    if not visit:
+        return fail("This jobseeker hasn't registered for your booth.", 404)
+    if visit.checked_in:
+        return fail("This jobseeker is already checked in.", 409)
+
+    visit.checked_in = True
+    visit.checked_in_at = now_manila()
+    db.session.commit()
+    return ok(visit.to_dict(), f"{visit.jobseeker_profile.full_name} checked in.")
+
+
+@jobfair_bp.post("/jobfair/<jobfair_id>/booth/visitors/<visit_id>/link-vacancy")
+@jwt_required()
+@role_required("employer")
+def link_booth_visitor_vacancy(jobfair_id, visit_id):
+    booth, company = _employer_confirmed_booth(jobfair_id)
+    if not booth:
+        return fail("You don't have a confirmed booth for this job fair.", 403)
+    visit = JobFairBoothVisit.query.filter_by(id=visit_id, booth_id=booth.id).first()
+    if not visit:
+        return fail("Booth visitor not found.", 404)
+    data = request.get_json(force=True) or {}
+    vacancy = Vacancy.query.get(data.get("vacancy_id"))
+    if not vacancy or vacancy.employer_company_id != company.id or vacancy.status != "published":
+        return fail("Select one of your published vacancies.", 400)
+
+    application = Application.query.filter_by(vacancy_id=vacancy.id, jobseeker_profile_id=visit.jobseeker_profile_id).first()
+    if not application:
+        score = match_score(visit.jobseeker_profile, vacancy)
+        application = Application(vacancy_id=vacancy.id, jobseeker_profile_id=visit.jobseeker_profile_id, status="applied", match_score=score)
+        db.session.add(application)
+        db.session.commit()
+        record_initial_history(application, User.query.get(company.user_id))
+
+        jobseeker_user = User.query.get(visit.jobseeker_profile.user_id)
+        notify_user(
+            jobseeker_user.id, "application_status", "Added as an Applicant",
+            f"{company.company_name} added you as an applicant for {vacancy.title} after your job fair booth visit.",
+            link="/jobseeker/applications",
+        )
+
+    visit.application_id = application.id
+    db.session.commit()
+    log_audit(User.query.get(company.user_id), "Update", "jobfair_booth_visits", visit.id, f"Linked to vacancy {vacancy.title}")
+    return ok(visit.to_dict(), "Applicant linked — manage them from Applicant Detail.")
 
 
 # ---------- Staff CRUD + lifecycle ----------
@@ -673,6 +803,21 @@ def jobfair_report(jobfair_id):
         columns = ["Company", "Position", "Employment Type", "Slots"]
         vacancies = Vacancy.query.filter(Vacancy.tagged_for_jobfair_id == fair.id, Vacancy.status == "published").all()
         rows = [[v.employer_company.company_name, v.title, v.job_type or "", v.num_slots or 1] for v in vacancies]
+    elif report_type == "booth_visits":
+        title = f"Booth Visits — {fair.name}"
+        columns = ["Booth/Company", "Jobseeker", "Preferred Position", "Registered", "Checked In", "Checked In At"]
+        rows = [
+            [
+                booth.booth_name or booth.employer_company.company_name,
+                v.jobseeker_profile.full_name,
+                v.jobseeker_profile.preferred_job_position or "",
+                v.created_at.strftime("%b %d, %Y") if v.created_at else "",
+                "Yes" if v.checked_in else "No",
+                v.checked_in_at.strftime("%b %d, %Y %I:%M %p") if v.checked_in_at else "",
+            ]
+            for booth in fair.booths
+            for v in booth.visits
+        ]
     else:
         return fail("Unknown report type.", 400)
 

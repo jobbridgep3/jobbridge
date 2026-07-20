@@ -48,6 +48,8 @@ const STATUS_MAP = {
   archived: { label: 'Archived', variant: 'default' },
   upcoming: { label: 'Upcoming', variant: 'info' },
   certificate_issued: { label: 'Certificate Issued', variant: 'success' },
+  checked_in: { label: 'Checked In', variant: 'success' },
+  not_arrived: { label: 'Not Arrived', variant: 'warning' },
 }
 
 export function StatusBadge({ status, label }) {

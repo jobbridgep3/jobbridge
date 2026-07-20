@@ -116,6 +116,9 @@ function BoothsDialog({ fair, onClose }) {
                   <div>
                     <p className="text-sm font-medium text-slate-800">{b.company_name}</p>
                     <p className="text-xs text-slate-500">{b.booth_name}</p>
+                    {b.status === 'confirmed' && (
+                      <p className="text-xs text-slate-400">{b.visitor_count} registered · {b.checked_in_count} checked in</p>
+                    )}
                   </div>
                   <StatusBadge status={b.status} />
                 </div>
@@ -501,6 +504,7 @@ export default function StaffJobFair({ basePath = '/staff' }) {
               { type: 'participants', label: 'Participant Report' },
               { type: 'employers', label: 'Employer Participation Report' },
               { type: 'vacancies', label: 'Vacancy Report' },
+              { type: 'booth_visits', label: 'Booth Visits Report' },
             ].map((r) => (
               <div key={r.type} className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
                 <p className="text-sm font-medium text-slate-800">{r.label}</p>

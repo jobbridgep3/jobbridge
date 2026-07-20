@@ -379,6 +379,22 @@ def send_jobfair_booth_status_email(to: str, company_name: str, fair_name: str, 
     return send_email(to, subject, html)
 
 
+def send_jobfair_booth_visit_email(to: str, company_name: str, fair_name: str, jobseeker_name: str, preferred_position: str | None = None):
+    url = f"{current_app.config['FRONTEND_URL']}/employer/jobfair"
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">New Booth Registration</h2>
+      <p>Hi {company_name},</p>
+      <p><b>{jobseeker_name}</b> has registered for your booth at <b>{fair_name}</b>.</p>
+      {f"<p><b>Preferred position:</b> {preferred_position}</p>" if preferred_position else ""}
+      <p>Check in the jobseeker via QR when they arrive, and view their profile from your booth roster.</p>
+      <p><a href="{url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">View My Booth</a></p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"New booth registration — {fair_name}", html)
+
+
 def send_employment_status_email(to: str, full_name: str, position: str, employer_name: str, status_label: str, note: str | None = None):
     url = f"{current_app.config['FRONTEND_URL']}/jobseeker/employment"
     html = f"""
