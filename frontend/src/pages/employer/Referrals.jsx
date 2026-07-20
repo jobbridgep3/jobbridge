@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
 import { CheckCircle2, ClipboardList, Eye, Send, UserPlus, XCircle } from 'lucide-react'
@@ -30,6 +30,7 @@ export default function EmployerReferrals() {
   const { data: referrals, isLoading } = useQuery({
     queryKey: ['employer', 'referrals', activeParams],
     queryFn: async () => (await api.get('/api/employer/referrals', { params: activeParams })).data.data,
+    placeholderData: keepPreviousData,
   })
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['employer', 'referrals'] })
