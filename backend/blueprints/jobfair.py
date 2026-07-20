@@ -34,6 +34,10 @@ jobfair_bp = Blueprint("jobfair", __name__, url_prefix="/api")
 staff_jobfair_bp = Blueprint("staff_jobfair", __name__, url_prefix="/api/staff/jobfair")
 
 PUBLIC_STATUSES = ("published", "ongoing", "completed")
+# Active browse-list only — completed ("Ended") fairs drop off the active list but
+# stay reachable via My Registrations / My Participations and the detail route,
+# which still use PUBLIC_STATUSES above.
+ACTIVE_LIST_STATUSES = ("published", "ongoing")
 
 
 def _next_registration_number():
@@ -58,7 +62,7 @@ def list_jobfairs():
         if request.args.get("status"):
             query = query.filter_by(status=request.args["status"])
     else:
-        query = query.filter(JobFair.status.in_(PUBLIC_STATUSES))
+        query = query.filter(JobFair.status.in_(ACTIVE_LIST_STATUSES))
     fairs = query.order_by(JobFair.event_date.desc()).all()
     return ok([f.to_dict() for f in fairs])
 

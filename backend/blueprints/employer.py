@@ -13,7 +13,7 @@ from models.jobfair import JobFairBooth
 from models.vacancy import Vacancy, VacancyCategory, VacancyScreeningQuestion
 from schemas.employer_schemas import CompanyProfileSchema, HRProfileSchema
 from schemas.vacancy_schemas import VacancyWriteSchema
-from services.application_status_service import build_timeline, transition_application
+from services.application_status_service import build_timeline, is_hired_elsewhere_at_company, transition_application
 from services.audit_service import log_audit
 from services.matching_service import rank_jobseekers_for_vacancy
 from services.notification_service import notify_role
@@ -921,6 +921,9 @@ def get_applicant(application_id):
         return fail("Applicant not found.", 404)
     result = application.to_dict()
     result["jobseeker_profile"] = application.jobseeker_profile.to_dict()
+    result["already_hired_elsewhere_at_company"] = is_hired_elsewhere_at_company(
+        application.jobseeker_profile_id, application.vacancy.employer_company_id, exclude_application_id=application.id,
+    )
     result["timeline"] = build_timeline(application)
     result["interviews"] = [i.to_dict() for i in sorted(application.interviews, key=lambda i: i.scheduled_date or i.created_at)]
     result["document_requests"] = [r.to_dict() for r in application.document_requests]

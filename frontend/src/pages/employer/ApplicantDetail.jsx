@@ -243,17 +243,21 @@ export default function EmployerApplicantDetail() {
           <CardTitle>Actions</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          {(EMPLOYER_ACTIONS_BY_STATUS[applicant.status] || []).map((status) => (
-            <Button
-              key={status}
-              size="sm"
-              variant={status === 'rejected' ? 'ghost' : status === 'hired' ? 'primary' : 'secondary'}
-              onClick={() => updateStatus.mutate(status)}
-              disabled={updateStatus.isPending}
-            >
-              {ACTION_LABELS[status]}
-            </Button>
-          ))}
+          {(EMPLOYER_ACTIONS_BY_STATUS[applicant.status] || []).map((status) => {
+            const blocked = status === 'hired' && applicant.already_hired_elsewhere_at_company
+            return (
+              <Button
+                key={status}
+                size="sm"
+                variant={status === 'rejected' ? 'ghost' : status === 'hired' ? 'primary' : 'secondary'}
+                onClick={() => updateStatus.mutate(status)}
+                disabled={updateStatus.isPending || blocked}
+                title={blocked ? 'Already hired for another position at your company.' : undefined}
+              >
+                {ACTION_LABELS[status]}
+              </Button>
+            )
+          })}
           {CAN_INVITE_INTERVIEW.includes(applicant.status) && (
             <Button size="sm" variant="secondary" onClick={() => setInterviewOpen(true)}>
               <Send className="h-3.5 w-3.5" /> Send Interview Invite

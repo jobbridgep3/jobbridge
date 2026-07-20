@@ -47,10 +47,14 @@ export default function JobseekerJobDetail() {
       />
 
       <Card>
-        <CardContent className="flex justify-end">
-          <Button onClick={() => applyMutation.mutate()} disabled={applyMutation.isPending}>
-            {applyMutation.isPending ? 'Submitting…' : 'Apply Now'}
-          </Button>
+        <CardContent className="flex items-center justify-end gap-3">
+          {job.already_hired_at_company ? (
+            <p className="text-sm text-slate-500">You're already hired by this company — you can't apply to another of their vacancies.</p>
+          ) : (
+            <Button onClick={() => applyMutation.mutate()} disabled={applyMutation.isPending}>
+              {applyMutation.isPending ? 'Submitting…' : 'Apply Now'}
+            </Button>
+          )}
         </CardContent>
       </Card>
     </motion.div>

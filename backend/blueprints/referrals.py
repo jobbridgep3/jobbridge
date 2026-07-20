@@ -9,6 +9,7 @@ from flask import Blueprint, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from extensions import db
+from models.application import APPLICATION_STATUS_LABELS, Application
 from models.jobseeker import JobseekerProfile
 from models.referral import ReferralLetter
 from models.user import User
@@ -40,11 +41,25 @@ def request_referral_letter():
         if not vacancy or vacancy.status != "published":
             return fail("Vacancy not found or not open.", 404)
 
-    pending = ReferralLetter.query.filter_by(
-        jobseeker_profile_id=profile.id, status="requested", vacancy_id=vacancy_id,
+        existing_application = Application.query.filter_by(
+            vacancy_id=vacancy_id, jobseeker_profile_id=profile.id,
+        ).first()
+        if existing_application and existing_application.status not in ("rejected", "cancelled"):
+            if existing_application.status == "hired":
+                return fail("You are already hired for this vacancy.", 409)
+            label = APPLICATION_STATUS_LABELS.get(existing_application.status, existing_application.status)
+            return fail(
+                f"You already have an active application ({label}) for this vacancy — a referral request isn't needed.", 409,
+            )
+
+    existing_referral = ReferralLetter.query.filter(
+        ReferralLetter.jobseeker_profile_id == profile.id,
+        ReferralLetter.vacancy_id == vacancy_id,
+        ReferralLetter.status.in_(("requested", "approved")),
     ).first()
-    if pending:
-        return fail("You already have a pending request for this referral letter.", 409)
+    if existing_referral:
+        what = "referral request for this vacancy" if vacancy_id else "general referral request"
+        return fail(f"You already have a {existing_referral.status} {what}.", 409)
 
     letter = ReferralLetter(
         jobseeker_profile_id=profile.id,

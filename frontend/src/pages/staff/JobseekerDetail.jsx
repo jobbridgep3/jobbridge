@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
 import { ArrowLeft, FileText, Pencil, ShieldCheck, ShieldX, Trash2, UserRound, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -239,6 +240,7 @@ export default function StaffJobseekerDetail({ basePath = '/staff' }) {
 
           {!editMode && (
             <div className="grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 sm:grid-cols-4">
+              {row('Date of Birth', profile.date_of_birth ? dayjs(profile.date_of_birth).format('MMMM D, YYYY') : null)}
               {row('Age', profile.age)}
               {row('Gender', profile.gender)}
               {row('Civil Status', profile.civil_status)}
