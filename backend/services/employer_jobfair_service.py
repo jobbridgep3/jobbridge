@@ -12,7 +12,7 @@ from services.pdf_service import generate_table_report
 
 PARTICIPATION_COLUMNS = [
     "Job Fair", "Event Date", "Venue", "Job Fair Status", "Booth Status",
-    "Assigned Vacancies", "Booth Visitors", "Interviews", "Hired",
+    "Assigned Vacancies", "Booth Visitors", "Rejected", "Hired",
 ]
 
 
@@ -75,7 +75,7 @@ def _participation_rows(company):
             p["booth_status"],
             p["assigned_vacancy_count"],
             summary.get("booth_visitors", 0),
-            summary.get("interviews", 0),
+            summary.get("rejected", 0),
             summary.get("hired", 0),
         ])
     return rows

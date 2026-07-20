@@ -261,7 +261,7 @@ function ParticipationsPanel() {
               <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-2 sm:grid-cols-4">
                 {[
                   ['Booth Visitors', p.attendance_summary.booth_visitors],
-                  ['Interviews', p.attendance_summary.interviews],
+                  ['Rejected', p.attendance_summary.rejected],
                   ['Hired', p.attendance_summary.hired],
                   ['Applications', p.attendance_summary.total],
                 ].map(([label, value]) => (
