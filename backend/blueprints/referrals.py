@@ -17,6 +17,7 @@ from models.vacancy import Vacancy
 from services.audit_service import log_audit
 from services.email_service import send_referral_decision_email, send_referral_pending_employer_review_email
 from services.notification_service import notify_role, notify_user
+from services.application_status_service import is_currently_employed_at_company
 from services.pdf_service import generate_referral_letter
 from services.storage_service import upload_file
 from utils.decorators import role_required
@@ -41,16 +42,26 @@ def request_referral_letter():
         if not vacancy or vacancy.status != "published":
             return fail("Vacancy not found or not open.", 404)
 
+        if is_currently_employed_at_company(profile.id, vacancy.employer_company_id):
+            return fail(
+                "You are currently employed by this company. Referral requests are disabled until your employment ends.", 409,
+            )
+
         existing_application = Application.query.filter_by(
             vacancy_id=vacancy_id, jobseeker_profile_id=profile.id,
         ).first()
-        if existing_application and existing_application.status not in ("rejected", "cancelled"):
-            if existing_application.status == "hired":
-                return fail("You are already hired for this vacancy.", 409)
-            label = APPLICATION_STATUS_LABELS.get(existing_application.status, existing_application.status)
-            return fail(
-                f"You already have an active application ({label}) for this vacancy — a referral request isn't needed.", 409,
-            )
+        if existing_application:
+            if existing_application.status == "rejected":
+                return fail(
+                    "You have already been rejected for this vacancy. You can no longer submit a referral request for this job opening.", 409,
+                )
+            if existing_application.status != "cancelled":
+                if existing_application.status == "hired":
+                    return fail("You are already hired for this vacancy.", 409)
+                label = APPLICATION_STATUS_LABELS.get(existing_application.status, existing_application.status)
+                return fail(
+                    f"You already have an active application ({label}) for this vacancy — a referral request isn't needed.", 409,
+                )
 
     existing_referral = ReferralLetter.query.filter(
         ReferralLetter.jobseeker_profile_id == profile.id,

@@ -7,8 +7,8 @@ website notification, and email notification always stay in sync.
 
 from extensions import db
 from models.application import APPLICATION_STATUS_LABELS, Application, ApplicationStatusHistory
+from models.employment import EMPLOYMENT_END_STATUSES, EmploymentRecord
 from models.user import User
-from models.vacancy import Vacancy
 from services.audit_service import log_audit
 from services.email_service import send_application_status_email
 from services.notification_service import notify_user
@@ -33,16 +33,18 @@ def can_transition(from_status: str, to_status: str) -> bool:
     return to_status in ALLOWED_TRANSITIONS.get(from_status, set())
 
 
-def is_hired_elsewhere_at_company(jobseeker_profile_id, employer_company_id, exclude_application_id=None):
-    """True if this jobseeker already has a 'hired' Application for a DIFFERENT
-    vacancy at the same employer — one active employment record per company."""
-    query = Application.query.join(Vacancy).filter(
-        Application.jobseeker_profile_id == jobseeker_profile_id,
-        Application.status == "hired",
-        Vacancy.employer_company_id == employer_company_id,
+def is_currently_employed_at_company(jobseeker_profile_id, employer_company_id, exclude_application_id=None):
+    """True if this jobseeker has an active (non-ended) EmploymentRecord at this
+    employer — i.e. currently hired, not yet resigned/terminated/contract-ended."""
+    query = EmploymentRecord.query.filter(
+        EmploymentRecord.jobseeker_profile_id == jobseeker_profile_id,
+        EmploymentRecord.employer_company_id == employer_company_id,
+        ~EmploymentRecord.status.in_(EMPLOYMENT_END_STATUSES),
     )
     if exclude_application_id:
-        query = query.filter(Application.id != exclude_application_id)
+        query = query.filter(
+            db.or_(EmploymentRecord.application_id.is_(None), EmploymentRecord.application_id != exclude_application_id)
+        )
     return query.first() is not None
 
 
@@ -61,10 +63,10 @@ def transition_application(application, new_status, actor_user, note=None, notif
             f"'{APPLICATION_STATUS_LABELS.get(old_status, old_status)}' to "
             f"'{APPLICATION_STATUS_LABELS.get(new_status, new_status)}'."
         )
-    if new_status == "hired" and is_hired_elsewhere_at_company(
+    if new_status == "hired" and is_currently_employed_at_company(
         application.jobseeker_profile_id, application.vacancy.employer_company_id, exclude_application_id=application.id,
     ):
-        return False, "This jobseeker is already hired for another position at this company."
+        return False, "This jobseeker is currently employed in another position at this company."
 
     application.status = new_status
     db.session.add(ApplicationStatusHistory(

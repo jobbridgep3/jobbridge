@@ -49,7 +49,7 @@ export default function JobseekerJobDetail() {
       <Card>
         <CardContent className="flex items-center justify-end gap-3">
           {job.already_hired_at_company ? (
-            <p className="text-sm text-slate-500">You're already hired by this company — you can't apply to another of their vacancies.</p>
+            <p className="text-sm text-slate-500">You are currently employed by this company. You cannot apply to another vacancy until your employment has ended.</p>
           ) : (
             <Button onClick={() => applyMutation.mutate()} disabled={applyMutation.isPending}>
               {applyMutation.isPending ? 'Submitting…' : 'Apply Now'}

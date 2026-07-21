@@ -7,7 +7,7 @@ from models.employer_hr import EmployerHRProfile
 from models.jobseeker import JobseekerProfile
 from models.user import User
 from models.vacancy import Vacancy
-from services.application_status_service import build_timeline, is_hired_elsewhere_at_company, record_initial_history, transition_application
+from services.application_status_service import build_timeline, is_currently_employed_at_company, record_initial_history, transition_application
 from services.audit_service import log_audit
 from services.matching_service import match_score, rank_vacancies_for_jobseeker
 from services.notification_service import notify_role, notify_user
@@ -74,7 +74,7 @@ def get_job(vacancy_id):
         profile = JobseekerProfile.query.filter_by(user_id=identity).first()
         if profile:
             score = match_score(profile, vacancy)
-            already_hired_at_company = is_hired_elsewhere_at_company(profile.id, vacancy.employer_company_id)
+            already_hired_at_company = is_currently_employed_at_company(profile.id, vacancy.employer_company_id)
 
     result = vacancy.to_dict(match_score=score)
     hired_count = Application.query.filter_by(vacancy_id=vacancy.id, status="hired").count()
@@ -100,8 +100,8 @@ def apply_to_job():
     if Application.query.filter_by(vacancy_id=vacancy.id, jobseeker_profile_id=profile.id).first():
         return fail("You have already applied to this job.", 409)
 
-    if is_hired_elsewhere_at_company(profile.id, vacancy.employer_company_id):
-        return fail("You are already hired by this company and cannot apply to another of their vacancies.", 409)
+    if is_currently_employed_at_company(profile.id, vacancy.employer_company_id):
+        return fail("You are currently employed by this company. You cannot apply to another vacancy until your employment has ended.", 409)
 
     score = match_score(profile, vacancy)
     application = Application(vacancy_id=vacancy.id, jobseeker_profile_id=profile.id, status="applied", match_score=score)
