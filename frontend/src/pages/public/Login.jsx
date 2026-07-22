@@ -3,7 +3,7 @@ import { useRef, useState } from 'react'
 import ReCAPTCHA from 'react-google-recaptcha'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { z } from 'zod'
 
 import { Button } from '../../components/ui/Button'
@@ -21,6 +21,7 @@ const schema = z.object({
 
 export default function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
   const setAuth = useAuthStore((s) => s.setAuth)
   const [serverError, setServerError] = useState(null)
   const [recaptchaToken, setRecaptchaToken] = useState(null)
@@ -38,7 +39,8 @@ export default function Login() {
       const { token, user } = res.data.data
       setAuth(token, user)
       toast.success('Welcome back!')
-      navigate(ROLE_DASHBOARD[user.role] || '/')
+      const from = location.state?.from
+      navigate(from ? `${from.pathname}${from.search || ''}` : ROLE_DASHBOARD[user.role] || '/')
     } catch (err) {
       setServerError(err.response?.data?.message || 'Login failed. Please try again.')
       // A reCAPTCHA token is single-use (Google's siteverify consumes it on the very

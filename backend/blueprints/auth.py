@@ -23,6 +23,7 @@ from schemas.auth_schemas import (
 from services.audit_service import log_audit
 from services.email_service import send_employer_welcome_email, send_otp_email
 from services.notification_service import notify_user
+from sockets.events import emit_broadcast
 from utils.client_ip import get_client_ip
 from utils.rate_limit_keys import ip_and_email_key
 from utils.recaptcha import verify_recaptcha
@@ -125,6 +126,8 @@ def register():
     db.session.commit()
     ttl_seconds = _issue_otp(user, "register")
     log_audit(user, "Account Create", "auth", user.id, f"Self-registered as {role}")
+    if role == "jobseeker":
+        emit_broadcast("public:homepage_update", {"sections": ["stats"]})
 
     return ok(
         {"email": user.email, "role": role, "expires_in": ttl_seconds},

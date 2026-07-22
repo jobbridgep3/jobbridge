@@ -16,6 +16,7 @@ from models.user import User
 from services.audit_service import log_audit
 from services.email_service import send_employment_status_email
 from services.notification_service import notify_role, notify_user
+from sockets.events import emit_broadcast
 from utils.decorators import role_required
 from utils.responses import fail, ok
 from utils.timezone import now_manila
@@ -64,6 +65,7 @@ def transition_employment(record, new_status, actor_user, note=None, notify=True
         f"Status: {old_status} -> {new_status}" + (f" — {note}" if note else ""),
         before={"status": old_status}, after={"status": new_status},
     )
+    emit_broadcast("public:homepage_update", {"sections": ["stats"]})
 
     if notify:
         label = EMPLOYMENT_STATUS_LABELS.get(new_status, new_status)

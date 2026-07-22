@@ -17,6 +17,7 @@ from services.application_status_service import build_timeline, is_currently_emp
 from services.audit_service import log_audit
 from services.matching_service import rank_jobseekers_for_vacancy
 from services.notification_service import notify_role
+from sockets.events import emit_broadcast
 from services.profile_completion_service import COMPANY_REQUIRED_FIELDS, HR_REQUIRED_FIELDS, compute_completion
 from services.vacancy_notification_service import notify_jobseekers_of_new_vacancy
 from services.vacancy_state_service import can_transition
@@ -676,6 +677,7 @@ def publish_vacancy(vacancy_id):
     vacancy.published_at = now_manila()
     db.session.commit()
     log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, "Published", before=before, after={"status": vacancy.status})
+    emit_broadcast("public:homepage_update", {"sections": ["jobs", "stats"]})
 
     notify_jobseekers_of_new_vacancy(vacancy, company)
 
@@ -729,6 +731,7 @@ def close_vacancy(vacancy_id):
     vacancy.status = "closed"
     db.session.commit()
     log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, "Closed", before=before, after={"status": vacancy.status})
+    emit_broadcast("public:homepage_update", {"sections": ["jobs", "stats"]})
     return ok(vacancy.to_dict(), "Vacancy closed.")
 
 
@@ -749,6 +752,7 @@ def reopen_vacancy(vacancy_id):
     vacancy.status = "published"
     db.session.commit()
     log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, "Reopened", before=before, after={"status": vacancy.status})
+    emit_broadcast("public:homepage_update", {"sections": ["jobs", "stats"]})
     return ok(vacancy.to_dict(), "Vacancy reopened.")
 
 
@@ -768,6 +772,7 @@ def mark_vacancy_filled(vacancy_id):
     vacancy.filled_at = now_manila()
     db.session.commit()
     log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, "Marked filled", before=before, after={"status": vacancy.status})
+    emit_broadcast("public:homepage_update", {"sections": ["jobs", "stats"]})
     return ok(vacancy.to_dict(), "Vacancy marked as filled.")
 
 

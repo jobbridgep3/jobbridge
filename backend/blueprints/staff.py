@@ -46,7 +46,7 @@ from services.user_deletion_service import employer_dependent_counts, jobseeker_
 from services.vacancy_notification_service import notify_jobseekers_of_new_vacancy
 from services.vacancy_query_service import build_vacancy_query
 from services.vacancy_state_service import can_transition
-from sockets.events import emit_to_role
+from sockets.events import emit_broadcast, emit_to_role
 from utils.decorators import role_required
 from utils.pagination import paginate
 from utils.responses import fail, ok
@@ -672,6 +672,7 @@ def verify_employer(company_id):
         remarks=company.accreditation_remarks if not approve else None,
     )
     log_audit(User.query.get(get_jwt_identity()), "Approve" if approve else "Reject", "employers", company.id, before=before, after=after)
+    emit_broadcast("public:homepage_update", {"sections": ["stats"]})
     return ok(company.to_dict(), "Employer accreditation updated.")
 
 
@@ -692,6 +693,7 @@ def suspend_employer(company_id):
     notify_user(company.user_id, "account_suspended", "Account Suspended", "Your company account has been suspended.",
                 link="/employer/company", socket_event="account:suspended", socket_payload={"employer_id": str(company.id)})
     log_audit(User.query.get(get_jwt_identity()), "Update", "employers", company.id, "Suspended", before=before, after=after)
+    emit_broadcast("public:homepage_update", {"sections": ["stats"]})
     return ok(company.to_dict(), "Employer suspended.")
 
 
@@ -713,6 +715,7 @@ def reinstate_employer(company_id):
                 link="/employer/company", socket_event="account:verified",
                 socket_payload={"employer_id": str(company.id), "status": company.accreditation_status})
     log_audit(User.query.get(get_jwt_identity()), "Update", "employers", company.id, "Reinstated", before=before, after=after)
+    emit_broadcast("public:homepage_update", {"sections": ["stats"]})
     return ok(company.to_dict(), "Employer reinstated.")
 
 
@@ -991,6 +994,7 @@ def suspend_vacancy(vacancy_id):
                 f"{vacancy.title} has been suspended." + (f" Reason: {vacancy.suspended_reason}" if vacancy.suspended_reason else ""),
                 socket_event="vacancy:suspended", socket_payload={"vacancy_id": str(vacancy.id)})
     log_audit(User.query.get(get_jwt_identity()), "Update", "vacancies", vacancy.id, "Suspended", before=before, after=after)
+    emit_broadcast("public:homepage_update", {"sections": ["jobs", "stats"]})
     return ok(vacancy.to_dict(), "Vacancy suspended.")
 
 
@@ -1016,6 +1020,7 @@ def reactivate_vacancy(vacancy_id):
     # publish from the jobseeker's perspective — re-run matching/notify/email.
     notify_jobseekers_of_new_vacancy(vacancy, vacancy.employer_company)
     log_audit(User.query.get(get_jwt_identity()), "Update", "vacancies", vacancy.id, "Reactivated", before=before, after=after)
+    emit_broadcast("public:homepage_update", {"sections": ["jobs", "stats"]})
     return ok(vacancy.to_dict(), "Vacancy reactivated.")
 
 
@@ -1034,6 +1039,7 @@ def staff_close_vacancy(vacancy_id):
     after = {"status": vacancy.status}
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Update", "vacancies", vacancy.id, "Closed by staff", before=before, after=after)
+    emit_broadcast("public:homepage_update", {"sections": ["jobs", "stats"]})
     return ok(vacancy.to_dict(), "Vacancy closed.")
 
 
@@ -1316,6 +1322,8 @@ def staff_update_employment(record_id):
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Update", "employment", record.id,
               before={"status": old_status}, after={"status": record.status})
+    if record.status != old_status:
+        emit_broadcast("public:homepage_update", {"sections": ["stats"]})
     return ok(record.to_dict(), "Employment record updated.")
 
 
@@ -1345,6 +1353,7 @@ def staff_create_employment():
     ))
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Create", "employment", record.id, "Manual walk-in placement entry")
+    emit_broadcast("public:homepage_update", {"sections": ["stats"]})
     return ok(record.to_dict(), "Employment record created.", 201)
 
 

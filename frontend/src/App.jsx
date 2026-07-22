@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom'
 
 import { AppShell } from './components/layout/AppShell'
+import { PublicLayout } from './components/public/PublicLayout'
 import { ProtectedRoute } from './routes/ProtectedRoute'
 import { RoleGuard } from './routes/RoleGuard'
 
@@ -12,7 +13,12 @@ import VerifyOtp from './pages/public/VerifyOtp'
 import ForgotPassword from './pages/public/ForgotPassword'
 import ResetPassword from './pages/public/ResetPassword'
 import CompleteProfile from './pages/public/CompleteProfile'
+import PublicAnnouncements from './pages/public/Announcements'
 import AnnouncementDetails from './pages/public/AnnouncementDetails'
+import PublicJobs from './pages/public/Jobs'
+import PublicJobDetail from './pages/public/JobDetail'
+import PublicJobFairs from './pages/public/JobFairs'
+import PublicJobFairDetail from './pages/public/JobFairDetail'
 
 // Jobseeker
 import JobseekerDashboard from './pages/jobseeker/Dashboard'
@@ -99,7 +105,16 @@ export default function App() {
   return (
     <Routes>
       {/* Public */}
-      <Route path="/" element={<Landing />} />
+      <Route element={<PublicLayout />}>
+        <Route path="/" element={<Landing />} />
+        <Route path="/jobs" element={<PublicJobs />} />
+        <Route path="/jobs/:id" element={<PublicJobDetail />} />
+        <Route path="/job-fair" element={<PublicJobFairs />} />
+        <Route path="/job-fair/:id" element={<PublicJobFairDetail />} />
+        <Route path="/announcements" element={<PublicAnnouncements />} />
+        <Route path="/announcements/:id" element={<AnnouncementDetails />} />
+        <Route path="*" element={<Landing />} />
+      </Route>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/register/choose" element={<RegisterChoice />} />
@@ -107,7 +122,6 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/complete-profile" element={<CompleteProfile />} />
-      <Route path="/announcements/:id" element={<AnnouncementDetails />} />
 
       <Route element={<ProtectedRoute />}>
         {/* Jobseeker */}
@@ -208,8 +222,6 @@ export default function App() {
           </Route>
         </Route>
       </Route>
-
-      <Route path="*" element={<Landing />} />
     </Routes>
   )
 }

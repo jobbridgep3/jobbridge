@@ -26,14 +26,20 @@ function ensureConnected(token) {
  * by an unrelated page navigating away — connecting and disconnecting on every
  * mount was accumulating orphaned server-side connections and could kill
  * another component's still-live connection.
+ *
+ * Pass `{ allowAnonymous: true }` for public pages (e.g. the homepage) that need
+ * live updates before/without a login — the backend already accepts a tokenless
+ * connection (it just skips joining any room), so such a caller only ever
+ * receives broadcast-style events, never the per-user/per-role ones. Omitting
+ * this option keeps every existing caller's exact current behavior.
  */
-export function useSocket(eventHandlers = {}) {
+export function useSocket(eventHandlers = {}, { allowAnonymous = false } = {}) {
   const token = useAuthStore((s) => s.token)
   const handlersRef = useRef(eventHandlers)
   handlersRef.current = eventHandlers
 
   useEffect(() => {
-    if (!token) return undefined
+    if (!token && !allowAnonymous) return undefined
 
     const socket = ensureConnected(token)
     refCount += 1
@@ -53,7 +59,7 @@ export function useSocket(eventHandlers = {}) {
         refCount = 0
       }
     }
-  }, [token])
+  }, [token, allowAnonymous])
 
   return socketInstance
 }

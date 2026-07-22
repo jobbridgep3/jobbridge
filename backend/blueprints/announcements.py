@@ -9,6 +9,7 @@ from models.user import User
 from services.announcement_notification_service import publish_and_notify
 from services.audit_service import log_audit
 from services.storage_service import upload_file, validate_upload_file
+from sockets.events import emit_broadcast
 from utils.decorators import role_required
 from utils.html_sanitizer import sanitize_html
 from utils.responses import fail, ok
@@ -155,6 +156,7 @@ def archive_announcement(announcement_id):
     announcement.status = "archived"
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Archive", "announcements", announcement.id, before=before, after={"status": "archived"})
+    emit_broadcast("public:homepage_update", {"sections": ["announcements"]})
     return ok(announcement.to_dict(), "Announcement archived.")
 
 
@@ -174,6 +176,7 @@ def pin_announcement(announcement_id):
     announcement.is_pinned = pin
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Pin" if pin else "Unpin", "announcements", announcement.id)
+    emit_broadcast("public:homepage_update", {"sections": ["announcements"]})
     return ok(announcement.to_dict(), "Announcement pinned." if pin else "Announcement unpinned.")
 
 
@@ -187,6 +190,7 @@ def delete_announcement(announcement_id):
     db.session.delete(announcement)
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Delete", "announcements", announcement_id)
+    emit_broadcast("public:homepage_update", {"sections": ["announcements"]})
     return ok(message="Announcement deleted.")
 
 

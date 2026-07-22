@@ -22,6 +22,7 @@ def _auto_publish_vacancies(app):
         from extensions import db
         from models.vacancy import Vacancy
         from services.notification_service import notify_user
+        from sockets.events import emit_broadcast
         from utils.timezone import now_manila
 
         today = now_manila().date()
@@ -39,6 +40,7 @@ def _auto_publish_vacancies(app):
                 link="/employer/vacancies", socket_event="vacancy:approved", socket_payload={"vacancy_id": str(vacancy.id)},
             )
         if due:
+            emit_broadcast("public:homepage_update", {"sections": ["jobs", "stats"]})
             logger.info("APScheduler: auto-published %d vacancy(ies).", len(due))
 
 
@@ -48,6 +50,7 @@ def _auto_close_vacancies(app):
         from extensions import db
         from models.vacancy import Vacancy
         from services.notification_service import notify_user
+        from sockets.events import emit_broadcast
         from utils.timezone import now_manila
 
         today = now_manila().date()
@@ -64,6 +67,7 @@ def _auto_close_vacancies(app):
                 link="/employer/vacancies", socket_event="vacancy:rejected", socket_payload={"vacancy_id": str(vacancy.id)},
             )
         if due:
+            emit_broadcast("public:homepage_update", {"sections": ["jobs", "stats"]})
             logger.info("APScheduler: auto-closed %d vacancy(ies).", len(due))
 
 
@@ -112,6 +116,7 @@ def _advance_jobfair_statuses(app):
 
         from extensions import db
         from models.jobfair import JobFair
+        from sockets.events import emit_broadcast
         from utils.timezone import now_manila
 
         now = now_manila()
@@ -128,6 +133,7 @@ def _advance_jobfair_statuses(app):
             fair.status = "completed"
         if started or ended:
             db.session.commit()
+            emit_broadcast("public:homepage_update", {"sections": ["jobfairs"]})
             logger.info("APScheduler: job fairs — %d started, %d completed.", len(started), len(ended))
 
 
@@ -156,6 +162,7 @@ def _auto_archive_expired_announcements(app):
     with app.app_context():
         from extensions import db
         from models.announcement import Announcement
+        from sockets.events import emit_broadcast
         from utils.timezone import now_manila
 
         expired = Announcement.query.filter(
@@ -167,6 +174,7 @@ def _auto_archive_expired_announcements(app):
             announcement.status = "archived"
         if expired:
             db.session.commit()
+            emit_broadcast("public:homepage_update", {"sections": ["announcements"]})
             logger.info("APScheduler: auto-archived %d expired announcement(s).", len(expired))
 
 

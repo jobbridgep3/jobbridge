@@ -25,7 +25,7 @@ from services.notification_service import notify_role, notify_user
 from services.pdf_service import generate_table_report, to_bytesio
 from services.qr_service import generate_qr_data_url
 from services.storage_service import upload_file, validate_upload_file
-from sockets.events import emit_to_role
+from sockets.events import emit_broadcast, emit_to_role
 from utils.decorators import role_required
 from utils.responses import fail, ok
 from utils.timezone import now_manila
@@ -54,23 +54,27 @@ def _next_registration_number():
 # ---------- Shared read ----------
 
 @jobfair_bp.get("/jobfair")
-@jwt_required()
+@jwt_required(optional=True)
 def list_jobfairs():
-    role = get_jwt().get("role")
+    role = get_jwt().get("role") if get_jwt_identity() else None
     query = JobFair.query
     if role in ("staff", "admin"):
         if request.args.get("status"):
             query = query.filter_by(status=request.args["status"])
     else:
         query = query.filter(JobFair.status.in_(ACTIVE_LIST_STATUSES))
-    fairs = query.order_by(JobFair.event_date.desc()).all()
+    if request.args.get("upcoming"):
+        query = query.filter(JobFair.event_date >= now_manila()).order_by(JobFair.event_date.asc())
+    else:
+        query = query.order_by(JobFair.event_date.desc())
+    fairs = query.all()
     return ok([f.to_dict() for f in fairs])
 
 
 @jobfair_bp.get("/jobfair/<jobfair_id>")
-@jwt_required()
+@jwt_required(optional=True)
 def get_jobfair(jobfair_id):
-    role = get_jwt().get("role")
+    role = get_jwt().get("role") if get_jwt_identity() else None
     fair = JobFair.query.get(jobfair_id)
     if not fair or (role not in ("staff", "admin") and fair.status not in PUBLIC_STATUSES):
         return fail("Job fair not found.", 404)
@@ -542,6 +546,7 @@ def publish_jobfair(jobfair_id):
     fair.published_at = now_manila()
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Publish", "jobfair", fair.id, before={"status": "draft"}, after={"status": "published"})
+    emit_broadcast("public:homepage_update", {"sections": ["jobfairs"]})
 
     # Website notifications: one persisted row per user (bulk insert), one socket per role.
     when = fair.event_date.strftime("%B %d, %Y %I:%M %p")
@@ -639,6 +644,7 @@ def archive_jobfair(jobfair_id):
     fair.status = "archived"
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Archive", "jobfair", fair.id, before={"status": before}, after={"status": "archived"})
+    emit_broadcast("public:homepage_update", {"sections": ["jobfairs"]})
     return ok(fair.to_dict(), "Job fair archived.")
 
 
@@ -655,6 +661,7 @@ def cancel_jobfair(jobfair_id):
     fair.status = "cancelled"
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Cancel", "jobfair", fair.id, before={"status": before}, after={"status": "cancelled"})
+    emit_broadcast("public:homepage_update", {"sections": ["jobfairs"]})
 
     payload = fair.to_dict()
     for registration in fair.registrations:

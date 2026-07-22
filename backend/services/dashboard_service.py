@@ -79,6 +79,26 @@ def build_summary() -> dict:
     }
 
 
+def build_public_summary() -> dict:
+    """The 4 counts safe to show an anonymous visitor on the public homepage —
+    same query logic as build_summary(), just without the admin-facing fields."""
+    active_employers = (
+        db.session.query(EmployerCompany)
+        .join(User, EmployerCompany.user_id == User.id)
+        .filter(EmployerCompany.accreditation_status == "accredited", User.is_active.is_(True))
+        .count()
+    )
+    successful_placements = EmploymentRecord.query.filter(
+        EmploymentRecord.status.in_(("active", "completed"))
+    ).count()
+    return {
+        "active_jobseekers": JobseekerProfile.query.count(),
+        "job_openings": Vacancy.query.filter_by(status="published").count(),
+        "accredited_employers": active_employers,
+        "successful_placements": successful_placements,
+    }
+
+
 def build_analytics(months: int = 6, date_from: str | None = None, date_to: str | None = None) -> dict:
     """`date_from`/`date_to` (ISO date strings), when both given, replace the default
     "last N months ending now" window with an explicit range — used by the dashboard

@@ -3,6 +3,7 @@ from models.user import User
 from services.audit_service import log_audit
 from services.email_service import send_announcement_email
 from services.notification_service import notify_role, notify_user
+from sockets.events import emit_broadcast
 from utils.timezone import now_manila
 
 NOTIFIABLE_ROLES = ("jobseeker", "employer", "staff", "admin")
@@ -45,4 +46,5 @@ def publish_and_notify(announcement, actor=None):
 
     announcement.reach_count = len(recipients)
     db.session.commit()
+    emit_broadcast("public:homepage_update", {"sections": ["announcements"]})
     return announcement

@@ -70,6 +70,7 @@ def _register_blueprints(app: Flask):
     from blueprints.notifications import notifications_bp
     from blueprints.profile import profile_bp
     from blueprints.programs import programs_bp
+    from blueprints.public_home import public_home_bp
     from blueprints.referrals import referrals_bp
     from blueprints.settings import admin_settings_bp, settings_bp
     from blueprints.staff import staff_bp
@@ -81,7 +82,7 @@ def _register_blueprints(app: Flask):
         jobfair_bp, staff_jobfair_bp, programs_bp, referrals_bp, training_bp, staff_training_bp,
         notifications_bp, settings_bp, admin_settings_bp,
         employer_bp, company_bp, vacancies_bp, applicants_bp, applicant_tools_bp, employer_referrals_bp,
-        staff_bp, lmi_bp, admin_bp, announcements_bp, chatbot_bp, lookups_bp,
+        staff_bp, lmi_bp, admin_bp, announcements_bp, chatbot_bp, lookups_bp, public_home_bp,
     ):
         app.register_blueprint(bp)
 
