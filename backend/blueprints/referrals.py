@@ -42,7 +42,8 @@ def request_referral_letter():
         if not vacancy or vacancy.status != "published":
             return fail("Vacancy not found or not open.", 404)
 
-        if is_currently_employed_at_company(profile.id, vacancy.employer_company_id):
+        currently_employed = is_currently_employed_at_company(profile.id, vacancy.employer_company_id)
+        if currently_employed:
             return fail(
                 "You are currently employed by this company. Referral requests are disabled until your employment ends.", 409,
             )
@@ -51,11 +52,14 @@ def request_referral_letter():
             vacancy_id=vacancy_id, jobseeker_profile_id=profile.id,
         ).first()
         if existing_application:
+            # A "hired" application whose employment has since ended is stale —
+            # don't let it block a fresh referral request for this vacancy.
+            stale_hire = existing_application.status == "hired" and not currently_employed
             if existing_application.status == "rejected":
                 return fail(
                     "You have already been rejected for this vacancy. You can no longer submit a referral request for this job opening.", 409,
                 )
-            if existing_application.status != "cancelled":
+            if existing_application.status != "cancelled" and not stale_hire:
                 if existing_application.status == "hired":
                     return fail("You are already hired for this vacancy.", 409)
                 label = APPLICATION_STATUS_LABELS.get(existing_application.status, existing_application.status)
