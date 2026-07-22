@@ -20,6 +20,7 @@ from models.user import User
 from models.vacancy import Vacancy
 from schemas.jobseeker_schemas import ProfileUpdateSchema
 from services.application_stats_service import bucket_application_stats
+from services.application_status_service import is_currently_employed_at_company
 from services.audit_service import log_audit
 from services.dashboard_service import (
     build_analytics,
@@ -1326,6 +1327,9 @@ def staff_create_employment():
     from models.employment import EmploymentStatusHistory
 
     data = request.get_json(force=True) or {}
+    if is_currently_employed_at_company(data["jobseeker_profile_id"], data["employer_company_id"]):
+        return fail("This jobseeker already has an active employment record at this company.", 409)
+
     record = EmploymentRecord(
         jobseeker_profile_id=data["jobseeker_profile_id"], employer_company_id=data["employer_company_id"],
         position=data.get("position", ""), start_date=datetime.fromisoformat(data["start_date"]).date(),
