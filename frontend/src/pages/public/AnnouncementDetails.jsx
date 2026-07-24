@@ -12,6 +12,7 @@ import { Dialog, DialogContent } from '../../components/ui/Dialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { CATEGORY_LABELS } from '../../config/announcementMeta'
+import { ROLE_DASHBOARD } from '../../config/navigation'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
 import { useAuthStore } from '../../store/authStore'
@@ -19,6 +20,8 @@ import { useAuthStore } from '../../store/authStore'
 export default function AnnouncementDetails() {
   const { id } = useParams()
   const token = useAuthStore((s) => s.token)
+  const user = useAuthStore((s) => s.user)
+  const backTo = user ? ROLE_DASHBOARD[user.role] || '/' : '/'
   const [lightbox, setLightbox] = useState(null)
 
   const { data: announcement, isLoading, error } = useQuery({
@@ -44,7 +47,7 @@ export default function AnnouncementDetails() {
 
   return (
     <motion.div {...fadeIn} className="mx-auto max-w-3xl space-y-6 p-6">
-      <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-text-secondary hover:text-primary-700">
+      <Link to={backTo} className="inline-flex items-center gap-1.5 text-sm text-text-secondary hover:text-primary-700">
         <ArrowLeft className="h-4 w-4" /> Back
       </Link>
 

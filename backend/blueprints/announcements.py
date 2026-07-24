@@ -62,7 +62,7 @@ def get_announcement(announcement_id):
 
     identity = get_jwt_identity()
     role = get_jwt().get("role") if identity else "public"
-    if role not in (announcement.target_roles or []):
+    if role not in ("staff", "admin") and role not in (announcement.target_roles or []):
         return fail("You do not have access to this announcement.", 403)
 
     result = announcement.to_dict()

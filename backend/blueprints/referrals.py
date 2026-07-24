@@ -37,6 +37,7 @@ def request_referral_letter():
 
     data = request.get_json(force=True) or {}
     vacancy_id = data.get("vacancy_id") or None
+    stale_hire = False
     if vacancy_id:
         vacancy = Vacancy.query.get(vacancy_id)
         if not vacancy or vacancy.status != "published":
@@ -72,7 +73,7 @@ def request_referral_letter():
         ReferralLetter.vacancy_id == vacancy_id,
         ReferralLetter.status.in_(("requested", "approved")),
     ).first()
-    if existing_referral:
+    if existing_referral and not stale_hire:
         what = "referral request for this vacancy" if vacancy_id else "general referral request"
         return fail(f"You already have a {existing_referral.status} {what}.", 409)
 

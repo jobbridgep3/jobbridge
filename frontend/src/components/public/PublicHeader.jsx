@@ -4,8 +4,10 @@ import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 
 import logo from '../../assets/peso-logo.png'
+import { ROLE_DASHBOARD } from '../../config/navigation'
 import { openCitizenCharter } from '../../config/siteInfo'
 import { slideDown } from '../../lib/motion'
+import { useAuthStore } from '../../store/authStore'
 import { Button } from '../ui/Button'
 
 // "Services"/"About Us"/"Contact" have no dedicated pages yet — they route home
@@ -50,6 +52,8 @@ function NavLink({ item, onNavigate, className = '' }) {
 
 export function PublicHeader() {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const user = useAuthStore((s) => s.user)
+  const dashboardPath = user ? ROLE_DASHBOARD[user.role] || '/' : null
 
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-surface/90 backdrop-blur">
@@ -69,12 +73,20 @@ export function PublicHeader() {
         </nav>
 
         <div className="hidden items-center gap-2 md:flex">
-          <Button variant="secondary" asChild>
-            <Link to="/login">Log In</Link>
-          </Button>
-          <Button asChild>
-            <Link to="/register/choose">Register</Link>
-          </Button>
+          {dashboardPath ? (
+            <Button asChild>
+              <Link to={dashboardPath}>Go to Dashboard</Link>
+            </Button>
+          ) : (
+            <>
+              <Button variant="secondary" asChild>
+                <Link to="/login">Log In</Link>
+              </Button>
+              <Button asChild>
+                <Link to="/register/choose">Register</Link>
+              </Button>
+            </>
+          )}
         </div>
 
         <button
@@ -95,12 +107,20 @@ export function PublicHeader() {
             ))}
           </nav>
           <div className="flex gap-2 border-t border-border px-4 py-3">
-            <Button variant="secondary" className="flex-1" asChild>
-              <Link to="/login" onClick={() => setMobileOpen(false)}>Log In</Link>
-            </Button>
-            <Button className="flex-1" asChild>
-              <Link to="/register/choose" onClick={() => setMobileOpen(false)}>Register</Link>
-            </Button>
+            {dashboardPath ? (
+              <Button className="flex-1" asChild>
+                <Link to={dashboardPath} onClick={() => setMobileOpen(false)}>Go to Dashboard</Link>
+              </Button>
+            ) : (
+              <>
+                <Button variant="secondary" className="flex-1" asChild>
+                  <Link to="/login" onClick={() => setMobileOpen(false)}>Log In</Link>
+                </Button>
+                <Button className="flex-1" asChild>
+                  <Link to="/register/choose" onClick={() => setMobileOpen(false)}>Register</Link>
+                </Button>
+              </>
+            )}
           </div>
         </motion.div>
       )}
