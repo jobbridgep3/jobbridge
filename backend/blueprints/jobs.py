@@ -2,12 +2,14 @@ from flask import Blueprint, request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from extensions import db
-from models.application import APPLICATION_STATUS_LABELS, Application, ApplicationStatusHistory
+from models.application import APPLICATION_STATUS_LABELS, Application
 from models.employer_hr import EmployerHRProfile
 from models.jobseeker import JobseekerProfile
 from models.user import User
 from models.vacancy import Vacancy
-from services.application_status_service import build_timeline, is_currently_employed_at_company, record_initial_history, transition_application
+from services.application_status_service import (
+    build_timeline, is_currently_employed_at_company, record_initial_history, reopen_stale_application, transition_application,
+)
 from services.audit_service import log_audit
 from services.matching_service import match_score, rank_vacancies_for_jobseeker
 from services.notification_service import notify_role, notify_user
@@ -114,27 +116,7 @@ def apply_to_job():
     score = match_score(profile, vacancy)
 
     if stale_hire:
-        # Reopen the same row for the new cycle instead of inserting a second
-        # one — Application has a unique (vacancy_id, jobseeker_profile_id)
-        # constraint, and reusing it keeps the full status-history timeline
-        # (Submitted -> ... -> Hired) intact rather than losing it.
-        old_status = existing_application.status
-        existing_application.status = "applied"
-        existing_application.match_score = score
-        existing_application.employer_notes = None
-        existing_application.feedback_note = None
-        application = existing_application
-        if application.referral_letter:
-            # Detach the old cycle's referral letter so a newly-approved one
-            # can attach to this application without hitting the partial
-            # unique index on referral_letters.application_id.
-            application.referral_letter.application_id = None
-        db.session.add(ApplicationStatusHistory(
-            application_id=application.id, from_status=old_status, to_status="applied",
-            changed_by=jobseeker_user.id if jobseeker_user else None,
-            note="Reapplied — prior employment with this company has ended.",
-        ))
-        db.session.commit()
+        application = reopen_stale_application(existing_application, jobseeker_user, score=score)
     else:
         application = Application(vacancy_id=vacancy.id, jobseeker_profile_id=profile.id, status="applied", match_score=score)
         db.session.add(application)

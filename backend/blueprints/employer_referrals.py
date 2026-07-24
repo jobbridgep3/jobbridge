@@ -17,7 +17,7 @@ from models.jobseeker import JobseekerProfile
 from models.referral import ReferralLetter
 from models.user import User
 from models.vacancy import Vacancy
-from services.application_status_service import record_initial_history
+from services.application_status_service import is_currently_employed_at_company, record_initial_history, reopen_stale_application
 from services.audit_service import log_audit
 from services.email_service import send_employer_referral_decision_email
 from services.matching_service import match_score
@@ -114,9 +114,15 @@ def accept_referral(referral_id):
         return fail(f"This referral has already been reviewed (status: {referral.employer_status}).", 400)
 
     employer_user = User.query.get(get_jwt_identity())
+    currently_employed = is_currently_employed_at_company(referral.jobseeker_profile_id, referral.vacancy.employer_company_id)
     application = Application.query.filter_by(
         vacancy_id=referral.vacancy_id, jobseeker_profile_id=referral.jobseeker_profile_id,
     ).first()
+    # A "hired" application whose employment has since ended is stale — the
+    # employer accepting a fresh referral for this vacancy should reopen a
+    # new cycle instead of relinking to the old, terminal one.
+    stale_hire = application is not None and application.status == "hired" and not currently_employed
+
     if not application:
         score = match_score(referral.jobseeker_profile, referral.vacancy)
         application = Application(
@@ -126,6 +132,9 @@ def accept_referral(referral_id):
         db.session.add(application)
         db.session.commit()
         record_initial_history(application, employer_user)
+    elif stale_hire:
+        score = match_score(referral.jobseeker_profile, referral.vacancy)
+        application = reopen_stale_application(application, employer_user, score=score)
     elif application.referral_letter and application.referral_letter.id != referral.id:
         return fail("This applicant already has a referral letter attached to this application.", 409)
 
