@@ -15,7 +15,19 @@ export default defineConfig({
       // maximumFileSizeToCacheInBytes: the default 2 MiB cap started rejecting the
       // main bundle once Tiptap's rich-text editor was added (~2.3 MiB) — raised
       // just enough to cover it rather than leaving the whole bundle uncached.
-      workbox: { skipWaiting: true, clientsClaim: true, maximumFileSizeToCacheInBytes: 4 * 1024 * 1024 },
+      workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        // Without this, the auto-registered SPA NavigationRoute intercepts EVERY
+        // same-origin navigation (window.open, typed URL, iframe load) once the
+        // service worker is active — including requests for real static files like
+        // citizen-charter.pdf — and answers with the cached index.html instead of
+        // letting the actual file load. That made "Open in New Tab" for the
+        // Citizen's Charter silently render the SPA shell (which falls through to
+        // the homepage route) instead of the PDF.
+        navigateFallbackDenylist: [/^\/citizen-charter\.pdf$/],
+      },
       includeAssets: ['peso-logo.png'],
       manifest: {
         name: 'JobBridge — PESO Pila, Laguna',
