@@ -2,7 +2,7 @@ import { Clock, Mail, MapPin, Phone } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import logo from '../../assets/peso-logo.png'
-import { openCitizenCharter, SITE_INFO } from '../../config/siteInfo'
+import { SITE_INFO } from '../../config/siteInfo'
 
 // lucide-react dropped brand icons — a minimal inline glyph avoids pulling in a
 // whole new icon-set dependency just for one Facebook link.
@@ -18,19 +18,19 @@ const QUICK_LINKS = [
   { label: 'Home', to: '/' },
   { label: 'Find Jobs', to: '/jobs' },
   { label: 'Job Fair', to: '/job-fair' },
-  { label: 'Citizen Charter', onClick: openCitizenCharter },
-  { label: 'Services', to: '/' },
-  { label: 'About Us', to: '/' },
-  { label: 'Contact', to: '/' },
+  { label: 'Citizen Charter', to: '/citizen-charter' },
+  { label: 'Services', to: '/services' },
+  { label: 'About Us', to: '/about' },
+  { label: 'Contact', to: '/contact' },
 ]
 
 const RESOURCE_LINKS = [
   { label: 'How to Register', to: '/register/choose' },
-  { label: 'Jobseeker Guide', to: '/register' },
-  { label: 'Employer Guide', to: '/register?type=employer' },
-  { label: 'Frequently Asked Questions', to: '/' },
-  { label: 'Privacy Policy', to: '/' },
-  { label: 'Terms of Use', to: '/' },
+  { label: 'Jobseeker Guide', to: '/jobseeker-guide' },
+  { label: 'Employer Guide', to: '/employer-guide' },
+  { label: 'Frequently Asked Questions', to: '/faqs' },
+  { label: 'Privacy Policy', to: '/privacy-policy' },
+  { label: 'Terms of Use', to: '/terms-of-use' },
 ]
 
 function FooterLink({ item }) {

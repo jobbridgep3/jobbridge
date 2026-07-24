@@ -58,6 +58,19 @@ def send_otp_email(to: str, code: str, purpose: str = "register"):
     return send_email(to, "Your JobBridge verification code", html)
 
 
+def send_contact_inquiry_email(name: str, email: str, subject: str, message: str):
+    """Forwards a public Contact Us submission to the PESO office inbox."""
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">New Contact Us Inquiry</h2>
+      <p><strong>From:</strong> {name} &lt;{email}&gt;</p>
+      <p><strong>Subject:</strong> {subject}</p>
+      <p style="white-space:pre-wrap">{message}</p>
+    </div>
+    """
+    return send_email(current_app.config["PESO_CONTACT_INBOX"], f"[JobBridge Contact] {subject}", html)
+
+
 def send_staff_credentials_email(to: str, full_name: str, temp_password: str):
     html = f"""
     <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">

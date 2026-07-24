@@ -5,21 +5,18 @@ import { Link, useLocation } from 'react-router-dom'
 
 import logo from '../../assets/peso-logo.png'
 import { ROLE_DASHBOARD } from '../../config/navigation'
-import { openCitizenCharter } from '../../config/siteInfo'
 import { slideDown } from '../../lib/motion'
 import { useAuthStore } from '../../store/authStore'
 import { Button } from '../ui/Button'
 
-// "Services"/"About Us"/"Contact" have no dedicated pages yet — they route home
-// per plan (restyled per the mockup, not dead links) until real content exists.
 const NAV_ITEMS = [
   { label: 'Home', to: '/', activeMatch: true },
   { label: 'Find Jobs', to: '/jobs', activeMatch: true },
   { label: 'Job Fair', to: '/job-fair', activeMatch: true },
-  { label: 'Citizen Charter', onClick: openCitizenCharter },
-  { label: 'Services', to: '/' },
-  { label: 'About Us', to: '/' },
-  { label: 'Contact', to: '/' },
+  { label: 'Citizen Charter', to: '/citizen-charter', activeMatch: true },
+  { label: 'Services', to: '/services', activeMatch: true },
+  { label: 'About Us', to: '/about', activeMatch: true },
+  { label: 'Contact', to: '/contact', activeMatch: true },
 ]
 
 function NavLink({ item, onNavigate, className = '' }) {

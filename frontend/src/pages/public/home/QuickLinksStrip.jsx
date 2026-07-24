@@ -1,8 +1,6 @@
 import { Briefcase, CalendarDays, FileText, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-import { openCitizenCharter } from '../../../config/siteInfo'
-
 const LINKS = [
   {
     icon: Users,
@@ -30,7 +28,7 @@ const LINKS = [
     title: 'Citizen Charter',
     description: 'Learn about our services and commitment to you.',
     cta: 'View Charter →',
-    onClick: openCitizenCharter,
+    to: '/citizen-charter',
   },
 ]
 

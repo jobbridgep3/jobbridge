@@ -19,6 +19,15 @@ import PublicJobs from './pages/public/Jobs'
 import PublicJobDetail from './pages/public/JobDetail'
 import PublicJobFairs from './pages/public/JobFairs'
 import PublicJobFairDetail from './pages/public/JobFairDetail'
+import CitizenCharter from './pages/public/CitizenCharter'
+import Services from './pages/public/Services'
+import About from './pages/public/About'
+import Contact from './pages/public/Contact'
+import JobseekerGuide from './pages/public/JobseekerGuide'
+import EmployerGuide from './pages/public/EmployerGuide'
+import Faqs from './pages/public/Faqs'
+import PrivacyPolicy from './pages/public/PrivacyPolicy'
+import TermsOfUse from './pages/public/TermsOfUse'
 
 // Jobseeker
 import JobseekerDashboard from './pages/jobseeker/Dashboard'
@@ -113,6 +122,15 @@ export default function App() {
         <Route path="/job-fair/:id" element={<PublicJobFairDetail />} />
         <Route path="/announcements" element={<PublicAnnouncements />} />
         <Route path="/announcements/:id" element={<AnnouncementDetails />} />
+        <Route path="/citizen-charter" element={<CitizenCharter />} />
+        <Route path="/services" element={<Services />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/jobseeker-guide" element={<JobseekerGuide />} />
+        <Route path="/employer-guide" element={<EmployerGuide />} />
+        <Route path="/faqs" element={<Faqs />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+        <Route path="/terms-of-use" element={<TermsOfUse />} />
         <Route path="*" element={<Landing />} />
       </Route>
       <Route path="/login" element={<Login />} />

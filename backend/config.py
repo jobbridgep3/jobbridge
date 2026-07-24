@@ -84,6 +84,9 @@ class Config:
     BREVO_SENDER_EMAIL = _require("BREVO_SENDER_EMAIL")
     BREVO_SENDER_NAME = os.environ.get("BREVO_SENDER_NAME", "JobBridge PESO Pila")
 
+    # --- Public Contact Us inbox (matches frontend's SITE_INFO.contactEmail) ---
+    PESO_CONTACT_INBOX = os.environ.get("PESO_CONTACT_INBOX", "jobbridgepilalaguna@gmail.com")
+
     # --- reCAPTCHA v2 (login) ---
     RECAPTCHA_SECRET_KEY = _require("RECAPTCHA_SECRET_KEY")
 
