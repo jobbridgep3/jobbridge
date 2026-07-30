@@ -12,9 +12,10 @@ from services.application_status_service import (
 )
 from services.audit_service import log_audit
 from services.matching_service import match_score, rank_vacancies_for_jobseeker
-from services.vacancy_capacity_service import VACANCY_FULL_MESSAGE, annotate_capacity, is_vacancy_full
+from services.vacancy_capacity_service import annotate_capacity, lock_vacancy_and_check_capacity
 from services.notification_service import notify_role, notify_user
 from services.pdf_service import generate_table_report, to_bytesio
+from sockets.events import emit_broadcast
 from utils.decorators import role_required
 from utils.responses import fail, ok
 from utils.timezone import now_manila
@@ -98,8 +99,12 @@ def apply_to_job():
     if not profile:
         return fail("Complete your profile before applying.", 400)
 
-    if is_vacancy_full(vacancy):
-        return fail(VACANCY_FULL_MESSAGE, 409)
+    # Locks the vacancy row so a concurrent apply can't also slip past this
+    # check before either commits — held through the checks below and
+    # released by the eventual commit (or explicitly on early return).
+    vacancy, has_capacity, capacity_error = lock_vacancy_and_check_capacity(vacancy.id)
+    if not has_capacity:
+        return fail(capacity_error, 409)
 
     currently_employed = is_currently_employed_at_company(profile.id, vacancy.employer_company_id)
     existing_application = Application.query.filter_by(vacancy_id=vacancy.id, jobseeker_profile_id=profile.id).first()
@@ -109,9 +114,11 @@ def apply_to_job():
     stale_hire = existing_application is not None and existing_application.status == "hired" and not currently_employed
 
     if existing_application and not stale_hire:
+        db.session.rollback()
         return fail("You have already applied to this job.", 409)
 
     if currently_employed:
+        db.session.rollback()
         return fail("You are currently employed by this company. You cannot apply to another vacancy until your employment has ended.", 409)
 
     jobseeker_user = User.query.get(profile.user_id)
@@ -124,6 +131,7 @@ def apply_to_job():
         db.session.add(application)
         db.session.commit()
         record_initial_history(application, jobseeker_user)
+    emit_broadcast("public:homepage_update", {"sections": ["jobs"]})
 
     # Auto-attach an approved, unattached referral letter (vacancy-specific first,
     # then a general one) so the employer sees it among the applicant's documents.

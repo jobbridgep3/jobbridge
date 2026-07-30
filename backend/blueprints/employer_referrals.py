@@ -22,6 +22,8 @@ from services.audit_service import log_audit
 from services.email_service import send_employer_referral_decision_email
 from services.matching_service import match_score
 from services.notification_service import notify_user
+from services.vacancy_capacity_service import lock_vacancy_and_check_capacity
+from sockets.events import emit_broadcast
 from utils.decorators import role_required
 from utils.responses import fail, ok
 from utils.timezone import now_manila
@@ -123,6 +125,13 @@ def accept_referral(referral_id):
     # new cycle instead of relinking to the old, terminal one.
     stale_hire = application is not None and application.status == "hired" and not currently_employed
 
+    if not application or stale_hire:
+        # Accepting is about to create or reopen an Application, exactly like
+        # apply_to_job — lock the vacancy row so this can't race past capacity.
+        _vacancy, has_capacity, capacity_error = lock_vacancy_and_check_capacity(referral.vacancy_id)
+        if not has_capacity:
+            return fail(capacity_error, 409)
+
     if not application:
         score = match_score(referral.jobseeker_profile, referral.vacancy)
         application = Application(
@@ -132,9 +141,11 @@ def accept_referral(referral_id):
         db.session.add(application)
         db.session.commit()
         record_initial_history(application, employer_user)
+        emit_broadcast("public:homepage_update", {"sections": ["jobs"]})
     elif stale_hire:
         score = match_score(referral.jobseeker_profile, referral.vacancy)
         application = reopen_stale_application(application, employer_user, score=score)
+        emit_broadcast("public:homepage_update", {"sections": ["jobs"]})
     elif application.referral_letter and application.referral_letter.id != referral.id:
         return fail("This applicant already has a referral letter attached to this application.", 409)
 
