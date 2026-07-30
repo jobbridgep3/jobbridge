@@ -496,7 +496,7 @@ def submit_accreditation():
 # questions) can be edited freely post-approval with no status change.
 CORE_VACANCY_FIELDS = (
     "title", "summary", "responsibilities", "daily_tasks", "description", "requirements",
-    "required_skills", "education_level", "min_experience_years", "salary_min", "salary_max", "num_slots",
+    "required_skills", "education_level", "min_experience_years", "salary_min", "salary_max",
 )
 
 
@@ -634,6 +634,9 @@ def update_vacancy(vacancy_id):
     if reverted_to_pending:
         notify_role("staff", "vacancy:submitted", {"vacancy_id": str(vacancy.id), "title": vacancy.title})
     log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, before=before, after={"status": vacancy.status})
+    # Openings (and other capacity-relevant fields) may have just changed —
+    # refresh every live listener (Job Search, Homepage, Employer Vacancies).
+    emit_broadcast("public:homepage_update", {"sections": ["jobs"]})
     message = "Vacancy updated. Core changes require re-approval." if reverted_to_pending else "Vacancy updated."
     return ok(vacancy.to_dict(), message)
 
