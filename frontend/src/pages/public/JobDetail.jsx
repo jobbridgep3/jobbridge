@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Briefcase } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
@@ -7,14 +7,17 @@ import { VacancyDisplay } from '../../components/vacancy/VacancyDisplay'
 import { Button } from '../../components/ui/Button'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
 import { resolveJobseekerCta } from '../../lib/publicCta'
+import { VACANCY_FULL_MESSAGE } from '../../lib/vacancyStateMachine'
 import { useAuthStore } from '../../store/authStore'
 
 export default function PublicJobDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const token = useAuthStore((s) => s.token)
   const role = useAuthStore((s) => s.user?.role)
 
@@ -22,6 +25,16 @@ export default function PublicJobDetail() {
     queryKey: ['public', 'jobs', id],
     queryFn: async () => (await api.get(`/api/jobs/${id}`)).data.data,
   })
+
+  // Live-refresh capacity the moment a slot is filled or freed elsewhere.
+  useSocket(
+    {
+      'public:homepage_update': (payload) => {
+        if (payload?.sections?.includes('jobs')) queryClient.invalidateQueries({ queryKey: ['public', 'jobs', id] })
+      },
+    },
+    { allowAnonymous: true }
+  )
 
   if (isLoading) {
     return (
@@ -51,13 +64,15 @@ export default function PublicJobDetail() {
 
       {action && (
         <div className="flex justify-end">
-          <Button
-            size="lg"
-            disabled={job.already_hired_at_company || job.is_full}
-            onClick={() => navigate(action.to, action.state ? { state: action.state } : undefined)}
-          >
-            {job.already_hired_at_company ? 'Already Employed Here' : job.is_full ? 'Slots Full' : 'Apply Now'}
-          </Button>
+          {job.already_hired_at_company ? (
+            <Button size="lg" disabled>Already Employed Here</Button>
+          ) : job.is_full ? (
+            <p className="text-sm text-text-secondary">{VACANCY_FULL_MESSAGE}</p>
+          ) : (
+            <Button size="lg" onClick={() => navigate(action.to, action.state ? { state: action.state } : undefined)}>
+              Apply Now
+            </Button>
+          )}
         </div>
       )}
     </motion.div>

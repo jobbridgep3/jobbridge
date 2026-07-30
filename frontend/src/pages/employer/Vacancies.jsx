@@ -5,10 +5,12 @@ import { useMemo } from 'react'
 import toast from 'react-hot-toast'
 import { Link, useSearchParams } from 'react-router-dom'
 
+import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { DataTable } from '../../components/ui/DataTable'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { useSocket } from '../../hooks/useSocket'
 import { fadeIn } from '../../lib/motion'
 import api from '../../lib/axios'
 import { formatApiError } from '../../lib/utils'
@@ -22,6 +24,14 @@ export default function EmployerVacancies() {
   const { data: vacancies, isLoading } = useQuery({
     queryKey: ['vacancies', 'my'],
     queryFn: async () => (await api.get('/api/vacancies/my')).data.data,
+  })
+
+  // Live-refresh remaining slots / Full state (e.g. after a hire or a
+  // resignation) without requiring a manual page reload.
+  useSocket({
+    'public:homepage_update': (payload) => {
+      if (payload?.sections?.includes('jobs')) queryClient.invalidateQueries({ queryKey: ['vacancies', 'my'] })
+    },
   })
 
   const filtered = useMemo(
@@ -41,7 +51,19 @@ export default function EmployerVacancies() {
   const columns = [
     { accessorKey: 'title', header: 'Job Title' },
     { accessorKey: 'job_type', header: 'Type', cell: ({ row }) => row.original.job_type?.replace(/_/g, ' ') || '—' },
-    { accessorKey: 'num_slots', header: 'Openings' },
+    {
+      accessorKey: 'num_slots',
+      header: 'Openings',
+      cell: ({ row }) => {
+        const v = row.original
+        return (
+          <span className="inline-flex items-center gap-2">
+            {v.slots_remaining != null ? `${v.slots_remaining} / ${v.num_slots}` : v.num_slots}
+            {v.is_full && <Badge variant="danger">Full</Badge>}
+          </span>
+        )
+      },
+    },
     { accessorKey: 'status', header: 'Status', cell: ({ row }) => <StatusBadge status={row.original.status} /> },
     {
       id: 'actions',

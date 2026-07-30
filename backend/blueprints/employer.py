@@ -19,6 +19,7 @@ from services.matching_service import rank_jobseekers_for_vacancy
 from services.notification_service import notify_role
 from sockets.events import emit_broadcast
 from services.profile_completion_service import COMPANY_REQUIRED_FIELDS, HR_REQUIRED_FIELDS, compute_completion
+from services.vacancy_capacity_service import annotate_capacity
 from services.vacancy_notification_service import notify_jobseekers_of_new_vacancy
 from services.vacancy_state_service import can_transition
 from utils.decorators import role_required
@@ -541,7 +542,7 @@ def get_my_vacancy(vacancy_id):
     vacancy = Vacancy.query.get(vacancy_id)
     if not vacancy or not company or vacancy.employer_company_id != company.id or vacancy.deleted_at:
         return fail("Vacancy not found.", 404)
-    return ok(vacancy.to_dict())
+    return ok(annotate_capacity(vacancy.to_dict(), vacancy))
 
 
 @vacancies_bp.get("/my")
@@ -556,7 +557,7 @@ def my_vacancies():
         .filter(Vacancy.deleted_at.is_(None))
         .order_by(Vacancy.created_at.desc()).all()
     )
-    return ok([v.to_dict() for v in vacancies])
+    return ok([annotate_capacity(v.to_dict(), v) for v in vacancies])
 
 
 @vacancies_bp.get("/categories")

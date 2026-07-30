@@ -65,7 +65,10 @@ def transition_employment(record, new_status, actor_user, note=None, notify=True
         f"Status: {old_status} -> {new_status}" + (f" — {note}" if note else ""),
         before={"status": old_status}, after={"status": new_status},
     )
-    emit_broadcast("public:homepage_update", {"sections": ["stats"]})
+    # Entering an end-status frees a vacancy slot — also refresh the "jobs"
+    # section (job lists, job detail pages) wherever it's live-listened to.
+    sections = ["stats", "jobs"] if new_status in EMPLOYMENT_END_STATUSES else ["stats"]
+    emit_broadcast("public:homepage_update", {"sections": sections})
 
     if notify:
         label = EMPLOYMENT_STATUS_LABELS.get(new_status, new_status)
@@ -107,6 +110,8 @@ def create_employment_record_for_application(application):
     db.session.flush()
     db.session.add(EmploymentStatusHistory(record_id=record.id, from_status=None, to_status="pending_deployment"))
     db.session.commit()
+    # Hiring consumes a vacancy slot — refresh "jobs" wherever it's live-listened to.
+    emit_broadcast("public:homepage_update", {"sections": ["jobs"]})
 
     jobseeker_user_id = application.jobseeker_profile.user_id
     notify_user(

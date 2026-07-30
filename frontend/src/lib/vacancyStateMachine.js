@@ -34,3 +34,8 @@ export const STATUS_LABELS = {
   closed: 'Closed',
   filled: 'Filled',
 }
+
+// Mirrors backend/services/vacancy_capacity_service.py VACANCY_FULL_MESSAGE —
+// shown whenever a vacancy's remaining slots reach 0.
+export const VACANCY_FULL_MESSAGE =
+  'This vacancy is currently full. Please wait until another applicant withdraws their application or a slot becomes available.'

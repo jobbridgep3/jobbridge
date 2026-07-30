@@ -8,6 +8,7 @@ import { Card, CardContent } from '../../../components/ui/Card'
 import { Skeleton } from '../../../components/ui/Skeleton'
 import api from '../../../lib/axios'
 import { resolveJobseekerCta } from '../../../lib/publicCta'
+import { VACANCY_FULL_MESSAGE } from '../../../lib/vacancyStateMachine'
 import { useAuthStore } from '../../../store/authStore'
 
 export function FindJobsPanel() {
@@ -60,9 +61,10 @@ export function FindJobsPanel() {
                   {job.title}
                 </h3>
               </Link>
-              {job.job_type && (
-                <Badge className="shrink-0 capitalize">{job.job_type.replace(/_/g, ' ')}</Badge>
-              )}
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                {job.is_full && <Badge variant="danger">Vacancy Full</Badge>}
+                {job.job_type && <Badge className="capitalize">{job.job_type.replace(/_/g, ' ')}</Badge>}
+              </div>
             </div>
             <p className="mt-0.5 text-xs text-text-muted">{job.company_name}</p>
             {job.work_location && (
@@ -72,7 +74,11 @@ export function FindJobsPanel() {
             )}
             {job.description && <p className="mt-1 line-clamp-2 text-xs text-text-muted">{job.description}</p>}
             <div className="mt-3">
-              <Button size="sm" onClick={() => applyNow(job)}>Apply Now</Button>
+              {job.is_full ? (
+                <p className="text-xs text-text-muted">{VACANCY_FULL_MESSAGE}</p>
+              ) : (
+                <Button size="sm" onClick={() => applyNow(job)}>Apply Now</Button>
+              )}
             </div>
           </div>
         ))}

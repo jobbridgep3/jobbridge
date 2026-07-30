@@ -23,9 +23,15 @@ export default function JobseekerJobs() {
     queryFn: async () => (await api.get('/api/jobs', { params: filters })).data.data,
   })
 
-  // Live-update the list the moment a new vacancy is published — no manual
-  // refresh needed to see it appear.
-  useSocket({ 'vacancy:new': () => queryClient.invalidateQueries({ queryKey: ['jobs'] }) })
+  // Live-update the list the moment a new vacancy is published, or a
+  // vacancy's remaining slots change (hire/resignation/etc.) — no manual
+  // refresh needed to see it appear or flip Full/Open.
+  useSocket({
+    'vacancy:new': () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
+    'public:homepage_update': (payload) => {
+      if (payload?.sections?.includes('jobs')) queryClient.invalidateQueries({ queryKey: ['jobs'] })
+    },
+  })
 
   return (
     <motion.div {...fadeIn} className="space-y-6">
@@ -73,7 +79,10 @@ export default function JobseekerJobs() {
                 <Link to={`/jobseeker/jobs/${job.id}`} className="block h-full p-5">
                   <div className="mb-2 flex items-start justify-between gap-2">
                     <h3 className="text-sm font-semibold text-slate-900">{job.title}</h3>
-                    {job.match_score != null && <Badge variant="primary">{job.match_score}% Match</Badge>}
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      {job.is_full && <Badge variant="danger">Full</Badge>}
+                      {job.match_score != null && <Badge variant="primary">{job.match_score}% Match</Badge>}
+                    </div>
                   </div>
                   <p className="text-xs text-slate-500">{job.company_name}</p>
                   <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">

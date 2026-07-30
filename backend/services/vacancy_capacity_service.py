@@ -12,6 +12,11 @@ from extensions import db
 from models.application import Application
 from models.employment import EMPLOYMENT_END_STATUSES, EmploymentRecord
 
+VACANCY_FULL_MESSAGE = (
+    "This vacancy is currently full. Please wait until another applicant "
+    "withdraws their application or a slot becomes available."
+)
+
 
 def get_filled_slots(vacancy_id):
     return (
@@ -28,3 +33,10 @@ def get_slots_remaining(vacancy):
 
 def is_vacancy_full(vacancy):
     return get_slots_remaining(vacancy) <= 0
+
+
+def annotate_capacity(payload, vacancy):
+    """Adds slots_remaining/is_full to a serialized vacancy dict in place."""
+    payload["slots_remaining"] = get_slots_remaining(vacancy)
+    payload["is_full"] = payload["slots_remaining"] <= 0
+    return payload

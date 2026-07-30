@@ -8,8 +8,10 @@ import { Button } from '../../components/ui/Button'
 import { Card, CardContent } from '../../components/ui/Card'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { VacancyDisplay } from '../../components/vacancy/VacancyDisplay'
+import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
+import { VACANCY_FULL_MESSAGE } from '../../lib/vacancyStateMachine'
 
 export default function JobseekerJobDetail() {
   const { id } = useParams()
@@ -19,6 +21,13 @@ export default function JobseekerJobDetail() {
   const { data: job, isLoading } = useQuery({
     queryKey: ['jobs', id],
     queryFn: async () => (await api.get(`/api/jobs/${id}`)).data.data,
+  })
+
+  // Live-refresh capacity the moment a slot is filled or freed elsewhere.
+  useSocket({
+    'public:homepage_update': (payload) => {
+      if (payload?.sections?.includes('jobs')) queryClient.invalidateQueries({ queryKey: ['jobs', id] })
+    },
   })
 
   const applyMutation = useMutation({
@@ -51,7 +60,7 @@ export default function JobseekerJobDetail() {
           {job.already_hired_at_company ? (
             <p className="text-sm text-slate-500">You are currently employed by this company. You cannot apply to another vacancy until your employment has ended.</p>
           ) : job.is_full ? (
-            <p className="text-sm text-slate-500">This vacancy has reached its maximum number of slots and is no longer accepting applications.</p>
+            <p className="text-sm text-slate-500">{VACANCY_FULL_MESSAGE}</p>
           ) : (
             <Button onClick={() => applyMutation.mutate()} disabled={applyMutation.isPending}>
               {applyMutation.isPending ? 'Submitting…' : 'Apply Now'}

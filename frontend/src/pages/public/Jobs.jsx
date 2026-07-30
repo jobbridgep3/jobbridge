@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Briefcase, MapPin, Search } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -8,15 +8,27 @@ import { Card, CardContent } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Input } from '../../components/ui/Input'
 import { Skeleton } from '../../components/ui/Skeleton'
+import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 
 export default function PublicJobs() {
   const [q, setQ] = useState('')
+  const queryClient = useQueryClient()
 
   const { data: jobs, isLoading } = useQuery({
     queryKey: ['public', 'jobs', 'list', q],
     queryFn: async () => (await api.get('/api/jobs', { params: q ? { q } : {} })).data.data,
   })
+
+  // Live-update remaining slots / Full state without a page refresh.
+  useSocket(
+    {
+      'public:homepage_update': (payload) => {
+        if (payload?.sections?.includes('jobs')) queryClient.invalidateQueries({ queryKey: ['public', 'jobs', 'list'] })
+      },
+    },
+    { allowAnonymous: true }
+  )
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
@@ -49,7 +61,10 @@ export default function PublicJobs() {
               <CardContent>
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="line-clamp-2 text-sm font-semibold text-text-primary">{job.title}</h3>
-                  {job.job_type && <Badge className="shrink-0 capitalize">{job.job_type.replace(/_/g, ' ')}</Badge>}
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    {job.is_full && <Badge variant="danger">Full</Badge>}
+                    {job.job_type && <Badge className="capitalize">{job.job_type.replace(/_/g, ' ')}</Badge>}
+                  </div>
                 </div>
                 <p className="mt-1 text-xs text-text-muted">{job.company_name}</p>
                 {job.work_location && (

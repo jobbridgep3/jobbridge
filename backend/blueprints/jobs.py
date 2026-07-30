@@ -12,7 +12,7 @@ from services.application_status_service import (
 )
 from services.audit_service import log_audit
 from services.matching_service import match_score, rank_vacancies_for_jobseeker
-from services.vacancy_capacity_service import get_slots_remaining, is_vacancy_full
+from services.vacancy_capacity_service import VACANCY_FULL_MESSAGE, annotate_capacity, is_vacancy_full
 from services.notification_service import notify_role, notify_user
 from services.pdf_service import generate_table_report, to_bytesio
 from utils.decorators import role_required
@@ -45,15 +45,10 @@ def list_jobs():
     if identity:
         profile = JobseekerProfile.query.filter_by(user_id=identity).first()
 
-    def _with_capacity(payload, vacancy):
-        payload["slots_remaining"] = get_slots_remaining(vacancy)
-        payload["is_full"] = payload["slots_remaining"] <= 0
-        return payload
-
     if profile:
         ranked = rank_vacancies_for_jobseeker(profile, vacancies)
-        return ok([_with_capacity(v.to_dict(match_score=score), v) for v, score in ranked])
-    return ok([_with_capacity(v.to_dict(), v) for v in vacancies])
+        return ok([annotate_capacity(v.to_dict(match_score=score), v) for v, score in ranked])
+    return ok([annotate_capacity(v.to_dict(), v) for v in vacancies])
 
 
 @jobs_bp.get("/jobs/recommended")
@@ -84,9 +79,7 @@ def get_job(vacancy_id):
             score = match_score(profile, vacancy)
             already_hired_at_company = is_currently_employed_at_company(profile.id, vacancy.employer_company_id)
 
-    result = vacancy.to_dict(match_score=score)
-    result["slots_remaining"] = get_slots_remaining(vacancy)
-    result["is_full"] = result["slots_remaining"] <= 0
+    result = annotate_capacity(vacancy.to_dict(match_score=score), vacancy)
     result["already_hired_at_company"] = already_hired_at_company
     return ok(result)
 
@@ -105,6 +98,9 @@ def apply_to_job():
     if not profile:
         return fail("Complete your profile before applying.", 400)
 
+    if is_vacancy_full(vacancy):
+        return fail(VACANCY_FULL_MESSAGE, 409)
+
     currently_employed = is_currently_employed_at_company(profile.id, vacancy.employer_company_id)
     existing_application = Application.query.filter_by(vacancy_id=vacancy.id, jobseeker_profile_id=profile.id).first()
     # A "hired" application is normally terminal, but if the employment it led
@@ -117,9 +113,6 @@ def apply_to_job():
 
     if currently_employed:
         return fail("You are currently employed by this company. You cannot apply to another vacancy until your employment has ended.", 409)
-
-    if is_vacancy_full(vacancy):
-        return fail("This vacancy has reached its maximum number of slots and is no longer accepting applications.", 409)
 
     jobseeker_user = User.query.get(profile.user_id)
     score = match_score(profile, vacancy)

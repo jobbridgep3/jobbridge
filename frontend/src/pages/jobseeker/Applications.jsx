@@ -225,6 +225,9 @@ function ReferralLettersPanel() {
   useSocket({
     'referral:ready': refresh,
     'referral:decision': refresh,
+    'public:homepage_update': (payload) => {
+      if (payload?.sections?.includes('jobs')) queryClient.invalidateQueries({ queryKey: ['jobs', 'for-referral'] })
+    },
   })
 
   const requestLetter = useMutation({
