@@ -22,8 +22,7 @@ from services.audit_service import log_audit
 from services.email_service import send_employer_referral_decision_email
 from services.matching_service import match_score
 from services.notification_service import notify_user
-from services.vacancy_capacity_service import lock_vacancy_and_check_capacity
-from sockets.events import emit_broadcast
+from services.vacancy_capacity_service import lock_vacancy_and_check_capacity, recalculate_vacancy_status
 from utils.decorators import role_required
 from utils.responses import fail, ok
 from utils.timezone import now_manila
@@ -141,11 +140,11 @@ def accept_referral(referral_id):
         db.session.add(application)
         db.session.commit()
         record_initial_history(application, employer_user)
-        emit_broadcast("public:homepage_update", {"sections": ["jobs"]})
+        recalculate_vacancy_status(referral.vacancy_id)
     elif stale_hire:
         score = match_score(referral.jobseeker_profile, referral.vacancy)
         application = reopen_stale_application(application, employer_user, score=score)
-        emit_broadcast("public:homepage_update", {"sections": ["jobs"]})
+        recalculate_vacancy_status(referral.vacancy_id)
     elif application.referral_letter and application.referral_letter.id != referral.id:
         return fail("This applicant already has a referral letter attached to this application.", 409)
 

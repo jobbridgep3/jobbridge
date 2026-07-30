@@ -4,6 +4,7 @@ from flask import Blueprint, request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from extensions import db
+from models.application import Application
 from models.employer import EmployerCompany
 from models.employment import (
     EMPLOYMENT_END_STATUSES,
@@ -16,6 +17,7 @@ from models.user import User
 from services.audit_service import log_audit
 from services.email_service import send_employment_status_email
 from services.notification_service import notify_role, notify_user
+from services.vacancy_capacity_service import recalculate_vacancy_status
 from sockets.events import emit_broadcast
 from utils.decorators import role_required
 from utils.responses import fail, ok
@@ -65,10 +67,13 @@ def transition_employment(record, new_status, actor_user, note=None, notify=True
         f"Status: {old_status} -> {new_status}" + (f" — {note}" if note else ""),
         before={"status": old_status}, after={"status": new_status},
     )
-    # Entering an end-status frees a vacancy slot — also refresh the "jobs"
-    # section (job lists, job detail pages) wherever it's live-listened to.
-    sections = ["stats", "jobs"] if new_status in EMPLOYMENT_END_STATUSES else ["stats"]
-    emit_broadcast("public:homepage_update", {"sections": sections})
+    emit_broadcast("public:homepage_update", {"sections": ["stats"]})
+    # Entering an end-status frees a vacancy slot (if this record is tied to
+    # an application — walk-in records aren't) — resync wherever it's live.
+    if new_status in EMPLOYMENT_END_STATUSES and record.application_id:
+        application = Application.query.get(record.application_id)
+        if application:
+            recalculate_vacancy_status(application.vacancy_id)
 
     if notify:
         label = EMPLOYMENT_STATUS_LABELS.get(new_status, new_status)
@@ -110,8 +115,8 @@ def create_employment_record_for_application(application):
     db.session.flush()
     db.session.add(EmploymentStatusHistory(record_id=record.id, from_status=None, to_status="pending_deployment"))
     db.session.commit()
-    # Hiring consumes a vacancy slot — refresh "jobs" wherever it's live-listened to.
-    emit_broadcast("public:homepage_update", {"sections": ["jobs"]})
+    # Hiring consumes a vacancy slot — resync wherever it's live-listened to.
+    recalculate_vacancy_status(vacancy.id)
 
     jobseeker_user_id = application.jobseeker_profile.user_id
     notify_user(

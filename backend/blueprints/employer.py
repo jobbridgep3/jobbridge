@@ -19,7 +19,7 @@ from services.matching_service import rank_jobseekers_for_vacancy
 from services.notification_service import notify_role
 from sockets.events import emit_broadcast
 from services.profile_completion_service import COMPANY_REQUIRED_FIELDS, HR_REQUIRED_FIELDS, compute_completion
-from services.vacancy_capacity_service import annotate_capacity
+from services.vacancy_capacity_service import annotate_capacity, recalculate_vacancy_status
 from services.vacancy_notification_service import notify_jobseekers_of_new_vacancy
 from services.vacancy_state_service import can_transition
 from utils.decorators import role_required
@@ -636,7 +636,7 @@ def update_vacancy(vacancy_id):
     log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, before=before, after={"status": vacancy.status})
     # Openings (and other capacity-relevant fields) may have just changed —
     # refresh every live listener (Job Search, Homepage, Employer Vacancies).
-    emit_broadcast("public:homepage_update", {"sections": ["jobs"]})
+    recalculate_vacancy_status(vacancy.id)
     message = "Vacancy updated. Core changes require re-approval." if reverted_to_pending else "Vacancy updated."
     return ok(vacancy.to_dict(), message)
 

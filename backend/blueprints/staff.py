@@ -43,6 +43,7 @@ from services.profile_completion_service import COMPANY_REQUIRED_FIELDS, compute
 from services.profile_service import apply_document_upload, apply_profile_update, find_document
 from services.storage_service import upload_file
 from services.user_deletion_service import employer_dependent_counts, jobseeker_dependent_counts
+from services.vacancy_capacity_service import recalculate_vacancy_status
 from services.vacancy_notification_service import notify_jobseekers_of_new_vacancy
 from services.vacancy_query_service import build_vacancy_query
 from services.vacancy_state_service import can_transition
@@ -1324,6 +1325,13 @@ def staff_update_employment(record_id):
               before={"status": old_status}, after={"status": record.status})
     if record.status != old_status:
         emit_broadcast("public:homepage_update", {"sections": ["stats"]})
+        # Staff can override straight to an end-status (resigned/terminated/
+        # contract-ended), which frees a vacancy slot — this bypasses
+        # employment.py's transition_employment(), so resync explicitly here.
+        if record.application_id:
+            application = Application.query.get(record.application_id)
+            if application:
+                recalculate_vacancy_status(application.vacancy_id)
     return ok(record.to_dict(), "Employment record updated.")
 
 

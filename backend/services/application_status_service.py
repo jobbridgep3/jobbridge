@@ -12,7 +12,7 @@ from models.user import User
 from services.audit_service import log_audit
 from services.email_service import send_application_status_email
 from services.notification_service import notify_user
-from sockets.events import emit_broadcast
+from services.vacancy_capacity_service import recalculate_vacancy_status
 
 # Employer-driven pipeline. Terminal statuses have no exits. "cancelled" is only
 # reachable by the jobseeker (withdraw) and only before review begins.
@@ -112,10 +112,10 @@ def transition_application(application, new_status, actor_user, note=None, notif
         f"Status: {old_status} -> {new_status}" + (f" — {note}" if note else ""),
         before={"status": old_status}, after={"status": new_status},
     )
-    # Rejecting/withdrawing frees a vacancy slot — refresh "jobs" wherever
-    # it's live-listened to (other statuses don't change occupancy, but a
-    # blanket refresh here is cheap and keeps this the single choke point).
-    emit_broadcast("public:homepage_update", {"sections": ["jobs"]})
+    # Rejecting/withdrawing frees a vacancy slot — resync wherever it's
+    # live-listened to (other statuses don't change occupancy, but a blanket
+    # refresh here is cheap and keeps this the single choke point).
+    recalculate_vacancy_status(application.vacancy_id)
 
     if notify:
         _notify_parties(application, old_status, new_status, note)

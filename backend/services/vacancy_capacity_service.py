@@ -11,6 +11,7 @@ from extensions import db
 from models.application import Application
 from models.employment import EMPLOYMENT_END_STATUSES, EmploymentRecord
 from models.vacancy import Vacancy
+from sockets.events import emit_broadcast
 
 VACANCY_FULL_MESSAGE = (
     "This vacancy is currently full. Please wait until another applicant "
@@ -69,3 +70,19 @@ def lock_vacancy_and_check_capacity(vacancy_id):
         db.session.rollback()
         return vacancy, False, VACANCY_FULL_MESSAGE
     return vacancy, True, None
+
+
+def recalculate_vacancy_status(vacancy_id):
+    """Call this after ANY event that changes a vacancy's occupied-slot count:
+    applying, withdrawing, employer rejecting, hiring, an employment record
+    entering/leaving an end-status (resigned/terminated/contract-ended) via
+    either the employer or PESO-staff path, or the employer editing Openings.
+
+    There is no stored Open/Full status to write — capacity is always
+    derived live (get_slots_remaining/is_vacancy_full above) from num_slots
+    and current occupancy, so the next read is already correct. This
+    function's only job is the real-time broadcast, so every live-listening
+    page (Job Search, Homepage, Job Details, Employer Vacancy Management,
+    referral picker) refreshes immediately instead of on next reload.
+    """
+    emit_broadcast("public:homepage_update", {"sections": ["jobs"]})

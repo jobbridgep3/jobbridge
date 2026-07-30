@@ -12,10 +12,9 @@ from services.application_status_service import (
 )
 from services.audit_service import log_audit
 from services.matching_service import match_score, rank_vacancies_for_jobseeker
-from services.vacancy_capacity_service import annotate_capacity, lock_vacancy_and_check_capacity
+from services.vacancy_capacity_service import annotate_capacity, lock_vacancy_and_check_capacity, recalculate_vacancy_status
 from services.notification_service import notify_role, notify_user
 from services.pdf_service import generate_table_report, to_bytesio
-from sockets.events import emit_broadcast
 from utils.decorators import role_required
 from utils.responses import fail, ok
 from utils.timezone import now_manila
@@ -131,7 +130,7 @@ def apply_to_job():
         db.session.add(application)
         db.session.commit()
         record_initial_history(application, jobseeker_user)
-    emit_broadcast("public:homepage_update", {"sections": ["jobs"]})
+    recalculate_vacancy_status(vacancy.id)
 
     # Auto-attach an approved, unattached referral letter (vacancy-specific first,
     # then a general one) so the employer sees it among the applicant's documents.
