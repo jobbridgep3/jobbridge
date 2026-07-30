@@ -120,7 +120,7 @@ export function VacancyDisplay({ vacancy, company, hrProfile, matchScore, slotsR
               <Clock className="h-4 w-4 shrink-0 text-slate-400" /> {v.schedule}
             </div>
           )}
-          <div className="flex items-center gap-2 text-sm text-slate-700">
+          <div className={`flex items-center gap-2 text-sm ${slotsRemaining === 0 ? 'text-red-500 font-medium' : 'text-slate-700'}`}>
             <Users className="h-4 w-4 shrink-0 text-slate-400" />
             {slotsRemaining != null ? `${slotsRemaining} of ${v.num_slots} slot(s) remaining` : `${v.num_slots ?? 1} opening(s)`}
           </div>

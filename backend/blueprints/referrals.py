@@ -18,6 +18,7 @@ from services.audit_service import log_audit
 from services.email_service import send_referral_decision_email, send_referral_pending_employer_review_email
 from services.notification_service import notify_role, notify_user
 from services.application_status_service import is_currently_employed_at_company
+from services.vacancy_capacity_service import is_vacancy_full
 from services.pdf_service import generate_referral_letter
 from services.storage_service import upload_file
 from utils.decorators import role_required
@@ -42,6 +43,9 @@ def request_referral_letter():
         vacancy = Vacancy.query.get(vacancy_id)
         if not vacancy or vacancy.status != "published":
             return fail("Vacancy not found or not open.", 404)
+
+        if is_vacancy_full(vacancy):
+            return fail("This vacancy has reached its maximum number of slots and is no longer accepting referral requests.", 409)
 
         currently_employed = is_currently_employed_at_company(profile.id, vacancy.employer_company_id)
         if currently_employed:

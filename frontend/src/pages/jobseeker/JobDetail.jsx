@@ -50,6 +50,8 @@ export default function JobseekerJobDetail() {
         <CardContent className="flex items-center justify-end gap-3">
           {job.already_hired_at_company ? (
             <p className="text-sm text-slate-500">You are currently employed by this company. You cannot apply to another vacancy until your employment has ended.</p>
+          ) : job.is_full ? (
+            <p className="text-sm text-slate-500">This vacancy has reached its maximum number of slots and is no longer accepting applications.</p>
           ) : (
             <Button onClick={() => applyMutation.mutate()} disabled={applyMutation.isPending}>
               {applyMutation.isPending ? 'Submitting…' : 'Apply Now'}

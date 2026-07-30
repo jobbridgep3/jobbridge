@@ -53,10 +53,10 @@ export default function PublicJobDetail() {
         <div className="flex justify-end">
           <Button
             size="lg"
-            disabled={job.already_hired_at_company}
+            disabled={job.already_hired_at_company || job.is_full}
             onClick={() => navigate(action.to, action.state ? { state: action.state } : undefined)}
           >
-            {job.already_hired_at_company ? 'Already Employed Here' : 'Apply Now'}
+            {job.already_hired_at_company ? 'Already Employed Here' : job.is_full ? 'Slots Full' : 'Apply Now'}
           </Button>
         </div>
       )}

@@ -253,8 +253,8 @@ function ReferralLettersPanel() {
               <Select value={form.vacancy_id} onChange={(e) => setForm({ ...form, vacancy_id: e.target.value })}>
                 <option value="">General referral (any employer)</option>
                 {(jobs || []).map((j) => (
-                  <option key={j.id} value={j.id}>
-                    {j.title} — {j.company_name}
+                  <option key={j.id} value={j.id} disabled={j.is_full}>
+                    {j.title} — {j.company_name}{j.is_full ? ' (Full)' : ''}
                   </option>
                 ))}
               </Select>
