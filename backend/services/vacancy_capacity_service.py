@@ -52,8 +52,14 @@ def is_vacancy_full(vacancy):
 
 
 def annotate_capacity(payload, vacancy):
-    """Adds slots_remaining/is_full to a serialized vacancy dict in place."""
-    payload["slots_remaining"] = get_slots_remaining(vacancy)
+    """Adds occupied_slots/slots_remaining/is_full to a serialized vacancy
+    dict in place. occupied_slots is exposed explicitly (not left for callers
+    to infer via num_slots - slots_remaining) so displays can show occupancy
+    unambiguously instead of a bare "remaining" number that reads like an
+    occupied count if misread."""
+    occupied = get_filled_slots(vacancy.id)
+    payload["occupied_slots"] = occupied
+    payload["slots_remaining"] = max((vacancy.num_slots or 1) - occupied, 0)
     payload["is_full"] = payload["slots_remaining"] <= 0
     return payload
 

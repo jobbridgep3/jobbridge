@@ -58,7 +58,7 @@ export default function EmployerVacancies() {
         const v = row.original
         return (
           <span className="inline-flex items-center gap-2">
-            {v.slots_remaining != null ? `${v.slots_remaining} / ${v.num_slots}` : v.num_slots}
+            {v.occupied_slots != null ? `${v.occupied_slots} / ${v.num_slots} occupied` : v.num_slots}
             {v.is_full && <Badge variant="danger">Full</Badge>}
           </span>
         )
