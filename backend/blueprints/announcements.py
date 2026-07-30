@@ -1,7 +1,9 @@
 from datetime import datetime
 
 from flask import Blueprint, request
-from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required, verify_jwt_in_request
+from flask_jwt_extended.exceptions import JWTExtendedException
+from jwt import PyJWTError
 
 from extensions import db
 from models.announcement import Announcement
@@ -54,14 +56,27 @@ def list_public_announcements():
 
 
 @announcements_bp.get("/<announcement_id>")
-@jwt_required(optional=True)
 def get_announcement(announcement_id):
+    # Public-with-optional-personalization page: an invalid/expired token
+    # should degrade to the anonymous view, not error out. jwt_required's
+    # optional=True only tolerates a MISSING token (flask-jwt-extended still
+    # raises on an invalid one), so this route verifies manually instead —
+    # otherwise a stale token 401s here, which the frontend's global axios
+    # interceptor treats as "log the whole session out."
+    identity, role = None, "public"
+    try:
+        verify_jwt_in_request(optional=True)
+    except (JWTExtendedException, PyJWTError):
+        pass
+    else:
+        identity = get_jwt_identity()
+        if identity:
+            role = get_jwt().get("role", "public")
+
     announcement = Announcement.query.get(announcement_id)
     if not announcement or announcement.status != "published":
         return fail("Announcement not found.", 404)
 
-    identity = get_jwt_identity()
-    role = get_jwt().get("role") if identity else "public"
     if role not in ("staff", "admin") and role not in (announcement.target_roles or []):
         return fail("You do not have access to this announcement.", 403)
 
