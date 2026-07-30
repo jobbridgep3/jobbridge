@@ -147,7 +147,6 @@ export default function EmployerVacancyForm() {
   const canPublish = isEdit && canTransition(status, 'published', 'employer') && status === 'approved'
   const canReopen = isEdit && canTransition(status, 'published', 'employer') && status === 'closed'
   const canClose = isEdit && canTransition(status, 'closed', 'employer')
-  const canMarkFilled = isEdit && canTransition(status, 'filled', 'employer')
   const canDelete = isEdit && status === 'draft'
 
   return (
@@ -208,11 +207,6 @@ export default function EmployerVacancyForm() {
           {canClose && (
             <Button type="button" variant="secondary" onClick={() => runAction('close', 'Vacancy closed.')} disabled={actionLoading === 'close'}>
               {actionLoading === 'close' ? 'Closing…' : 'Close'}
-            </Button>
-          )}
-          {canMarkFilled && (
-            <Button type="button" variant="secondary" onClick={() => runAction('mark-filled', 'Marked as filled.')} disabled={actionLoading === 'mark-filled'}>
-              {actionLoading === 'mark-filled' ? 'Updating…' : 'Mark Filled'}
             </Button>
           )}
         </CardContent>
