@@ -104,7 +104,7 @@ export default function EmployerDashboard() {
               <EmptyState title="No announcements" />
             ) : (
               announcements.slice(0, 4).map((a) => (
-                <Link key={a.id} to={`/announcements/${a.id}`} className="block border-b border-border-subtle pb-2 last:border-0 hover:opacity-80">
+                <Link key={a.id} to={`/dashboard/announcements/${a.id}`} className="block border-b border-border-subtle pb-2 last:border-0 hover:opacity-80">
                   <p className="text-sm font-medium text-text-primary">{a.title}</p>
                 </Link>
               ))

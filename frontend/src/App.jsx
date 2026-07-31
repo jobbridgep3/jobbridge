@@ -15,6 +15,7 @@ import ResetPassword from './pages/public/ResetPassword'
 import CompleteProfile from './pages/public/CompleteProfile'
 import PublicAnnouncements from './pages/public/Announcements'
 import AnnouncementDetails from './pages/public/AnnouncementDetails'
+import DashboardAnnouncementDetails from './pages/dashboard/AnnouncementDetails'
 import PublicJobs from './pages/public/Jobs'
 import PublicJobDetail from './pages/public/JobDetail'
 import PublicJobFairs from './pages/public/JobFairs'
@@ -142,6 +143,10 @@ export default function App() {
       <Route path="/complete-profile" element={<CompleteProfile />} />
 
       <Route element={<ProtectedRoute />}>
+        {/* Announcement detail opened from any authenticated dashboard —
+            no PublicLayout navbar/footer, no role-specific AppShell sidebar. */}
+        <Route path="/dashboard/announcements/:id" element={<DashboardAnnouncementDetails />} />
+
         {/* Jobseeker */}
         <Route element={<RoleGuard allowedRole="jobseeker" />}>
           <Route path="/jobseeker" element={<AppShell />}>

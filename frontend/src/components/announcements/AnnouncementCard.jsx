@@ -11,11 +11,11 @@ function stripHtml(html) {
   return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
-export function AnnouncementCard({ announcement }) {
+export function AnnouncementCard({ announcement, basePath = '/announcements' }) {
   const excerpt = stripHtml(announcement.body).slice(0, 140)
   return (
     <Card className="overflow-hidden" hover>
-      <Link to={`/announcements/${announcement.id}`} className="block">
+      <Link to={`${basePath}/${announcement.id}`} className="block">
         {announcement.banner_url ? (
           <img src={announcement.banner_url} alt={announcement.title} className="aspect-[16/9] w-full bg-surface-secondary object-contain" />
         ) : (

@@ -95,3 +95,14 @@ export function resolveIcon(type) {
 export function isClickable(notification) {
   return Boolean(notification.link)
 }
+
+/** Notification `link` values are generated server-side as public URLs
+ * (e.g. `/announcements/:id`). Clicking a notification always happens from
+ * inside an authenticated dashboard, so announcement links are rewritten to
+ * the dashboard-scoped route — which skips the public navbar/footer instead
+ * of dropping a logged-in user back onto the public site layout. */
+export function resolveNotificationLink(link) {
+  if (!link) return link
+  const match = link.match(/^\/announcements\/(.+)$/)
+  return match ? `/dashboard/announcements/${match[1]}` : link
+}

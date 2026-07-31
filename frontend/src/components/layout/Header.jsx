@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { Breadcrumb } from '../ui/Breadcrumb'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/DropdownMenu'
-import { resolveIcon } from '../../config/notificationMeta'
+import { resolveIcon, resolveNotificationLink } from '../../config/notificationMeta'
 import { ROLE_DASHBOARD } from '../../config/navigation'
 import api from '../../lib/axios'
 import { cn } from '../../lib/utils'
@@ -59,7 +59,7 @@ export function Header({ breadcrumbItems = [] }) {
                 return (
                   <DropdownMenuItem
                     key={n.id}
-                    onClick={() => n.link && navigate(n.link)}
+                    onClick={() => n.link && navigate(resolveNotificationLink(n.link))}
                     className={cn('items-start gap-2', !n.is_read && 'bg-primary-50/60 dark:bg-primary-900/20')}
                   >
                     <Icon className="mt-0.5 h-4 w-4 shrink-0 text-text-secondary" />

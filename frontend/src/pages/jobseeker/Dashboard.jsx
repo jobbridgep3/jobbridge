@@ -137,7 +137,7 @@ export default function JobseekerDashboard() {
             announcements.slice(0, 3).map((a) => (
               <Link
                 key={a.id}
-                to={`/announcements/${a.id}`}
+                to={`/dashboard/announcements/${a.id}`}
                 className="block border-b border-border-subtle pb-3 last:border-0 last:pb-0 hover:opacity-80"
               >
                 <div className="mb-1 flex items-center gap-2">

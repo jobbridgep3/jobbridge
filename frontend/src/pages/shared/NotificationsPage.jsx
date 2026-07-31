@@ -13,7 +13,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { Input } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { CardSkeleton } from '../../components/ui/Skeleton'
-import { isClickable, resolveIcon, resolvePriority } from '../../config/notificationMeta'
+import { isClickable, resolveIcon, resolveNotificationLink, resolvePriority } from '../../config/notificationMeta'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { cn } from '../../lib/utils'
@@ -196,7 +196,7 @@ export function NotificationsPage() {
                             className={cn('min-w-0 flex-1', clickable && 'cursor-pointer')}
                             onClick={() => {
                               markRead(n)
-                              if (clickable) navigate(n.link)
+                              if (clickable) navigate(resolveNotificationLink(n.link))
                             }}
                           >
                             <div className="flex items-center gap-2">
