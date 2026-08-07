@@ -159,6 +159,36 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
     setMessages((m) => [...m, { from: 'bot', text: reason || 'Sorry, I had trouble responding. Please try again.' }])
   }
 
+  // Job Bot's generated-report replies (Feature 2) contain a markdown link to this
+  // exact route — a plain <a href> click is a top-level browser navigation, which can't
+  // carry the Authorization header @jwt_required() needs, so it 404s with "Missing
+  // Authorization Header" instead of downloading. Detecting the link and firing an
+  // authenticated request through the same `api` instance (whose interceptor already
+  // attaches the token) instead of letting the browser navigate directly is the fix —
+  // the route's auth/ownership check itself is untouched and is still the real boundary.
+  const isDownloadLink = (href) => Boolean(href?.includes('/api/assistant/download/'))
+
+  const handleDownloadClick = async (href) => {
+    try {
+      const res = await api.get(href, { responseType: 'blob' })
+      const match = /filename="?([^";]+)"?/.exec(res.headers['content-disposition'] || '')
+      const blobUrl = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = match ? match[1] : 'download'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(blobUrl)
+    } catch (err) {
+      const text =
+        err.response?.status === 404
+          ? 'This download link has expired. Please ask me to generate the file again.'
+          : 'Sorry, the download failed. Please try again.'
+      setMessages((m) => [...m, { from: 'bot', text }])
+    }
+  }
+
   // Selecting a file only STAGES it — no network call here. It's only sent when the
   // user explicitly submits (Send/Enter), same as typed text, and can be removed
   // before that via the chip's ✕ without anything ever being sent.
@@ -458,7 +488,25 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
                         >
                           {msg.from === 'bot' ? (
                             <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-headings:my-1">
-                              <ReactMarkdown>{msg.visibleText ?? msg.text}</ReactMarkdown>
+                              <ReactMarkdown
+                                components={{
+                                  a: ({ href, children }) =>
+                                    isDownloadLink(href) ? (
+                                      <button
+                                        onClick={() => handleDownloadClick(href)}
+                                        className="font-medium text-primary-700 underline hover:text-primary-900 dark:text-primary-400"
+                                      >
+                                        {children}
+                                      </button>
+                                    ) : (
+                                      <a href={href} target="_blank" rel="noopener noreferrer">
+                                        {children}
+                                      </a>
+                                    ),
+                                }}
+                              >
+                                {msg.visibleText ?? msg.text}
+                              </ReactMarkdown>
                             </div>
                           ) : (
                             <span className="whitespace-pre-wrap">{msg.text}</span>

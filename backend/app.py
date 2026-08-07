@@ -24,7 +24,17 @@ def create_app(config_object=Config):
     migrate.init_app(app, db)
     jwt.init_app(app)
     limiter.init_app(app)
-    cors.init_app(app, resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}}, supports_credentials=True)
+    # expose_headers: Flask-CORS's default exposed-header allowlist doesn't include
+    # Content-Disposition — without this, a cross-origin JS response.headers read (e.g.
+    # the assistant's authenticated file-download blob fetch) silently can't see the
+    # filename the server sent, even though the header is genuinely present on the wire.
+    # Purely additive: does not touch which origins are allowed.
+    cors.init_app(
+        app,
+        resources={r"/api/*": {"origins": app.config["CORS_ORIGINS"]}},
+        supports_credentials=True,
+        expose_headers=["Content-Disposition"],
+    )
     socketio.init_app(app)
 
     with app.app_context():
