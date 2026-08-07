@@ -24,10 +24,12 @@ services:
       # GOOGLE_APPLICATION_CREDENTIALS_JSON, GROQ_API_KEY, ADMIN_SEED_EMAIL,
       # ADMIN_SEED_PASSWORD
       #
-      # GROQ_API_KEY: powers the AI assistant (POST /api/assistant/chat), created at
-      # https://console.groq.com/keys. When unset the endpoint returns a 503 with a
-      # clear message; the rest of the app is unaffected. GROQ_MODEL is optional and
-      # defaults to llama-3.3-70b-versatile.
+      # GROQ_API_KEY: powers the AI assistant (POST /api/assistant/chat) and voice input
+      # (POST /api/assistant/transcribe, no separate credential needed), created at
+      # https://console.groq.com/keys. When unset both endpoints return a 503 with a
+      # clear message; the rest of the app is unaffected. GROQ_MODEL and
+      # GROQ_WHISPER_MODEL are optional, defaulting to llama-3.3-70b-versatile and
+      # whisper-large-v3-turbo respectively.
       #
       # GOOGLE_APPLICATION_CREDENTIALS_JSON: base64-encoded contents of the Vision
       # service-account JSON key (GOOGLE_APPLICATION_CREDENTIALS, the file-path form, only

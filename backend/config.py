@@ -119,6 +119,8 @@ class Config:
     # it's blank rather than failing at import/boot time.
     GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
     GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+    # Voice input (Phase 5) — reuses GROQ_API_KEY above, no separate credential needed.
+    GROQ_WHISPER_MODEL = os.environ.get("GROQ_WHISPER_MODEL", "whisper-large-v3-turbo")
 
     # --- Admin seed (used only by seed.py) ---
     ADMIN_SEED_EMAIL = os.environ.get("ADMIN_SEED_EMAIL", "")

@@ -33,6 +33,14 @@ resume-vs-postings comparison additionally runs for role in (None, "jobseeker") 
 using the exact same published/non-deleted Vacancy visibility already used by
 assistant_retrieval's jobseeker/public context — structurally incapable of comparing
 against anything that role couldn't already browse.
+
+Phase 5 addition — POST /transcribe: transcribes audio to text and returns ONLY that
+text — it does not call get_reply(), does not know about roles/context/history. The
+client (ChatbotWidget) populates its existing text input with the transcript and the
+user sends it through /chat exactly like a typed message, so voice input reuses that
+pipeline unchanged rather than duplicating it. This separation is also what keeps a
+future text-to-speech feature (reply -> audio) addable later as its own equally-separate
+module/endpoint, without touching this one or /chat.
 """
 
 import json
@@ -43,7 +51,7 @@ from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 
 from extensions import limiter
 from models.vacancy import Vacancy
-from services import document_extraction, faq_lookup
+from services import document_extraction, faq_lookup, transcription_service
 from services.assistant_retrieval import build_context
 from services.assistant_service import get_reply
 from services.matching_service import rank_vacancies_for_text
@@ -180,3 +188,23 @@ def upload_document():
     if result["mode"] == "error":
         return fail(result["detail"], 503, {"session_id": result["session_id"]})
     return ok(result)
+
+
+@assistant_bp.post("/transcribe")
+@jwt_required(optional=True)
+@limiter.limit("10 per minute", key_func=get_client_ip)
+def transcribe_audio():
+    file = request.files.get("file")
+    if not file:
+        return fail("No audio uploaded.", 400)
+
+    audio_bytes = file.read()
+    filename = file.filename or "recording.webm"
+    error = transcription_service.validate_audio(audio_bytes, filename)
+    if error:
+        return fail(error, 400)
+
+    result = transcription_service.transcribe(audio_bytes, filename)
+    if result["mode"] == "error":
+        return fail(result["detail"], 503)
+    return ok({"transcript": result["transcript"]})
