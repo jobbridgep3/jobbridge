@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { FileText, Mic, Paperclip, RotateCcw, Send, Square, X } from 'lucide-react'
+import { ArrowDown, FileText, Mic, Paperclip, RotateCcw, Send, Square, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 
@@ -26,6 +26,10 @@ function pickSupportedMimeType() {
 
 const DEFAULT_GREETING = "Kumusta! I'm Job Bot, your JobBridge assistant. Ask me about jobs, applications, and PESO Pila services."
 
+// "Near the bottom" tolerance in px — auto-scroll only kicks in within this distance,
+// so a user who's scrolled up to read earlier messages never gets yanked back down.
+const NEAR_BOTTOM_THRESHOLD_PX = 100
+
 export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }) {
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState([{ from: 'bot', text: greeting }])
@@ -38,12 +42,51 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
   // 'kind' is a generic seam: Feature 6 (camera) adds 'image' here without touching
   // the staging/send-dispatch mechanism built in this fix.
   const [attachment, setAttachment] = useState(null)
+  const [showJumpButton, setShowJumpButton] = useState(false)
   const fileInputRef = useRef(null)
   const mediaRecorderRef = useRef(null)
   const recordingTimeoutRef = useRef(null)
   const revealTimerRef = useRef(null)
+  const messagesContainerRef = useRef(null)
+  const isNearBottomRef = useRef(true) // read inside effects to avoid a stale closure
 
   useEffect(() => () => clearInterval(revealTimerRef.current), [])
+
+  const scrollToBottom = (behavior = 'smooth') => {
+    messagesContainerRef.current?.scrollTo({ top: messagesContainerRef.current.scrollHeight, behavior })
+  }
+
+  const handleScroll = () => {
+    const el = messagesContainerRef.current
+    if (!el) return
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_THRESHOLD_PX
+    isNearBottomRef.current = near
+    if (near) setShowJumpButton(false)
+  }
+
+  // Auto-scroll on every new message (user's own AND Job Bot's reply, including the
+  // typewriter reveal's incremental updates, which also flow through `messages`) — but
+  // only when the user is already near the bottom. Otherwise leave their scroll
+  // position alone and surface the jump-to-bottom pill instead of yanking them down.
+  useEffect(() => {
+    if (isNearBottomRef.current) {
+      scrollToBottom()
+    } else {
+      setShowJumpButton(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, sending])
+
+  useEffect(() => {
+    if (open) scrollToBottom('auto') // instant, not animated, when the panel first opens
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  const jumpToBottom = () => {
+    scrollToBottom()
+    isNearBottomRef.current = true
+    setShowJumpButton(false)
+  }
 
   const historyFromMessages = () =>
     messages.map((m) => ({ role: m.from === 'bot' ? 'assistant' : 'user', content: m.text }))
@@ -220,44 +263,60 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
                 </button>
               </div>
             </div>
-            <div className="flex-1 space-y-3 overflow-y-auto p-3">
-              {messages.map((msg, i) => (
-                <div key={i} className={cn('flex items-end gap-2', msg.from === 'user' && 'flex-row-reverse')}>
-                  {msg.from === 'bot' && <JobBotIcon className="mb-1 h-5 w-5 shrink-0" />}
-                  <div
-                    className={cn(
-                      'max-w-[80%] rounded-lg px-3 py-2 text-sm',
-                      msg.from === 'bot' ? 'bg-surface-hover text-text-secondary' : 'bg-primary-800 text-white'
-                    )}
+            <div className="relative flex-1 overflow-hidden">
+              <div ref={messagesContainerRef} onScroll={handleScroll} className="h-full space-y-3 overflow-y-auto p-3">
+                {messages.map((msg, i) => (
+                  <div key={i} className={cn('flex items-end gap-2', msg.from === 'user' && 'flex-row-reverse')}>
+                    {msg.from === 'bot' && <JobBotIcon className="mb-1 h-5 w-5 shrink-0" />}
+                    <div
+                      className={cn(
+                        'max-w-[80%] rounded-lg px-3 py-2 text-sm',
+                        msg.from === 'bot' ? 'bg-surface-hover text-text-secondary' : 'bg-primary-800 text-white'
+                      )}
+                    >
+                      {msg.from === 'bot' ? (
+                        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-headings:my-1">
+                          <ReactMarkdown>{msg.visibleText ?? msg.text}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        <span className="whitespace-pre-wrap">{msg.text}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {sending && (
+                  <div className="flex items-end gap-2">
+                    <JobBotIcon className="mb-1 h-5 w-5 shrink-0" />
+                    <div className="flex items-center gap-2 rounded-lg bg-surface-hover px-3 py-2">
+                      <span className="flex gap-1">
+                        {[0, 0.15, 0.3].map((delay) => (
+                          <motion.span
+                            key={delay}
+                            className="h-1.5 w-1.5 rounded-full bg-text-muted"
+                            animate={{ opacity: [0.3, 1, 0.3] }}
+                            transition={{ duration: 1, repeat: Infinity, delay }}
+                          />
+                        ))}
+                      </span>
+                      <span className="text-xs text-text-muted">Job Bot is typing…</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <AnimatePresence>
+                {showJumpButton && (
+                  <motion.button
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 6 }}
+                    onClick={jumpToBottom}
+                    className="absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-primary-800 px-3 py-1.5 text-xs text-white shadow-md hover:bg-primary-900"
                   >
-                    {msg.from === 'bot' ? (
-                      <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-headings:my-1">
-                        <ReactMarkdown>{msg.visibleText ?? msg.text}</ReactMarkdown>
-                      </div>
-                    ) : (
-                      <span className="whitespace-pre-wrap">{msg.text}</span>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {sending && (
-                <div className="flex items-end gap-2">
-                  <JobBotIcon className="mb-1 h-5 w-5 shrink-0" />
-                  <div className="flex items-center gap-2 rounded-lg bg-surface-hover px-3 py-2">
-                    <span className="flex gap-1">
-                      {[0, 0.15, 0.3].map((delay) => (
-                        <motion.span
-                          key={delay}
-                          className="h-1.5 w-1.5 rounded-full bg-text-muted"
-                          animate={{ opacity: [0.3, 1, 0.3] }}
-                          transition={{ duration: 1, repeat: Infinity, delay }}
-                        />
-                      ))}
-                    </span>
-                    <span className="text-xs text-text-muted">Job Bot is typing…</span>
-                  </div>
-                </div>
-              )}
+                    <ArrowDown className="h-3 w-3" />
+                    New message
+                  </motion.button>
+                )}
+              </AnimatePresence>
             </div>
             {(recording || transcribing) && (
               <div className="flex items-center gap-2 border-t border-border-subtle px-3 py-1.5 text-xs text-text-muted">
