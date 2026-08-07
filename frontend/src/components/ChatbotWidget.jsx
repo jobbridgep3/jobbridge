@@ -340,7 +340,9 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-40">
+    // Bottom offset accounts for the iOS home-indicator gesture area on notched
+    // devices — without this, the FAB/panel can sit flush against or under it.
+    <div className="fixed right-6 z-40" style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}>
       <AnimatePresence>
         {open && (
           <motion.div
@@ -348,7 +350,12 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 12 }}
             transition={{ duration: 0.15 }}
-            className="mb-3 flex h-[min(70vh,480px)] w-[min(92vw,360px)] flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-xl"
+            // Mobile-first: near-full-width with symmetric margins matching the parent's
+            // own right-6 offset (calc(100vw-3rem)), and `dvh` (not `vh`) so the panel's
+            // height correctly shrinks when the on-screen keyboard opens — `vh` is based
+            // on the layout viewport and doesn't react to it, which is what covers the
+            // input bar. Reverts to the compact floating-panel size at sm: (640px) and up.
+            className="mb-3 flex h-[min(75dvh,560px)] w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-xl sm:h-[min(70dvh,480px)] sm:w-[360px]"
           >
             <div className="flex items-center justify-between bg-primary-900 px-4 py-3 text-white">
               <div className="flex items-center gap-2">
@@ -477,7 +484,9 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
                     </span>
                   </div>
                 )}
-                <div className="flex items-center gap-2 border-t border-border-subtle p-2">
+                {/* gap-1/h-8 on mobile, gap-2/h-9 from sm: up — the narrowest phones (~320px)
+                    need every pixel back from 4 icon buttons + a still-usable text input. */}
+                <div className="flex items-center gap-1 border-t border-border-subtle p-2 sm:gap-2">
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -489,7 +498,7 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
                     onClick={() => fileInputRef.current?.click()}
                     disabled={sending || recording || transcribing}
                     aria-label="Attach a document"
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover disabled:opacity-50"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover disabled:opacity-50 sm:h-9 sm:w-9"
                   >
                     <Paperclip className="h-4 w-4" />
                   </button>
@@ -505,7 +514,7 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
                     onClick={() => cameraInputRef.current?.click()}
                     disabled={sending || recording || transcribing}
                     aria-label="Take or attach a photo"
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover disabled:opacity-50"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover disabled:opacity-50 sm:h-9 sm:w-9"
                   >
                     <Camera className="h-4 w-4" />
                   </button>
@@ -514,7 +523,7 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
                     disabled={sending || transcribing}
                     aria-label={recording ? 'Stop recording' : 'Record a voice message'}
                     className={cn(
-                      'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg disabled:opacity-50',
+                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg disabled:opacity-50 sm:h-9 sm:w-9',
                       recording ? 'bg-red-500 text-white hover:bg-red-600' : 'text-text-muted hover:bg-surface-hover'
                     )}
                   >
@@ -525,12 +534,12 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
                     placeholder="Type a message…"
-                    className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus-visible:outline-2 focus-visible:outline-primary-500"
+                    className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus-visible:outline-2 focus-visible:outline-primary-500"
                   />
                   <button
                     onClick={sendMessage}
                     disabled={sending || recording || transcribing || (!input.trim() && !attachment)}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-800 text-white hover:bg-primary-900 disabled:opacity-50"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-800 text-white hover:bg-primary-900 disabled:opacity-50 sm:h-9 sm:w-9"
                   >
                     <Send className="h-4 w-4" />
                   </button>
