@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { Mic, Paperclip, RotateCcw, Send, Square, X } from 'lucide-react'
+import { FileText, Mic, Paperclip, RotateCcw, Send, Square, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 
@@ -34,6 +34,10 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
   const [sessionId, setSessionId] = useState(null)
   const [recording, setRecording] = useState(false)
   const [transcribing, setTranscribing] = useState(false)
+  // { file, kind: 'document' } | null — staged, not sent, until the user submits.
+  // 'kind' is a generic seam: Feature 6 (camera) adds 'image' here without touching
+  // the staging/send-dispatch mechanism built in this fix.
+  const [attachment, setAttachment] = useState(null)
   const fileInputRef = useRef(null)
   const mediaRecorderRef = useRef(null)
   const recordingTimeoutRef = useRef(null)
@@ -76,46 +80,45 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
     setMessages((m) => [...m, { from: 'bot', text: reason || 'Sorry, I had trouble responding. Please try again.' }])
   }
 
-  const sendMessage = async () => {
-    const text = input.trim()
-    if (!text || sending) return
-    // Captured before appending the new turn — the server trims/validates this
-    // regardless, but only what's already been said belongs in "history".
-    const history = historyFromMessages()
-    setMessages((m) => [...m, { from: 'user', text }])
-    setInput('')
-    setSending(true)
-    try {
-      appendReply(await api.post('/api/assistant/chat', { message: text, session_id: sessionId, history }))
-    } catch (err) {
-      appendError(err)
-    } finally {
-      setSending(false)
-    }
-  }
-
-  const handleFileSelected = async (e) => {
+  // Selecting a file only STAGES it — no network call here. It's only sent when the
+  // user explicitly submits (Send/Enter), same as typed text, and can be removed
+  // before that via the chip's ✕ without anything ever being sent.
+  const handleFileSelected = (e) => {
     const file = e.target.files?.[0]
     e.target.value = '' // allow re-selecting the same file later
-    if (!file || sending) return
+    if (!file) return
 
     if (file.size > MAX_UPLOAD_SIZE_BYTES) {
       setMessages((m) => [...m, { from: 'bot', text: 'That file is too large. Maximum size is 5MB.' }])
       return
     }
+    setAttachment({ file, kind: 'document' })
+  }
 
-    const history = historyFromMessages()
+  const removeAttachment = () => setAttachment(null)
+
+  const sendMessage = async () => {
     const text = input.trim()
-    setMessages((m) => [...m, { from: 'user', text: `📎 ${file.name}` }])
+    if ((!text && !attachment) || sending) return
+    // Captured before appending the new turn — the server trims/validates this
+    // regardless, but only what's already been said belongs in "history".
+    const history = historyFromMessages()
+    const staged = attachment
+    setMessages((m) => [...m, { from: 'user', text: staged ? `📎 ${staged.file.name}${text ? ` — ${text}` : ''}` : text }])
     setInput('')
+    setAttachment(null)
     setSending(true)
     try {
-      const form = new FormData()
-      form.append('file', file)
-      form.append('message', text)
-      if (sessionId) form.append('session_id', sessionId)
-      form.append('history', JSON.stringify(history))
-      appendReply(await api.post('/api/assistant/upload-document', form))
+      if (staged) {
+        const form = new FormData()
+        form.append('file', staged.file)
+        form.append('message', text)
+        if (sessionId) form.append('session_id', sessionId)
+        form.append('history', JSON.stringify(history))
+        appendReply(await api.post('/api/assistant/upload-document', form))
+      } else {
+        appendReply(await api.post('/api/assistant/chat', { message: text, session_id: sessionId, history }))
+      }
     } catch (err) {
       appendError(err)
     } finally {
@@ -183,6 +186,7 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
     clearInterval(revealTimerRef.current)
     setMessages([{ from: 'bot', text: greeting }])
     setSessionId(null)
+    setAttachment(null)
   }
 
   return (
@@ -261,6 +265,17 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
                 {recording ? 'Recording… tap the mic again to stop' : 'Transcribing…'}
               </div>
             )}
+            {attachment && (
+              <div className="flex items-center gap-2 border-t border-border-subtle px-3 py-1.5">
+                <span className="flex max-w-full items-center gap-1.5 rounded-full bg-surface-hover px-2.5 py-1 text-xs text-text-secondary">
+                  <FileText className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{attachment.file.name}</span>
+                  <button onClick={removeAttachment} aria-label="Remove attachment" className="shrink-0 rounded-full p-0.5 hover:bg-surface">
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              </div>
+            )}
             <div className="flex items-center gap-2 border-t border-border-subtle p-2">
               <input
                 ref={fileInputRef}
@@ -297,7 +312,7 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
               />
               <button
                 onClick={sendMessage}
-                disabled={sending || recording || transcribing}
+                disabled={sending || recording || transcribing || (!input.trim() && !attachment)}
                 className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-800 text-white hover:bg-primary-900 disabled:opacity-50"
               >
                 <Send className="h-4 w-4" />
