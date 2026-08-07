@@ -1,9 +1,12 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { MessageCircle, Send, X } from 'lucide-react'
-import { useState } from 'react'
+import { MessageCircle, Paperclip, Send, X } from 'lucide-react'
+import { useRef, useState } from 'react'
 
 import api from '../lib/axios'
 import { cn } from '../lib/utils'
+
+const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024 // 5MB — matches the server-side limit; this is a UX
+// pre-check only, not the real boundary, which stays server-side (see document_extraction.py)
 
 export function ChatbotWidget({
   title = 'JobBridge Assistant',
@@ -14,28 +17,65 @@ export function ChatbotWidget({
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [sessionId, setSessionId] = useState(null)
+  const fileInputRef = useRef(null)
+
+  const historyFromMessages = () =>
+    messages.map((m) => ({ role: m.from === 'bot' ? 'assistant' : 'user', content: m.text }))
+
+  const appendReply = (res) => {
+    setSessionId(res.data.data.session_id)
+    setMessages((m) => [...m, { from: 'bot', text: res.data.data.reply }])
+  }
+
+  const appendError = (err) => {
+    // The backend explains why it couldn't answer (not configured, upstream timeout,
+    // rate limited, invalid file) — show that rather than a generic string that hides the cause.
+    const reason = err.response?.data?.message
+    setMessages((m) => [...m, { from: 'bot', text: reason || 'Sorry, I had trouble responding. Please try again.' }])
+  }
 
   const sendMessage = async () => {
     const text = input.trim()
     if (!text || sending) return
     // Captured before appending the new turn — the server trims/validates this
     // regardless, but only what's already been said belongs in "history".
-    const history = messages.map((m) => ({ role: m.from === 'bot' ? 'assistant' : 'user', content: m.text }))
+    const history = historyFromMessages()
     setMessages((m) => [...m, { from: 'user', text }])
     setInput('')
     setSending(true)
     try {
-      const res = await api.post('/api/assistant/chat', { message: text, session_id: sessionId, history })
-      setSessionId(res.data.data.session_id)
-      setMessages((m) => [...m, { from: 'bot', text: res.data.data.reply }])
+      appendReply(await api.post('/api/assistant/chat', { message: text, session_id: sessionId, history }))
     } catch (err) {
-      // The backend explains why it couldn't answer (not configured, upstream timeout,
-      // rate limited) — show that rather than a generic string that hides the cause.
-      const reason = err.response?.data?.message
-      setMessages((m) => [
-        ...m,
-        { from: 'bot', text: reason || 'Sorry, I had trouble responding. Please try again.' },
-      ])
+      appendError(err)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleFileSelected = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-selecting the same file later
+    if (!file || sending) return
+
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+      setMessages((m) => [...m, { from: 'bot', text: 'That file is too large. Maximum size is 5MB.' }])
+      return
+    }
+
+    const history = historyFromMessages()
+    const text = input.trim()
+    setMessages((m) => [...m, { from: 'user', text: `📎 ${file.name}` }])
+    setInput('')
+    setSending(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('message', text)
+      if (sessionId) form.append('session_id', sessionId)
+      form.append('history', JSON.stringify(history))
+      appendReply(await api.post('/api/assistant/upload-document', form))
+    } catch (err) {
+      appendError(err)
     } finally {
       setSending(false)
     }
@@ -63,7 +103,7 @@ export function ChatbotWidget({
                 <div
                   key={i}
                   className={cn(
-                    'max-w-[85%] rounded-lg px-3 py-2 text-sm',
+                    'max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm',
                     msg.from === 'bot' ? 'bg-slate-100 text-slate-700' : 'ml-auto bg-primary-800 text-white'
                   )}
                 >
@@ -72,6 +112,21 @@ export function ChatbotWidget({
               ))}
             </div>
             <div className="flex items-center gap-2 border-t border-slate-100 p-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.docx,.txt"
+                hidden
+                onChange={handleFileSelected}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={sending}
+                aria-label="Attach a document"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-50"
+              >
+                <Paperclip className="h-4 w-4" />
+              </button>
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}

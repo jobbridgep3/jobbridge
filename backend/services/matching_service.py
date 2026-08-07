@@ -23,24 +23,41 @@ def _vacancy_text(vacancy) -> str:
     return f"{vacancy.title} {vacancy.skills_required or ''} {vacancy.requirements or ''} {vacancy.industry or ''}".strip()
 
 
-def match_score(jobseeker_profile, vacancy) -> float:
-    """Returns a 0-100 match percentage between one jobseeker and one vacancy."""
-    profile_text = _profile_text(jobseeker_profile)
-    vacancy_text = _vacancy_text(vacancy)
-    if not profile_text or not vacancy_text:
+def _score_texts(text_a: str, text_b: str) -> float:
+    """Core TF-IDF + cosine similarity computation, shared by every match_score* function
+    below — extracted so a not-yet-saved raw text (e.g. an uploaded-but-unsaved resume,
+    see match_score_from_text) can reuse the exact same scoring logic as a real profile."""
+    if not text_a or not text_b:
         return 0.0
     try:
         vectorizer = TfidfVectorizer(stop_words="english")
-        tfidf = vectorizer.fit_transform([profile_text, vacancy_text])
+        tfidf = vectorizer.fit_transform([text_a, text_b])
         score = cosine_similarity(tfidf[0:1], tfidf[1:2])[0][0]
         return round(float(score) * 100, 1)
     except ValueError:
         return 0.0
 
 
+def match_score(jobseeker_profile, vacancy) -> float:
+    """Returns a 0-100 match percentage between one jobseeker and one vacancy."""
+    return _score_texts(_profile_text(jobseeker_profile), _vacancy_text(vacancy))
+
+
+def match_score_from_text(resume_text: str, vacancy) -> float:
+    """Same scoring as match_score(), for a raw (not-yet-saved) uploaded resume's text —
+    used by the AI assistant's document-upload comparison feature."""
+    return _score_texts(resume_text, _vacancy_text(vacancy))
+
+
 def rank_vacancies_for_jobseeker(jobseeker_profile, vacancies: list) -> list[tuple]:
     """Returns [(vacancy, score), ...] sorted by score desc."""
     scored = [(v, match_score(jobseeker_profile, v)) for v in vacancies]
+    return sorted(scored, key=lambda pair: pair[1], reverse=True)
+
+
+def rank_vacancies_for_text(resume_text: str, vacancies: list) -> list[tuple]:
+    """Returns [(vacancy, score), ...] sorted by score desc, for an uploaded resume's raw text."""
+    scored = [(v, match_score_from_text(resume_text, v)) for v in vacancies]
     return sorted(scored, key=lambda pair: pair[1], reverse=True)
 
 

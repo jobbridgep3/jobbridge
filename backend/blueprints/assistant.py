@@ -22,17 +22,31 @@ Phase 3 additions:
     array. _clean_history() validates and trims it server-side before it's ever trusted
     for anything — it only affects that user's own conversation quality, never identity/
     role, which still come solely from the JWT.
+
+Phase 4 addition — POST /upload-document: a sibling multipart route, not a rewrite of
+/chat's JSON contract (matching every other upload route in this codebase, which are all
+their own dedicated multipart endpoints separate from any JSON route). File bytes are
+processed entirely in memory (see services/document_extraction.py) and never persisted —
+nothing is written to disk or Supabase Storage, so there is nothing to clean up. The
+extracted text becomes part of that turn's `context`, reusing get_reply() unchanged; a
+resume-vs-postings comparison additionally runs for role in (None, "jobseeker") only,
+using the exact same published/non-deleted Vacancy visibility already used by
+assistant_retrieval's jobseeker/public context — structurally incapable of comparing
+against anything that role couldn't already browse.
 """
 
+import json
 import uuid
 
 from flask import Blueprint, request
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 
 from extensions import limiter
-from services import faq_lookup
+from models.vacancy import Vacancy
+from services import document_extraction, faq_lookup
 from services.assistant_retrieval import build_context
 from services.assistant_service import get_reply
+from services.matching_service import rank_vacancies_for_text
 from utils.client_ip import get_client_ip
 from utils.responses import fail, ok
 
@@ -104,6 +118,65 @@ def chat():
     history = _clean_history(data.get("history"))
 
     result = get_reply(message, session_id, role, context, history)
+    if result["mode"] == "error":
+        return fail(result["detail"], 503, {"session_id": result["session_id"]})
+    return ok(result)
+
+
+def _format_matches(ranked: list) -> str:
+    if not ranked:
+        return "Job match comparison: no strong matches were found between this document and current postings."
+    lines = "\n".join(f"- \"{v.title}\" — {score:.0f}% match" for v, score in ranked)
+    return f"Job match comparison (against currently published postings):\n{lines}"
+
+
+def _parse_history_field(raw: str):
+    """Multipart form fields are always strings — the history array arrives JSON-encoded.
+    A malformed/missing field becomes [] rather than a 500; _clean_history() validates
+    the actual shape of whatever comes out of this."""
+    if not raw:
+        return []
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+
+
+@assistant_bp.post("/upload-document")
+@jwt_required(optional=True)
+@limiter.limit("10 per minute", key_func=get_client_ip)
+def upload_document():
+    file = request.files.get("file")
+    if not file:
+        return fail("No file uploaded.", 400)
+
+    file_bytes = file.read()
+    filename = document_extraction.sanitize_filename(file.filename or "upload")
+    error = document_extraction.validate(file_bytes, filename)
+    if error:
+        return fail(error, 400)
+
+    extraction = document_extraction.extract_text(file_bytes, filename)
+    if extraction["mode"] == "error":
+        return fail(extraction["detail"], 400)
+
+    role = get_jwt().get("role") if get_jwt_identity() else None
+    identity = get_jwt_identity()
+
+    doc_context = f'Uploaded document "{filename}":\n\n{extraction["text"]}'
+    if role in (None, "jobseeker"):
+        # Same published+non-deleted visibility already used by assistant_retrieval's
+        # jobseeker/public context — comparison never sees anything that role couldn't
+        # already browse via GET /api/jobs.
+        vacancies = Vacancy.query.filter_by(status="published").filter(Vacancy.deleted_at.is_(None)).all()
+        ranked = [pair for pair in rank_vacancies_for_text(extraction["text"], vacancies)[:5] if pair[1] > 0]
+        doc_context += "\n\n" + _format_matches(ranked)
+
+    context = build_context(role, identity) + "\n\n" + doc_context
+    message = (request.form.get("message") or "").strip() or "Please summarize this document and tell me what it's about."
+    history = _clean_history(_parse_history_field(request.form.get("history")))
+
+    result = get_reply(message, request.form.get("session_id"), role, context, history)
     if result["mode"] == "error":
         return fail(result["detail"], 503, {"session_id": result["session_id"]})
     return ok(result)
