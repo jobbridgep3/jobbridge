@@ -59,6 +59,15 @@ Q&A, mirroring /upload-document's shape. The image is validated (services/image_
 base64-encoded, and passed to get_reply() as an optional image_data_uri — the exact same
 role-scoped persona/context/history pipeline as every other message, just with an extra
 input modality. Grants no new data access.
+
+Feature 4 addition — conversation persistence: `_respond()` is now the single exit point
+for every successful reply (FAQ, report, plain chat, document, image). For an
+authenticated caller it upserts an AssistantConversation row via services/conversation_service.py
+and returns that row's id as `session_id`; for anonymous callers, `session_id` behaves
+exactly as it always has (ephemeral, never persisted — there's no account to scope a row
+to). GET/PATCH/DELETE /conversations[/<id>] manage the resulting history — all
+`@jwt_required()` (mandatory) and ownership-checked, matching every other user-owned
+resource in this app.
 """
 
 import io
@@ -71,6 +80,7 @@ from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from extensions import limiter
 from models.vacancy import Vacancy
 from services import (
+    conversation_service,
     document_extraction,
     faq_lookup,
     image_validation,
@@ -131,6 +141,18 @@ def _clean_history(raw) -> list:
     return trimmed
 
 
+def _respond(identity: str, session_id: str, user_message: str, reply_text: str, mode: str, attachment_label: str = None):
+    """The single exit point for every successful reply. For an authenticated caller,
+    persists this turn (creating a new conversation if session_id is absent/foreign/
+    invalid) and returns that conversation's real id as session_id. For anonymous
+    callers, session_id stays exactly as ephemeral as it's always been — no account to
+    persist a row against."""
+    if identity:
+        conversation_id = conversation_service.upsert_turn(session_id, identity, user_message, reply_text, attachment_label)
+        return ok({"reply": reply_text, "session_id": conversation_id, "mode": mode})
+    return ok({"reply": reply_text, "session_id": session_id or uuid.uuid4().hex, "mode": mode})
+
+
 @assistant_bp.post("/chat")
 @jwt_required(optional=True)
 @limiter.limit("20 per minute", key_func=get_client_ip)
@@ -143,18 +165,17 @@ def chat():
         return fail(f"Message is too long ({MAX_MESSAGE_LENGTH} character max).", 400)
 
     session_id = data.get("session_id")
+    role = get_jwt().get("role") if get_jwt_identity() else None
+    identity = get_jwt_identity()
 
     faq_answer = faq_lookup.match(message)
     if faq_answer:
-        return ok({"reply": faq_answer, "session_id": session_id or uuid.uuid4().hex, "mode": "faq"})
-
-    role = get_jwt().get("role") if get_jwt_identity() else None
-    identity = get_jwt_identity()
+        return _respond(identity, session_id, message, faq_answer, "faq")
 
     if identity:
         intent = report_intent_service.detect(message, role)
         if intent:
-            report_reply = _try_generate_report(intent, identity, role, session_id)
+            report_reply = _try_generate_report(intent, identity, role, session_id, message)
             if report_reply is not None:
                 return report_reply
 
@@ -164,10 +185,10 @@ def chat():
     result = get_reply(message, session_id, role, context, history)
     if result["mode"] == "error":
         return fail(result["detail"], 503, {"session_id": result["session_id"]})
-    return ok(result)
+    return _respond(identity, session_id, message, result["reply"], result["mode"])
 
 
-def _try_generate_report(intent: dict, identity: str, role: str, session_id: str):
+def _try_generate_report(intent: dict, identity: str, role: str, session_id: str, message: str):
     """Returns a Flask response if report generation succeeded, or None to fall through
     to the normal chat pipeline (role_intent_service already role-checked the match, but
     generate_report_file re-checks independently — defense in depth, never a single check).
@@ -188,7 +209,7 @@ def _try_generate_report(intent: dict, identity: str, role: str, session_id: str
     token = report_download_cache.stage(file_bytes, filename, mimetype, identity)
     download_url = f"{request.host_url.rstrip('/')}/api/assistant/download/{token}"
     reply = f"Here's your generated file: [Download {filename}]({download_url})\n\nThis link will expire in 15 minutes."
-    return ok({"reply": reply, "session_id": session_id or uuid.uuid4().hex, "mode": "report"})
+    return _respond(identity, session_id, message, reply, "report")
 
 
 def _format_matches(ranked: list) -> str:
@@ -247,7 +268,7 @@ def upload_document():
     result = get_reply(message, request.form.get("session_id"), role, context, history)
     if result["mode"] == "error":
         return fail(result["detail"], 503, {"session_id": result["session_id"]})
-    return ok(result)
+    return _respond(identity, request.form.get("session_id"), message, result["reply"], result["mode"], filename)
 
 
 @assistant_bp.post("/transcribe")
@@ -311,4 +332,44 @@ def chat_with_image():
     result = get_reply(message, request.form.get("session_id"), role, context, history, image_data_uri)
     if result["mode"] == "error":
         return fail(result["detail"], 503, {"session_id": result["session_id"]})
-    return ok(result)
+    return _respond(identity, request.form.get("session_id"), message, result["reply"], result["mode"], "photo")
+
+
+@assistant_bp.get("/conversations")
+@jwt_required()
+def list_conversations():
+    return ok(conversation_service.list_conversations(get_jwt_identity()))
+
+
+@assistant_bp.get("/conversations/<conversation_id>")
+@jwt_required()
+def get_conversation(conversation_id):
+    conversation = conversation_service.get_conversation(conversation_id, get_jwt_identity())
+    if not conversation:
+        return fail("Conversation not found.", 404)
+    return ok(conversation.to_dict())
+
+
+@assistant_bp.delete("/conversations/<conversation_id>")
+@jwt_required()
+def delete_conversation(conversation_id):
+    deleted = conversation_service.delete_conversation(conversation_id, get_jwt_identity())
+    if not deleted:
+        return fail("Conversation not found.", 404)
+    return ok(None, "Conversation deleted.")
+
+
+@assistant_bp.patch("/conversations/<conversation_id>")
+@jwt_required()
+def update_conversation(conversation_id):
+    data = request.get_json(force=True) or {}
+    conversation = conversation_service.update_conversation(
+        conversation_id,
+        get_jwt_identity(),
+        is_pinned=data.get("is_pinned"),
+        is_favorite=data.get("is_favorite"),
+        title=data.get("title"),
+    )
+    if not conversation:
+        return fail("Conversation not found.", 404)
+    return ok(conversation.to_summary_dict())

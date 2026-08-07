@@ -3,6 +3,7 @@
 from models.announcement import Announcement
 from models.applicant_tools import ApplicationMessage, DocumentRequest, JobOffer
 from models.application import Application, ApplicationStatusHistory
+from models.assistant_conversation import AssistantConversation
 from models.audit import AuditTrail
 from models.employer import EmployerCompany, EmployerCompanyDocument
 from models.employer_hr import EmployerHRDocument, EmployerHRProfile
@@ -54,4 +55,5 @@ __all__ = [
     "Notification",
     "AuditTrail",
     "SystemSetting",
+    "AssistantConversation",
 ]

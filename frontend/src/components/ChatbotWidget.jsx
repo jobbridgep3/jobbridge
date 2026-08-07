@@ -1,10 +1,12 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowDown, Camera, FileText, Mic, Paperclip, RotateCcw, Send, Square, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, Camera, FileText, History, Mic, Paperclip, RotateCcw, Send, Square, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 
 import api from '../lib/axios'
 import { cn } from '../lib/utils'
+import { useAuthStore } from '../store/authStore'
+import { ConversationHistoryPanel } from './ConversationHistoryPanel'
 import { JobBotIcon } from './icons/JobBotIcon'
 
 const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024 // 5MB — matches the server-side limit; this is a UX
@@ -32,6 +34,11 @@ const DEFAULT_GREETING = "Kumusta! I'm Job Bot, your JobBridge assistant. Ask me
 const NEAR_BOTTOM_THRESHOLD_PX = 100
 
 export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }) {
+  // Persisted conversation history (Feature 4) only exists for authenticated users —
+  // there's no account to scope a saved conversation to on the public/anonymous
+  // Front Desk widget, so the History button and all of it below are gated on this.
+  const hasAccount = Boolean(useAuthStore((s) => s.token))
+
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState([{ from: 'bot', text: greeting }])
   const [input, setInput] = useState('')
@@ -43,6 +50,9 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
   // the user submits. previewUrl (image only) is an object URL, revoked on removal/send.
   const [attachment, setAttachment] = useState(null)
   const [showJumpButton, setShowJumpButton] = useState(false)
+  const [view, setView] = useState('chat') // 'chat' | 'history'
+  const [conversations, setConversations] = useState([])
+  const [favoritesOnly, setFavoritesOnly] = useState(false)
   const fileInputRef = useRef(null)
   const cameraInputRef = useRef(null)
   const mediaRecorderRef = useRef(null)
@@ -264,6 +274,71 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
     setAttachment(null)
   }
 
+  const openHistory = async () => {
+    setView('history')
+    try {
+      const res = await api.get('/api/assistant/conversations')
+      setConversations(res.data.data)
+    } catch {
+      setConversations([])
+    }
+  }
+
+  const startNewChat = () => {
+    clearConversation()
+    setView('chat')
+  }
+
+  const attachmentPrefix = (label) => (label === 'photo' ? '📷 photo' : label ? `📎 ${label}` : null)
+
+  const selectConversation = async (conversationId) => {
+    try {
+      const res = await api.get(`/api/assistant/conversations/${conversationId}`)
+      const full = res.data.data
+      setMessages(
+        full.messages.map((m) => {
+          const prefix = m.role === 'user' ? attachmentPrefix(m.attachment) : null
+          return { from: m.role === 'assistant' ? 'bot' : 'user', text: prefix ? `${prefix}${m.content ? ` — ${m.content}` : ''}` : m.content }
+        })
+      )
+      setSessionId(full.id)
+      setView('chat')
+    } catch (err) {
+      appendError(err)
+      setView('chat')
+    }
+  }
+
+  const togglePin = async (conv) => {
+    setConversations((cs) => cs.map((c) => (c.id === conv.id ? { ...c, is_pinned: !c.is_pinned } : c)))
+    try {
+      await api.patch(`/api/assistant/conversations/${conv.id}`, { is_pinned: !conv.is_pinned })
+      openHistory() // re-sort (pinned sorts first server-side)
+    } catch {
+      setConversations((cs) => cs.map((c) => (c.id === conv.id ? { ...c, is_pinned: conv.is_pinned } : c))) // revert
+    }
+  }
+
+  const toggleFavorite = async (conv) => {
+    setConversations((cs) => cs.map((c) => (c.id === conv.id ? { ...c, is_favorite: !c.is_favorite } : c)))
+    try {
+      await api.patch(`/api/assistant/conversations/${conv.id}`, { is_favorite: !conv.is_favorite })
+    } catch {
+      setConversations((cs) => cs.map((c) => (c.id === conv.id ? { ...c, is_favorite: conv.is_favorite } : c))) // revert
+    }
+  }
+
+  const deleteConversation = async (conv) => {
+    if (!window.confirm(`Delete "${conv.title}"? This can't be undone.`)) return
+    try {
+      await api.delete(`/api/assistant/conversations/${conv.id}`)
+      setConversations((cs) => cs.filter((c) => c.id !== conv.id))
+      if (sessionId === conv.id) clearConversation()
+    } catch (err) {
+      appendError(err)
+    }
+  }
+
   return (
     <div className="fixed bottom-6 right-6 z-40">
       <AnimatePresence>
@@ -277,158 +352,191 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
           >
             <div className="flex items-center justify-between bg-primary-900 px-4 py-3 text-white">
               <div className="flex items-center gap-2">
-                <JobBotIcon className="h-6 w-6 shrink-0" />
-                <p className="text-sm font-semibold">{title}</p>
+                {view === 'history' ? (
+                  <button onClick={() => setView('chat')} aria-label="Back to chat" className="rounded p-1 hover:bg-white/10">
+                    <ArrowLeft className="h-4 w-4" />
+                  </button>
+                ) : (
+                  <JobBotIcon className="h-6 w-6 shrink-0" />
+                )}
+                <p className="text-sm font-semibold">{view === 'history' ? 'History' : title}</p>
               </div>
               <div className="flex items-center gap-1">
-                <button
-                  onClick={clearConversation}
-                  disabled={sending}
-                  aria-label="Clear conversation"
-                  title="Clear conversation"
-                  className="rounded p-1 hover:bg-white/10 disabled:opacity-50"
-                >
-                  <RotateCcw className="h-4 w-4" />
-                </button>
+                {view === 'chat' && hasAccount && (
+                  <button
+                    onClick={openHistory}
+                    aria-label="Conversation history"
+                    title="Conversation history"
+                    className="rounded p-1 hover:bg-white/10"
+                  >
+                    <History className="h-4 w-4" />
+                  </button>
+                )}
+                {view === 'chat' && (
+                  <button
+                    onClick={clearConversation}
+                    disabled={sending}
+                    aria-label="Clear conversation"
+                    title="Clear conversation"
+                    className="rounded p-1 hover:bg-white/10 disabled:opacity-50"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                  </button>
+                )}
                 <button onClick={() => setOpen(false)} aria-label="Close chat" className="rounded p-1 hover:bg-white/10">
                   <X className="h-4 w-4" />
                 </button>
               </div>
             </div>
-            <div className="relative flex-1 overflow-hidden">
-              <div ref={messagesContainerRef} onScroll={handleScroll} className="h-full space-y-3 overflow-y-auto p-3">
-                {messages.map((msg, i) => (
-                  <div key={i} className={cn('flex items-end gap-2', msg.from === 'user' && 'flex-row-reverse')}>
-                    {msg.from === 'bot' && <JobBotIcon className="mb-1 h-5 w-5 shrink-0" />}
-                    <div
-                      className={cn(
-                        'max-w-[80%] rounded-lg px-3 py-2 text-sm',
-                        msg.from === 'bot' ? 'bg-surface-hover text-text-secondary' : 'bg-primary-800 text-white'
-                      )}
-                    >
-                      {msg.from === 'bot' ? (
-                        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-headings:my-1">
-                          <ReactMarkdown>{msg.visibleText ?? msg.text}</ReactMarkdown>
+            {view === 'history' ? (
+              <ConversationHistoryPanel
+                conversations={conversations}
+                favoritesOnly={favoritesOnly}
+                onToggleFavoritesOnly={() => setFavoritesOnly((f) => !f)}
+                onSelect={selectConversation}
+                onPin={togglePin}
+                onFavorite={toggleFavorite}
+                onDelete={deleteConversation}
+                onNewChat={startNewChat}
+              />
+            ) : (
+              <>
+                <div className="relative flex-1 overflow-hidden">
+                  <div ref={messagesContainerRef} onScroll={handleScroll} className="h-full space-y-3 overflow-y-auto p-3">
+                    {messages.map((msg, i) => (
+                      <div key={i} className={cn('flex items-end gap-2', msg.from === 'user' && 'flex-row-reverse')}>
+                        {msg.from === 'bot' && <JobBotIcon className="mb-1 h-5 w-5 shrink-0" />}
+                        <div
+                          className={cn(
+                            'max-w-[80%] rounded-lg px-3 py-2 text-sm',
+                            msg.from === 'bot' ? 'bg-surface-hover text-text-secondary' : 'bg-primary-800 text-white'
+                          )}
+                        >
+                          {msg.from === 'bot' ? (
+                            <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-headings:my-1">
+                              <ReactMarkdown>{msg.visibleText ?? msg.text}</ReactMarkdown>
+                            </div>
+                          ) : (
+                            <span className="whitespace-pre-wrap">{msg.text}</span>
+                          )}
                         </div>
+                      </div>
+                    ))}
+                    {sending && (
+                      <div className="flex items-end gap-2">
+                        <JobBotIcon className="mb-1 h-5 w-5 shrink-0" />
+                        <div className="flex items-center gap-2 rounded-lg bg-surface-hover px-3 py-2">
+                          <span className="flex gap-1">
+                            {[0, 0.15, 0.3].map((delay) => (
+                              <motion.span
+                                key={delay}
+                                className="h-1.5 w-1.5 rounded-full bg-text-muted"
+                                animate={{ opacity: [0.3, 1, 0.3] }}
+                                transition={{ duration: 1, repeat: Infinity, delay }}
+                              />
+                            ))}
+                          </span>
+                          <span className="text-xs text-text-muted">Job Bot is typing…</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <AnimatePresence>
+                    {showJumpButton && (
+                      <motion.button
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 6 }}
+                        onClick={jumpToBottom}
+                        className="absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-primary-800 px-3 py-1.5 text-xs text-white shadow-md hover:bg-primary-900"
+                      >
+                        <ArrowDown className="h-3 w-3" />
+                        New message
+                      </motion.button>
+                    )}
+                  </AnimatePresence>
+                </div>
+                {(recording || transcribing) && (
+                  <div className="flex items-center gap-2 border-t border-border-subtle px-3 py-1.5 text-xs text-text-muted">
+                    <span className={cn('h-2 w-2 rounded-full', recording ? 'animate-pulse bg-red-500' : 'bg-text-muted')} />
+                    {recording ? 'Recording… tap the mic again to stop' : 'Transcribing…'}
+                  </div>
+                )}
+                {attachment && (
+                  <div className="flex items-center gap-2 border-t border-border-subtle px-3 py-1.5">
+                    <span className="flex max-w-full items-center gap-1.5 rounded-full bg-surface-hover py-1 pl-1 pr-2.5 text-xs text-text-secondary">
+                      {attachment.kind === 'image' ? (
+                        <img src={attachment.previewUrl} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover" />
                       ) : (
-                        <span className="whitespace-pre-wrap">{msg.text}</span>
+                        <FileText className="ml-1 h-3.5 w-3.5 shrink-0" />
                       )}
-                    </div>
-                  </div>
-                ))}
-                {sending && (
-                  <div className="flex items-end gap-2">
-                    <JobBotIcon className="mb-1 h-5 w-5 shrink-0" />
-                    <div className="flex items-center gap-2 rounded-lg bg-surface-hover px-3 py-2">
-                      <span className="flex gap-1">
-                        {[0, 0.15, 0.3].map((delay) => (
-                          <motion.span
-                            key={delay}
-                            className="h-1.5 w-1.5 rounded-full bg-text-muted"
-                            animate={{ opacity: [0.3, 1, 0.3] }}
-                            transition={{ duration: 1, repeat: Infinity, delay }}
-                          />
-                        ))}
-                      </span>
-                      <span className="text-xs text-text-muted">Job Bot is typing…</span>
-                    </div>
+                      <span className="truncate">{attachment.kind === 'image' ? 'Photo' : attachment.file.name}</span>
+                      <button onClick={removeAttachment} aria-label="Remove attachment" className="shrink-0 rounded-full p-0.5 hover:bg-surface">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
                   </div>
                 )}
-              </div>
-              <AnimatePresence>
-                {showJumpButton && (
-                  <motion.button
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 6 }}
-                    onClick={jumpToBottom}
-                    className="absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-primary-800 px-3 py-1.5 text-xs text-white shadow-md hover:bg-primary-900"
+                <div className="flex items-center gap-2 border-t border-border-subtle p-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.docx,.txt"
+                    hidden
+                    onChange={handleFileSelected}
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={sending || recording || transcribing}
+                    aria-label="Attach a document"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover disabled:opacity-50"
                   >
-                    <ArrowDown className="h-3 w-3" />
-                    New message
-                  </motion.button>
-                )}
-              </AnimatePresence>
-            </div>
-            {(recording || transcribing) && (
-              <div className="flex items-center gap-2 border-t border-border-subtle px-3 py-1.5 text-xs text-text-muted">
-                <span className={cn('h-2 w-2 rounded-full', recording ? 'animate-pulse bg-red-500' : 'bg-text-muted')} />
-                {recording ? 'Recording… tap the mic again to stop' : 'Transcribing…'}
-              </div>
-            )}
-            {attachment && (
-              <div className="flex items-center gap-2 border-t border-border-subtle px-3 py-1.5">
-                <span className="flex max-w-full items-center gap-1.5 rounded-full bg-surface-hover py-1 pl-1 pr-2.5 text-xs text-text-secondary">
-                  {attachment.kind === 'image' ? (
-                    <img src={attachment.previewUrl} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover" />
-                  ) : (
-                    <FileText className="ml-1 h-3.5 w-3.5 shrink-0" />
-                  )}
-                  <span className="truncate">{attachment.kind === 'image' ? 'Photo' : attachment.file.name}</span>
-                  <button onClick={removeAttachment} aria-label="Remove attachment" className="shrink-0 rounded-full p-0.5 hover:bg-surface">
-                    <X className="h-3 w-3" />
+                    <Paperclip className="h-4 w-4" />
                   </button>
-                </span>
-              </div>
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    hidden
+                    onChange={handleImageSelected}
+                  />
+                  <button
+                    onClick={() => cameraInputRef.current?.click()}
+                    disabled={sending || recording || transcribing}
+                    aria-label="Take or attach a photo"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover disabled:opacity-50"
+                  >
+                    <Camera className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={recording ? stopRecording : startRecording}
+                    disabled={sending || transcribing}
+                    aria-label={recording ? 'Stop recording' : 'Record a voice message'}
+                    className={cn(
+                      'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg disabled:opacity-50',
+                      recording ? 'bg-red-500 text-white hover:bg-red-600' : 'text-text-muted hover:bg-surface-hover'
+                    )}
+                  >
+                    {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                  </button>
+                  <input
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                    placeholder="Type a message…"
+                    className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus-visible:outline-2 focus-visible:outline-primary-500"
+                  />
+                  <button
+                    onClick={sendMessage}
+                    disabled={sending || recording || transcribing || (!input.trim() && !attachment)}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-800 text-white hover:bg-primary-900 disabled:opacity-50"
+                  >
+                    <Send className="h-4 w-4" />
+                  </button>
+                </div>
+              </>
             )}
-            <div className="flex items-center gap-2 border-t border-border-subtle p-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,.docx,.txt"
-                hidden
-                onChange={handleFileSelected}
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={sending || recording || transcribing}
-                aria-label="Attach a document"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover disabled:opacity-50"
-              >
-                <Paperclip className="h-4 w-4" />
-              </button>
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                hidden
-                onChange={handleImageSelected}
-              />
-              <button
-                onClick={() => cameraInputRef.current?.click()}
-                disabled={sending || recording || transcribing}
-                aria-label="Take or attach a photo"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover disabled:opacity-50"
-              >
-                <Camera className="h-4 w-4" />
-              </button>
-              <button
-                onClick={recording ? stopRecording : startRecording}
-                disabled={sending || transcribing}
-                aria-label={recording ? 'Stop recording' : 'Record a voice message'}
-                className={cn(
-                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg disabled:opacity-50',
-                  recording ? 'bg-red-500 text-white hover:bg-red-600' : 'text-text-muted hover:bg-surface-hover'
-                )}
-              >
-                {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-              </button>
-              <input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-                placeholder="Type a message…"
-                className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus-visible:outline-2 focus-visible:outline-primary-500"
-              />
-              <button
-                onClick={sendMessage}
-                disabled={sending || recording || transcribing || (!input.trim() && !attachment)}
-                className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-800 text-white hover:bg-primary-900 disabled:opacity-50"
-              >
-                <Send className="h-4 w-4" />
-              </button>
-            </div>
           </motion.div>
         )}
       </AnimatePresence>
