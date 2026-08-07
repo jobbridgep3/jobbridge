@@ -5,11 +5,12 @@ import { useState } from 'react'
 import api from '../lib/axios'
 import { cn } from '../lib/utils'
 
-export function ChatbotWidget() {
+export function ChatbotWidget({
+  title = 'JobBridge Assistant',
+  greeting = "Kumusta! I'm the JobBridge assistant. Ask me about jobs, applications, and PESO Pila services.",
+}) {
   const [open, setOpen] = useState(false)
-  const [messages, setMessages] = useState([
-    { from: 'bot', text: "Kumusta! I'm the JobBridge assistant. Ask me about job searching, SPES, DILP, OWWA, or job fairs." },
-  ])
+  const [messages, setMessages] = useState([{ from: 'bot', text: greeting }])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [sessionId, setSessionId] = useState(null)
@@ -49,7 +50,7 @@ export function ChatbotWidget() {
             className="mb-3 flex h-[420px] w-[340px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
           >
             <div className="flex items-center justify-between bg-primary-900 px-4 py-3 text-white">
-              <p className="text-sm font-semibold">JobBridge Assistant</p>
+              <p className="text-sm font-semibold">{title}</p>
               <button onClick={() => setOpen(false)} aria-label="Close chat">
                 <X className="h-4 w-4" />
               </button>

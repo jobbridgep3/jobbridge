@@ -91,7 +91,7 @@ export function AppShell() {
           <Outlet />
         </motion.main>
       </div>
-      {user?.role === 'jobseeker' && <ChatbotWidget />}
+      {user && <ChatbotWidget />}
     </div>
   )
 }
