@@ -27,6 +27,31 @@ function pickSupportedMimeType() {
   return RECORDER_MIME_TYPES.find((type) => window.MediaRecorder?.isTypeSupported?.(type)) || ''
 }
 
+// Vision models don't benefit from more than ~1568px on the long edge — real phone
+// cameras routinely produce 8-15MB photos at full resolution, well over what the app
+// needs or what the 5MB limit allows, so every staged image is downscaled+recompressed
+// before that limit is ever checked (the limit becomes a safety net, not the primary gate).
+const MAX_IMAGE_DIMENSION = 1568
+const IMAGE_COMPRESS_QUALITY = 0.8
+
+async function compressImage(file) {
+  const bitmap = await createImageBitmap(file)
+  try {
+    const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(bitmap.width, bitmap.height)) // never upscale
+    const width = Math.round(bitmap.width * scale)
+    const height = Math.round(bitmap.height * scale)
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height)
+    return await new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('toBlob failed'))), 'image/jpeg', IMAGE_COMPRESS_QUALITY)
+    })
+  } finally {
+    bitmap.close?.()
+  }
+}
+
 const DEFAULT_GREETING = "Kumusta! I'm Job Bot, your JobBridge assistant. Ask me about jobs, applications, and PESO Pila services."
 
 // "Near the bottom" tolerance in px — auto-scroll only kicks in within this distance,
@@ -152,18 +177,30 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
   // Same staging pattern as document attach — this is what "capture=environment" opens
   // the native camera for on mobile, and gracefully falls back to a plain file picker
   // on desktop (no capture-hint support), with zero extra fallback code needed.
-  const handleImageSelected = (e) => {
+  const handleImageSelected = async (e) => {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
 
-    if (file.size > MAX_IMAGE_SIZE_BYTES) {
-      setMessages((m) => [...m, { from: 'bot', text: 'That image is too large. Maximum size is 5MB.' }])
+    // Compress first — a full-resolution camera photo is routinely 8-15MB, well over
+    // the limit, before Groq (which doesn't benefit from more than ~1568px anyway) ever
+    // sees it. If compression itself fails for some reason, fall back to the raw file
+    // rather than blocking the user entirely — the size check below still applies either way.
+    let staged = file
+    try {
+      const compressed = await compressImage(file)
+      staged = new File([compressed], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' })
+    } catch {
+      // fall back to the original file — still subject to the size check below
+    }
+
+    if (staged.size > MAX_IMAGE_SIZE_BYTES) {
+      setMessages((m) => [...m, { from: 'bot', text: 'That image is too large even after compression. Please try a different photo.' }])
       return
     }
     setAttachment((prev) => {
       if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl)
-      return { file, kind: 'image', previewUrl: URL.createObjectURL(file) }
+      return { file: staged, kind: 'image', previewUrl: URL.createObjectURL(staged) }
     })
   }
 
