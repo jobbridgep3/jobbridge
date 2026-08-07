@@ -53,6 +53,12 @@ checks the requester's identity against the token's recorded owner
 (report_download_cache.py) before streaming anything, independent of the token's own
 obscurity. A non-match (or a role not permitted for the matched report) falls through
 to the normal chat pipeline, same as an FAQ non-match does today.
+
+Feature 6 addition — POST /chat-with-image: a multipart sibling route for camera/visual
+Q&A, mirroring /upload-document's shape. The image is validated (services/image_validation.py),
+base64-encoded, and passed to get_reply() as an optional image_data_uri — the exact same
+role-scoped persona/context/history pipeline as every other message, just with an extra
+input modality. Grants no new data access.
 """
 
 import io
@@ -64,7 +70,14 @@ from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 
 from extensions import limiter
 from models.vacancy import Vacancy
-from services import document_extraction, faq_lookup, report_download_cache, report_intent_service, transcription_service
+from services import (
+    document_extraction,
+    faq_lookup,
+    image_validation,
+    report_download_cache,
+    report_intent_service,
+    transcription_service,
+)
 from services.assistant_retrieval import build_context
 from services.assistant_service import get_reply
 from services.matching_service import rank_vacancies_for_text
@@ -270,3 +283,32 @@ def download_report(token):
         as_attachment=True,
         download_name=entry["filename"],
     )
+
+
+@assistant_bp.post("/chat-with-image")
+@jwt_required(optional=True)
+@limiter.limit("10 per minute", key_func=get_client_ip)
+def chat_with_image():
+    file = request.files.get("image")
+    if not file:
+        return fail("No image uploaded.", 400)
+
+    image_bytes = file.read()
+    filename = file.filename or "photo.jpg"
+    error = image_validation.validate(image_bytes, filename)
+    if error:
+        return fail(error, 400)
+
+    mimetype = image_validation.detect_mimetype(image_bytes)
+    image_data_uri = image_validation.to_data_uri(image_bytes, mimetype)
+
+    role = get_jwt().get("role") if get_jwt_identity() else None
+    identity = get_jwt_identity()
+    context = build_context(role, identity)
+    message = (request.form.get("message") or "").strip() or "What do you see in this image?"
+    history = _clean_history(_parse_history_field(request.form.get("history")))
+
+    result = get_reply(message, request.form.get("session_id"), role, context, history, image_data_uri)
+    if result["mode"] == "error":
+        return fail(result["detail"], 503, {"session_id": result["session_id"]})
+    return ok(result)

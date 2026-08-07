@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowDown, FileText, Mic, Paperclip, RotateCcw, Send, Square, X } from 'lucide-react'
+import { ArrowDown, Camera, FileText, Mic, Paperclip, RotateCcw, Send, Square, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 
@@ -9,6 +9,7 @@ import { JobBotIcon } from './icons/JobBotIcon'
 
 const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024 // 5MB — matches the server-side limit; this is a UX
 // pre-check only, not the real boundary, which stays server-side (see document_extraction.py)
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024 // matches image_validation.py's server-side limit
 
 const MAX_RECORDING_MS = 60 * 1000 // auto-stop so nobody can record indefinitely
 const RECORDER_MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
@@ -38,12 +39,12 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
   const [sessionId, setSessionId] = useState(null)
   const [recording, setRecording] = useState(false)
   const [transcribing, setTranscribing] = useState(false)
-  // { file, kind: 'document' } | null — staged, not sent, until the user submits.
-  // 'kind' is a generic seam: Feature 6 (camera) adds 'image' here without touching
-  // the staging/send-dispatch mechanism built in this fix.
+  // { file, kind: 'document' | 'image', previewUrl? } | null — staged, not sent, until
+  // the user submits. previewUrl (image only) is an object URL, revoked on removal/send.
   const [attachment, setAttachment] = useState(null)
   const [showJumpButton, setShowJumpButton] = useState(false)
   const fileInputRef = useRef(null)
+  const cameraInputRef = useRef(null)
   const mediaRecorderRef = useRef(null)
   const recordingTimeoutRef = useRef(null)
   const revealTimerRef = useRef(null)
@@ -138,7 +139,28 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
     setAttachment({ file, kind: 'document' })
   }
 
-  const removeAttachment = () => setAttachment(null)
+  // Same staging pattern as document attach — this is what "capture=environment" opens
+  // the native camera for on mobile, and gracefully falls back to a plain file picker
+  // on desktop (no capture-hint support), with zero extra fallback code needed.
+  const handleImageSelected = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      setMessages((m) => [...m, { from: 'bot', text: 'That image is too large. Maximum size is 5MB.' }])
+      return
+    }
+    setAttachment((prev) => {
+      if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl)
+      return { file, kind: 'image', previewUrl: URL.createObjectURL(file) }
+    })
+  }
+
+  const removeAttachment = () => {
+    if (attachment?.previewUrl) URL.revokeObjectURL(attachment.previewUrl)
+    setAttachment(null)
+  }
 
   const sendMessage = async () => {
     const text = input.trim()
@@ -147,12 +169,21 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
     // regardless, but only what's already been said belongs in "history".
     const history = historyFromMessages()
     const staged = attachment
-    setMessages((m) => [...m, { from: 'user', text: staged ? `📎 ${staged.file.name}${text ? ` — ${text}` : ''}` : text }])
+    const label = staged?.kind === 'image' ? '📷 photo' : staged ? `📎 ${staged.file.name}` : null
+    setMessages((m) => [...m, { from: 'user', text: label ? `${label}${text ? ` — ${text}` : ''}` : text }])
     setInput('')
+    if (staged?.previewUrl) URL.revokeObjectURL(staged.previewUrl)
     setAttachment(null)
     setSending(true)
     try {
-      if (staged) {
+      if (staged?.kind === 'image') {
+        const form = new FormData()
+        form.append('image', staged.file)
+        form.append('message', text)
+        if (sessionId) form.append('session_id', sessionId)
+        form.append('history', JSON.stringify(history))
+        appendReply(await api.post('/api/assistant/chat-with-image', form))
+      } else if (staged) {
         const form = new FormData()
         form.append('file', staged.file)
         form.append('message', text)
@@ -229,6 +260,7 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
     clearInterval(revealTimerRef.current)
     setMessages([{ from: 'bot', text: greeting }])
     setSessionId(null)
+    if (attachment?.previewUrl) URL.revokeObjectURL(attachment.previewUrl)
     setAttachment(null)
   }
 
@@ -326,9 +358,13 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
             )}
             {attachment && (
               <div className="flex items-center gap-2 border-t border-border-subtle px-3 py-1.5">
-                <span className="flex max-w-full items-center gap-1.5 rounded-full bg-surface-hover px-2.5 py-1 text-xs text-text-secondary">
-                  <FileText className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{attachment.file.name}</span>
+                <span className="flex max-w-full items-center gap-1.5 rounded-full bg-surface-hover py-1 pl-1 pr-2.5 text-xs text-text-secondary">
+                  {attachment.kind === 'image' ? (
+                    <img src={attachment.previewUrl} alt="" className="h-5 w-5 shrink-0 rounded-full object-cover" />
+                  ) : (
+                    <FileText className="ml-1 h-3.5 w-3.5 shrink-0" />
+                  )}
+                  <span className="truncate">{attachment.kind === 'image' ? 'Photo' : attachment.file.name}</span>
                   <button onClick={removeAttachment} aria-label="Remove attachment" className="shrink-0 rounded-full p-0.5 hover:bg-surface">
                     <X className="h-3 w-3" />
                   </button>
@@ -350,6 +386,22 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover disabled:opacity-50"
               >
                 <Paperclip className="h-4 w-4" />
+              </button>
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                hidden
+                onChange={handleImageSelected}
+              />
+              <button
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={sending || recording || transcribing}
+                aria-label="Take or attach a photo"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover disabled:opacity-50"
+              >
+                <Camera className="h-4 w-4" />
               </button>
               <button
                 onClick={recording ? stopRecording : startRecording}
