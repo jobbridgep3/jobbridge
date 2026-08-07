@@ -1,9 +1,11 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { MessageCircle, Mic, Paperclip, Send, Square, X } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { Mic, Paperclip, RotateCcw, Send, Square, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
 
 import api from '../lib/axios'
 import { cn } from '../lib/utils'
+import { JobBotIcon } from './icons/JobBotIcon'
 
 const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024 // 5MB — matches the server-side limit; this is a UX
 // pre-check only, not the real boundary, which stays server-side (see document_extraction.py)
@@ -11,14 +13,20 @@ const MAX_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024 // 5MB — matches the server-side
 const MAX_RECORDING_MS = 60 * 1000 // auto-stop so nobody can record indefinitely
 const RECORDER_MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
 
+// Total reveal duration is bounded regardless of reply length (~60 ticks), so a long
+// reply doesn't take forever to finish animating — purely cosmetic, not a real stream
+// (see the Phase 6 plan: this app's single-eventlet-worker architecture can't safely
+// forward token-by-token streaming without a real restructure, so this is the stand-in).
+const REVEAL_TICKS = 60
+const REVEAL_INTERVAL_MS = 16
+
 function pickSupportedMimeType() {
   return RECORDER_MIME_TYPES.find((type) => window.MediaRecorder?.isTypeSupported?.(type)) || ''
 }
 
-export function ChatbotWidget({
-  title = 'JobBridge Assistant',
-  greeting = "Kumusta! I'm the JobBridge assistant. Ask me about jobs, applications, and PESO Pila services.",
-}) {
+const DEFAULT_GREETING = "Kumusta! I'm Job Bot, your JobBridge assistant. Ask me about jobs, applications, and PESO Pila services."
+
+export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }) {
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState([{ from: 'bot', text: greeting }])
   const [input, setInput] = useState('')
@@ -29,13 +37,36 @@ export function ChatbotWidget({
   const fileInputRef = useRef(null)
   const mediaRecorderRef = useRef(null)
   const recordingTimeoutRef = useRef(null)
+  const revealTimerRef = useRef(null)
+
+  useEffect(() => () => clearInterval(revealTimerRef.current), [])
 
   const historyFromMessages = () =>
     messages.map((m) => ({ role: m.from === 'bot' ? 'assistant' : 'user', content: m.text }))
 
+  const revealReply = (fullText, index) => {
+    clearInterval(revealTimerRef.current)
+    const step = Math.max(1, Math.ceil(fullText.length / REVEAL_TICKS))
+    let shown = 0
+    revealTimerRef.current = setInterval(() => {
+      shown = Math.min(fullText.length, shown + step)
+      setMessages((m) => {
+        const next = [...m]
+        if (next[index]) next[index] = { ...next[index], visibleText: fullText.slice(0, shown) }
+        return next
+      })
+      if (shown >= fullText.length) clearInterval(revealTimerRef.current)
+    }, REVEAL_INTERVAL_MS)
+  }
+
   const appendReply = (res) => {
     setSessionId(res.data.data.session_id)
-    setMessages((m) => [...m, { from: 'bot', text: res.data.data.reply }])
+    const text = res.data.data.reply
+    setMessages((m) => {
+      const next = [...m, { from: 'bot', text, visibleText: '' }]
+      revealReply(text, next.length - 1)
+      return next
+    })
   }
 
   const appendError = (err) => {
@@ -148,6 +179,12 @@ export function ChatbotWidget({
     }
   }
 
+  const clearConversation = () => {
+    clearInterval(revealTimerRef.current)
+    setMessages([{ from: 'bot', text: greeting }])
+    setSessionId(null)
+  }
+
   return (
     <div className="fixed bottom-6 right-6 z-40">
       <AnimatePresence>
@@ -157,34 +194,74 @@ export function ChatbotWidget({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 12 }}
             transition={{ duration: 0.15 }}
-            className="mb-3 flex h-[420px] w-[340px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
+            className="mb-3 flex h-[min(70vh,480px)] w-[min(92vw,360px)] flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-xl"
           >
             <div className="flex items-center justify-between bg-primary-900 px-4 py-3 text-white">
-              <p className="text-sm font-semibold">{title}</p>
-              <button onClick={() => setOpen(false)} aria-label="Close chat">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="flex-1 space-y-2 overflow-y-auto p-3">
-              {messages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    'max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm',
-                    msg.from === 'bot' ? 'bg-slate-100 text-slate-700' : 'ml-auto bg-primary-800 text-white'
-                  )}
+              <div className="flex items-center gap-2">
+                <JobBotIcon className="h-6 w-6 shrink-0" />
+                <p className="text-sm font-semibold">{title}</p>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={clearConversation}
+                  disabled={sending}
+                  aria-label="Clear conversation"
+                  title="Clear conversation"
+                  className="rounded p-1 hover:bg-white/10 disabled:opacity-50"
                 >
-                  {msg.text}
+                  <RotateCcw className="h-4 w-4" />
+                </button>
+                <button onClick={() => setOpen(false)} aria-label="Close chat" className="rounded p-1 hover:bg-white/10">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 space-y-3 overflow-y-auto p-3">
+              {messages.map((msg, i) => (
+                <div key={i} className={cn('flex items-end gap-2', msg.from === 'user' && 'flex-row-reverse')}>
+                  {msg.from === 'bot' && <JobBotIcon className="mb-1 h-5 w-5 shrink-0" />}
+                  <div
+                    className={cn(
+                      'max-w-[80%] rounded-lg px-3 py-2 text-sm',
+                      msg.from === 'bot' ? 'bg-surface-hover text-text-secondary' : 'bg-primary-800 text-white'
+                    )}
+                  >
+                    {msg.from === 'bot' ? (
+                      <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-headings:my-1">
+                        <ReactMarkdown>{msg.visibleText ?? msg.text}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      <span className="whitespace-pre-wrap">{msg.text}</span>
+                    )}
+                  </div>
                 </div>
               ))}
+              {sending && (
+                <div className="flex items-end gap-2">
+                  <JobBotIcon className="mb-1 h-5 w-5 shrink-0" />
+                  <div className="flex items-center gap-2 rounded-lg bg-surface-hover px-3 py-2">
+                    <span className="flex gap-1">
+                      {[0, 0.15, 0.3].map((delay) => (
+                        <motion.span
+                          key={delay}
+                          className="h-1.5 w-1.5 rounded-full bg-text-muted"
+                          animate={{ opacity: [0.3, 1, 0.3] }}
+                          transition={{ duration: 1, repeat: Infinity, delay }}
+                        />
+                      ))}
+                    </span>
+                    <span className="text-xs text-text-muted">Job Bot is typing…</span>
+                  </div>
+                </div>
+              )}
             </div>
             {(recording || transcribing) && (
-              <div className="flex items-center gap-2 border-t border-slate-100 px-3 py-1.5 text-xs text-slate-500">
-                <span className={cn('h-2 w-2 rounded-full', recording ? 'animate-pulse bg-red-500' : 'bg-slate-400')} />
+              <div className="flex items-center gap-2 border-t border-border-subtle px-3 py-1.5 text-xs text-text-muted">
+                <span className={cn('h-2 w-2 rounded-full', recording ? 'animate-pulse bg-red-500' : 'bg-text-muted')} />
                 {recording ? 'Recording… tap the mic again to stop' : 'Transcribing…'}
               </div>
             )}
-            <div className="flex items-center gap-2 border-t border-slate-100 p-2">
+            <div className="flex items-center gap-2 border-t border-border-subtle p-2">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -196,7 +273,7 @@ export function ChatbotWidget({
                 onClick={() => fileInputRef.current?.click()}
                 disabled={sending || recording || transcribing}
                 aria-label="Attach a document"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 disabled:opacity-50"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface-hover disabled:opacity-50"
               >
                 <Paperclip className="h-4 w-4" />
               </button>
@@ -206,7 +283,7 @@ export function ChatbotWidget({
                 aria-label={recording ? 'Stop recording' : 'Record a voice message'}
                 className={cn(
                   'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg disabled:opacity-50',
-                  recording ? 'bg-red-500 text-white hover:bg-red-600' : 'text-slate-500 hover:bg-slate-100'
+                  recording ? 'bg-red-500 text-white hover:bg-red-600' : 'text-text-muted hover:bg-surface-hover'
                 )}
               >
                 {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
@@ -216,7 +293,7 @@ export function ChatbotWidget({
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
                 placeholder="Type a message…"
-                className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus-visible:outline-2 focus-visible:outline-primary-500"
+                className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus-visible:outline-2 focus-visible:outline-primary-500"
               />
               <button
                 onClick={sendMessage}
@@ -234,10 +311,10 @@ export function ChatbotWidget({
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setOpen((o) => !o)}
-        className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-800 text-white shadow-lg hover:bg-primary-900"
+        className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-800 shadow-lg hover:bg-primary-900"
         aria-label="Open chat assistant"
       >
-        <MessageCircle className="h-6 w-6" />
+        <JobBotIcon className="h-9 w-9" />
       </motion.button>
     </div>
   )

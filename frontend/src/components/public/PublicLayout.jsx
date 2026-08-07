@@ -12,10 +12,7 @@ export function PublicLayout() {
         <Outlet />
       </main>
       <PublicFooter />
-      <ChatbotWidget
-        title="PESO Pila Front Desk"
-        greeting="Kumusta! I'm the PESO Pila Front Desk Assistant. Ask me about registering, job fairs, the Citizen Charter, or how JobBridge works."
-      />
+      <ChatbotWidget greeting="Kumusta! I'm Job Bot, your PESO Pila Front Desk Assistant. Ask me about registering, job fairs, the Citizen Charter, or how JobBridge works." />
     </div>
   )
 }
