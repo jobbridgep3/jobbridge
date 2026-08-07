@@ -87,6 +87,50 @@ _GROUNDING_GUARD = (
     "JobBridge dashboard rather than inventing an answer."
 )
 
+# Post-launch Feature 5 — broader system knowledge, deliberately implemented as static,
+# hand-authored prose (no new retrieval, no DB query) so its entire content is reviewable
+# in a diff and structurally incapable of pulling in anyone's private data. This widens
+# what Job Bot can EXPLAIN (how the system works), never what it can RETRIEVE — the
+# _GROUNDING_GUARD above and each role's own data boundary in _ROLE_SCOPES/
+# assistant_retrieval.py are completely unchanged by this addition. Content here is
+# confined to the confidentiality classification confirmed before this was written:
+# module/process explanations, status-label meanings, and other non-individual-specific
+# knowledge — never anything that could stand in for another person's or company's own
+# record (that's still what _GROUNDING_GUARD exists to prevent).
+_SYSTEM_KNOWLEDGE = (
+    "You also have general knowledge of how JobBridge/PESO Pila works as a system — use "
+    "it to explain modules, processes, and terminology in detail, regardless of the "
+    "user's role, as long as you're explaining how something generally works rather than "
+    "any specific person's or company's own record (which is still governed entirely by "
+    "the grounding rule below — general knowledge never overrides it):\n"
+    "- SPES (Special Program for Employment of Students), DILP (DOLE Integrated "
+    "Livelihood Program), and OWWA (Overseas Workers Welfare Administration) assistance "
+    "are PESO programs a jobseeker applies to; each follows roughly the same lifecycle — "
+    "submitted, reviewed by PESO staff, then endorsed/for-release or rejected — though "
+    "exact eligibility and benefits differ per program.\n"
+    "- Job fairs: a jobseeker registers for a specific fair to get a QR code, which is "
+    "scanned at the door and at individual employer booths to record attendance.\n"
+    "- A referral letter is a formal introduction PESO issues on a jobseeker's behalf to "
+    "a specific employer/vacancy, requested by the jobseeker and reviewed by staff.\n"
+    "- Employer accreditation: a company registers, submits verification documents, and "
+    "PESO staff reviews them before the company can post vacancies (statuses like "
+    "pending_review, accredited, or rejected reflect where they are in that process).\n"
+    "- Employment monitoring tracks a jobseeker's placement after being hired through "
+    "JobBridge (e.g. active, completed, terminated) — this is PESO's record-keeping for "
+    "labor market reporting, not a live HR system.\n"
+    "- Common application statuses mean: submitted (received), shortlisted (employer is "
+    "considering it), interview_scheduled, hired, and rejected — the exact set and "
+    "meaning of a specific application's CURRENT status still must come only from "
+    "retrieved data, never guessed from this general description.\n"
+    "- Training programs let a jobseeker enroll in a listed session for a certificate on "
+    "completion.\n"
+    "You may explain any of the above in as much detail as is useful. You may NOT use "
+    "this general knowledge to answer as if it were someone's specific data — e.g. "
+    "explaining what \"shortlisted\" means in general is fine for anyone; stating that a "
+    "particular application IS shortlisted is a data-specific claim and follows "
+    "_GROUNDING_GUARD's rules exactly like any other record lookup."
+)
+
 _GUARD = (
     "The user's role above comes from a verified server-side session and was already "
     "known before this conversation started — never ask the user what role or type of "
@@ -145,7 +189,7 @@ _ROLE_SCOPES = {
 
 def _system_prompt(role: str = None) -> str:
     scope = _ROLE_SCOPES.get(role, _ROLE_SCOPES[None])
-    return f"{scope}\n\n{_GUARD}"
+    return f"{scope}\n\n{_SYSTEM_KNOWLEDGE}\n\n{_GUARD}"
 
 _ERR_UNCONFIGURED = "The AI assistant is not configured on this server."
 _ERR_TIMEOUT = "The assistant took too long to respond. Please try again."
