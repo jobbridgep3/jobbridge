@@ -63,7 +63,8 @@ assistant_bp = Blueprint("assistant", __name__, url_prefix="/api/assistant")
 MAX_MESSAGE_LENGTH = 2000
 
 # History trimming — see the Phase 3 plan for the reasoning. The real constraint is
-# cost/latency per request, not context-window overflow (Llama 3.3 70B's window is huge).
+# cost/latency per request, not context-window overflow (Qwen3.6 27B's 131K-token
+# window on Groq is far larger than persona + retrieval context + history + message).
 MAX_HISTORY_TURNS = 6
 MAX_HISTORY_TURN_LENGTH = 500
 MAX_HISTORY_TOTAL_LENGTH = 3000

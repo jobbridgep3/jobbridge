@@ -1,9 +1,17 @@
-"""AI assistant backed by Groq (Llama 3.3 70B), replacing the former Dialogflow ES bot.
+"""AI assistant backed by Groq (Qwen3.6 27B), replacing the former Dialogflow ES bot.
 
 Groq exposes an OpenAI-compatible chat/completions endpoint, so this is a plain HTTPS
 POST via `requests` — no vendor SDK, no service-account key file, no extra dependency.
 The API key comes from GROQ_API_KEY (env only; never committed, never sent to the
 browser).
+
+Model migration note: originally llama-3.3-70b-versatile, migrated to qwen/qwen3.6-27b
+after Groq deprecated the former for free/developer-tier usage (shutdown 2026-08-16).
+Unlike Llama 3.3, Qwen3.6 27B is a dual-mode model with a "thinking mode" that's on by
+default — left enabled, its reasoning trace would land inline in the same `content`
+field this module reads, with no stripping logic to catch it. `_call_groq` explicitly
+sends `reasoning_effort: "none"` to keep response behavior equivalent to the old model:
+fast, concise, no reasoning-trace pollution in what reaches the chat UI.
 
 Scope:
   - stateless server-side: `session_id` is generated/echoed but nothing is persisted in
@@ -177,6 +185,8 @@ def _call_groq(api_key: str, model: str, system_prompt: str, context: str, histo
             "messages": messages,
             "temperature": 0.6,
             "max_tokens": 1024,
+            # Disables Qwen3.6 27B's thinking mode — see module docstring.
+            "reasoning_effort": "none",
         },
         timeout=_TIMEOUT,
     )

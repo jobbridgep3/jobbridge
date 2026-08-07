@@ -113,12 +113,14 @@ class Config:
     # a fresh git clone with no way to place a git-ignored secret file on it).
     GOOGLE_APPLICATION_CREDENTIALS_JSON = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON", "")
 
-    # Groq (Llama 3.3 70B) powers the AI assistant — see services/assistant_service.py.
+    # Groq (Qwen3.6 27B) powers the AI assistant — see services/assistant_service.py.
+    # Migrated from llama-3.3-70b-versatile, which Groq shut down for free/developer-tier
+    # usage on 2026-08-16; qwen/qwen3.6-27b is one of Groq's two official replacements.
     # Deliberately NOT passed through _require(): CI boots create_app() with no secrets
     # set, so making this mandatory would break the build. The endpoint returns 503 when
     # it's blank rather than failing at import/boot time.
     GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-    GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+    GROQ_MODEL = os.environ.get("GROQ_MODEL", "qwen/qwen3.6-27b")
     # Voice input (Phase 5) — reuses GROQ_API_KEY above, no separate credential needed.
     GROQ_WHISPER_MODEL = os.environ.get("GROQ_WHISPER_MODEL", "whisper-large-v3-turbo")
 

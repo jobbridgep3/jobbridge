@@ -28,8 +28,9 @@ services:
       # (POST /api/assistant/transcribe, no separate credential needed), created at
       # https://console.groq.com/keys. When unset both endpoints return a 503 with a
       # clear message; the rest of the app is unaffected. GROQ_MODEL and
-      # GROQ_WHISPER_MODEL are optional, defaulting to llama-3.3-70b-versatile and
-      # whisper-large-v3-turbo respectively.
+      # GROQ_WHISPER_MODEL are optional, defaulting to qwen/qwen3.6-27b and
+      # whisper-large-v3-turbo respectively. (GROQ_MODEL migrated from
+      # llama-3.3-70b-versatile, which Groq deprecated 2026-08-16.)
       #
       # GOOGLE_APPLICATION_CREDENTIALS_JSON: base64-encoded contents of the Vision
       # service-account JSON key (GOOGLE_APPLICATION_CREDENTIALS, the file-path form, only

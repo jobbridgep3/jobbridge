@@ -9,7 +9,7 @@ Built for LSPU Sta. Cruz Campus, BSIT — Group EW12.
 - **Frontend**: React 18 + Vite, Tailwind CSS, shadcn-style components (Radix primitives), Framer Motion, TanStack Query/Table, Zustand, Socket.io-client
 - **Backend**: Flask, SQLAlchemy (Supabase Postgres via session pooler), Flask-JWT-Extended, Flask-SocketIO, Flask-Mail
 - **Database & Storage**: Supabase (Postgres + Storage)
-- **AI**: scikit-learn (TF-IDF + Cosine Similarity job matching, fully live), spaCy (resume NLP parsing, fully live), Google Vision API (OCR — reports an error until `GOOGLE_APPLICATION_CREDENTIALS` is configured), Groq / Llama 3.3 70B (AI assistant — returns a 503 until `GROQ_API_KEY` is configured)
+- **AI**: scikit-learn (TF-IDF + Cosine Similarity job matching, fully live), spaCy (resume NLP parsing, fully live), Google Vision API (OCR — reports an error until `GOOGLE_APPLICATION_CREDENTIALS` is configured), Groq / Qwen3.6 27B (AI assistant — returns a 503 until `GROQ_API_KEY` is configured)
 - **Deployment**: Vercel (frontend), Render (backend)
 
 ## Local Development
