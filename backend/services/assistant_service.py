@@ -5,13 +5,14 @@ POST via `requests` — no vendor SDK, no service-account key file, no extra dep
 The API key comes from GROQ_API_KEY (env only; never committed, never sent to the
 browser).
 
-Scope — deliberately minimal:
-  - single-turn, stateless. `session_id` is generated/echoed so the request contract is
-    already correct for the chat-history phase, but nothing is stored server-side and no
-    prior turns are sent to the model.
-  - role-aware system prompt (Phase 2) but still no database retrieval/RAG, no document
-    or voice input — the assistant speaks generally within its role's scope rather than
-    answering with real records it has no access to.
+Scope:
+  - stateless server-side: `session_id` is generated/echoed but nothing is persisted in
+    the database. Conversation continuity (Phase 3) comes from the client resending its
+    own held message history on each request — see `_clean_history` in
+    blueprints/assistant.py — trimmed here before being forwarded to Groq.
+  - role-aware system prompt (Phase 2) PLUS role-scoped SQL retrieval (Phase 3, see
+    services/assistant_retrieval.py) — the assistant now answers from real JobBridge
+    rows, not just general how-to guidance.
 
 There is NO canned-response fallback (the Dialogflow build had one, which meant a broken
 integration was indistinguishable from a working one — the deployed bot silently served
@@ -27,13 +28,15 @@ protected route in this app uses. `role` is one of "jobseeker" / "employer" / "s
 prompt reflecting what that role can actually do in JobBridge today (see _ROLE_SCOPES);
 an unrecognized role value falls back to the public-safe prompt rather than erroring.
 
-There is still no live database access in this phase, so every prompt explicitly tells
-the model to speak in general/how-to terms and defer to the real dashboard for the
-user's actual current data — without this, the model will confidently invent specific
-application counts/statuses/records it has no way of actually knowing. Every prompt also
-ends with a shared guard: the role came from a verified session and can't be changed by
-anything typed in the conversation, so a jobseeker asking the assistant to "act as an
-admin" doesn't work.
+SQL-based RAG (Phase 3): the caller also passes `context`, a plain-text block built by
+services/assistant_retrieval.py from targeted, ownership-filtered, LIMIT-ed SQL queries
+— never a raw ORM object, never something built from user input. It's injected as a
+second system message, after the persona prompt. Every prompt's grounding guard
+(`_GROUNDING_GUARD`) restricts data-specific answers to ONLY what's present in that
+context block, and requires the model to say so plainly when the context doesn't cover
+the question — retrieval builds "none found" lines explicitly for this reason, so the
+model is never left to infer absence on its own. The Phase 2 anti-injection guard
+(`_GUARD` — role can't change via conversation text) is unchanged and still applies.
 
 eventlet: the app runs on a single eventlet worker (see render.yaml startCommand), and
 `requests`/urllib3 socket I/O is not covered by eventlet's monkey_patch() in a way that's
@@ -62,11 +65,14 @@ _INTRO = (
     "in the Philippines. Be concise, friendly, and practical."
 )
 
-_NO_FABRICATION = (
-    "You do not have live access to specific account, application, or case records in "
-    "this version — speak in general, how-to terms rather than inventing specific "
-    "numbers, statuses, names, or records. If the user wants their actual current data, "
-    "point them to the relevant page in their JobBridge dashboard."
+_GROUNDING_GUARD = (
+    "Below this you will be given real data retrieved from the JobBridge database for "
+    "this conversation, in a message starting with \"Retrieved JobBridge data:\". Answer "
+    "data-specific questions (applications, postings, statistics, records) ONLY using "
+    "that retrieved data — never guess or state a number, name, status, or record that "
+    "isn't present in it. If the retrieved data doesn't contain something relevant to "
+    "the question, say so plainly and point the user to the relevant page in their "
+    "JobBridge dashboard rather than inventing an answer."
 )
 
 _GUARD = (
@@ -86,13 +92,13 @@ _ROLE_SCOPES = {
         "Citizen Charter, office/contact info, and general FAQs. You have no access to "
         "any specific person's or company's account data — if asked something that "
         "needs a login (e.g. checking an application's status), explain that and briefly "
-        "describe how to log in or register."
+        f"describe how to log in or register. {_GROUNDING_GUARD}"
     ),
     "jobseeker": (
         f"{_INTRO} You are talking to a logged-in Jobseeker. Help with job searching, "
         "applying to postings, their resume/profile, PESO programs (SPES, DILP, OWWA), "
         "job fairs, and interviews. Never discuss another user's data, or "
-        f"employer/staff/admin-only operations. {_NO_FABRICATION}"
+        f"employer/staff/admin-only operations. {_GROUNDING_GUARD}"
     ),
     "employer": (
         f"{_INTRO} You are talking to a logged-in Employer. Help with running their own "
@@ -100,7 +106,7 @@ _ROLE_SCOPES = {
         "applicants to their own postings, interviews, and general hiring guidance. "
         "Never discuss or assume access to any other employer's postings, applicants, or "
         "company data, and never help with staff/admin-only operations (account "
-        f"verification/suspension, audit trail, etc.). {_NO_FABRICATION}"
+        f"verification/suspension, audit trail, etc.). {_GROUNDING_GUARD}"
     ),
     "staff": (
         f"{_INTRO} You are talking to a logged-in PESO Staff member. PESO Staff accounts "
@@ -111,13 +117,13 @@ _ROLE_SCOPES = {
         "permanently deleting jobseeker/employer accounts, reinstating a suspended "
         "employer, creating or managing other staff accounts, the system audit trail, or "
         "vacancy category configuration — those are admin-only; if asked about those, "
-        f"say so and suggest contacting an admin. {_NO_FABRICATION}"
+        f"say so and suggest contacting an admin. {_GROUNDING_GUARD}"
     ),
     "admin": (
         f"{_INTRO} You are talking to a logged-in Admin. Admins have system-wide access: "
         "everything PESO Staff can do, plus permanently deleting jobseeker/employer "
         "accounts, reinstating a suspended employer, managing staff accounts, the full "
-        f"audit trail, and vacancy category configuration. {_NO_FABRICATION}"
+        f"audit trail, and vacancy category configuration. {_GROUNDING_GUARD}"
     ),
 }
 
@@ -137,17 +143,25 @@ def is_assistant_configured() -> bool:
     return bool(current_app.config.get("GROQ_API_KEY"))
 
 
-def _call_groq(api_key: str, model: str, system_prompt: str, message: str) -> str:
+def _call_groq(api_key: str, model: str, system_prompt: str, context: str, history: list, message: str) -> str:
     """Runs entirely inside eventlet.tpool's real OS thread — no Flask context access.
 
-    system_prompt is a plain string built by the caller before entering tpool (via
-    _system_prompt(role)) — safe to pass across the thread boundary since it needs no
-    Flask app context to construct.
+    system_prompt/context are plain strings built by the caller before entering tpool
+    (via _system_prompt(role) and assistant_retrieval.build_context()) — safe to pass
+    across the thread boundary since neither needs Flask app context to construct.
+    `history` is a list of already-validated/trimmed {"role", "content"} dicts (see
+    blueprints/assistant.py's _clean_history) — also plain data, safe to cross tpool.
 
     Returns the reply text, or raises. Upstream error bodies are logged but never
     returned to the caller verbatim: they can echo request details, and a 401 body in
     particular should not reach the browser.
     """
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "system", "content": f"Retrieved JobBridge data:\n\n{context}"},
+        *history,
+        {"role": "user", "content": message},
+    ]
     resp = requests.post(
         GROQ_API_URL,
         headers={
@@ -156,10 +170,7 @@ def _call_groq(api_key: str, model: str, system_prompt: str, message: str) -> st
         },
         json={
             "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": message},
-            ],
+            "messages": messages,
             "temperature": 0.6,
             "max_tokens": 1024,
         },
@@ -179,13 +190,17 @@ def _call_groq(api_key: str, model: str, system_prompt: str, message: str) -> st
     return reply
 
 
-def get_reply(message: str, session_id: str = None, role: str = None) -> dict:
+def get_reply(message: str, session_id: str = None, role: str = None, context: str = "", history: list = None) -> dict:
     """Returns {"reply": str|None, "session_id": str, "mode": "groq"|"error", "detail": str|None}.
 
     `role` must be derived from the caller's signed JWT claim (or None for an anonymous
-    visitor) — see the module docstring's trust-boundary note.
+    visitor) — see the module docstring's trust-boundary note. `context` is the
+    retrieval bundle from assistant_retrieval.build_context(role, user_id) — built by
+    the caller, since that involves DB reads that must happen before this function's
+    eventlet.tpool.execute() call. `history` is already-cleaned/trimmed by the caller.
     """
     session_id = session_id or uuid.uuid4().hex
+    history = history or []
 
     if not is_assistant_configured():
         logger.warning("GROQ_API_KEY is not configured — cannot answer assistant message.")
@@ -201,7 +216,7 @@ def get_reply(message: str, session_id: str = None, role: str = None) -> dict:
     import eventlet.tpool
 
     try:
-        reply = eventlet.tpool.execute(_call_groq, api_key, model, system_prompt, message)
+        reply = eventlet.tpool.execute(_call_groq, api_key, model, system_prompt, context, history, message)
         return {"reply": reply, "session_id": session_id, "mode": "groq", "detail": None}
     except requests.Timeout as exc:
         logger.error("Groq request timed out: %s", exc)

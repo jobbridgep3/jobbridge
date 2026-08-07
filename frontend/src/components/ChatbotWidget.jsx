@@ -18,11 +18,14 @@ export function ChatbotWidget({
   const sendMessage = async () => {
     const text = input.trim()
     if (!text || sending) return
+    // Captured before appending the new turn — the server trims/validates this
+    // regardless, but only what's already been said belongs in "history".
+    const history = messages.map((m) => ({ role: m.from === 'bot' ? 'assistant' : 'user', content: m.text }))
     setMessages((m) => [...m, { from: 'user', text }])
     setInput('')
     setSending(true)
     try {
-      const res = await api.post('/api/assistant/chat', { message: text, session_id: sessionId })
+      const res = await api.post('/api/assistant/chat', { message: text, session_id: sessionId, history })
       setSessionId(res.data.data.session_id)
       setMessages((m) => [...m, { from: 'bot', text: res.data.data.reply }])
     } catch (err) {
