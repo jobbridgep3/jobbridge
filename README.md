@@ -9,7 +9,7 @@ Built for LSPU Sta. Cruz Campus, BSIT — Group EW12.
 - **Frontend**: React 18 + Vite, Tailwind CSS, shadcn-style components (Radix primitives), Framer Motion, TanStack Query/Table, Zustand, Socket.io-client
 - **Backend**: Flask, SQLAlchemy (Supabase Postgres via session pooler), Flask-JWT-Extended, Flask-SocketIO, Flask-Mail
 - **Database & Storage**: Supabase (Postgres + Storage)
-- **AI**: scikit-learn (TF-IDF + Cosine Similarity job matching, fully live), spaCy (resume NLP parsing, fully live), Google Vision API (OCR — stubbed with mock output until `GOOGLE_APPLICATION_CREDENTIALS` is configured), Dialogflow ES (chatbot — stubbed with canned replies until `DIALOGFLOW_PROJECT_ID` is configured)
+- **AI**: scikit-learn (TF-IDF + Cosine Similarity job matching, fully live), spaCy (resume NLP parsing, fully live), Google Vision API (OCR — reports an error until `GOOGLE_APPLICATION_CREDENTIALS` is configured), Groq / Llama 3.3 70B (AI assistant — returns a 503 until `GROQ_API_KEY` is configured)
 - **Deployment**: Vercel (frontend), Render (backend)
 
 ## Local Development
@@ -42,7 +42,7 @@ npm run dev                      # runs on http://localhost:5173
 See `backend/.env.example` and `frontend/.env.example` for the full list. Secrets are never committed — `.env` is git-ignored everywhere.
 
 Notably:
-- `GOOGLE_APPLICATION_CREDENTIALS` / `DIALOGFLOW_PROJECT_ID` are optional. When absent, OCR resume parsing and the chatbot run in a clearly-labeled mock mode so the rest of the system remains fully testable without a Google Cloud account. A service-account key is configured for `GOOGLE_APPLICATION_CREDENTIALS` (place it at `backend/credentials/`, git-ignored) — Vision API also requires **billing enabled** on the GCP project, or calls fail with a billing error and the code falls back to mock output automatically.
+- `GOOGLE_APPLICATION_CREDENTIALS` / `GROQ_API_KEY` are optional — the rest of the system stays fully testable without them. When absent, the affected feature reports a clear error rather than silently serving fabricated output: resume OCR returns `mode: "error"`, and `POST /api/assistant/chat` returns 503. A service-account key is configured for `GOOGLE_APPLICATION_CREDENTIALS` (place it at `backend/credentials/`, git-ignored) — Vision API also requires **billing enabled** on the GCP project, or calls fail with a billing error. `GROQ_API_KEY` is created at [console.groq.com/keys](https://console.groq.com/keys).
 - Supabase Row Level Security should be enabled per-table in the dashboard as defense-in-depth. The backend authenticates via `DATABASE_URL` (a Postgres role, not a Supabase client session), so the primary authorization boundary is the JWT + `@role_required` decorator, not RLS.
 
 ## Deployment

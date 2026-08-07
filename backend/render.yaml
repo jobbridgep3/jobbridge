@@ -21,8 +21,13 @@ services:
       # URL), FRONTEND_URL (same deployed Vercel URL, no trailing slash — used to build
       # absolute links in emails, e.g. the accreditation "Go to Dashboard" button; the
       # app refuses to boot in production without this set to a non-localhost value),
-      # GOOGLE_APPLICATION_CREDENTIALS_JSON, DIALOGFLOW_PROJECT_ID, ADMIN_SEED_EMAIL,
+      # GOOGLE_APPLICATION_CREDENTIALS_JSON, GROQ_API_KEY, ADMIN_SEED_EMAIL,
       # ADMIN_SEED_PASSWORD
+      #
+      # GROQ_API_KEY: powers the AI assistant (POST /api/assistant/chat), created at
+      # https://console.groq.com/keys. When unset the endpoint returns a 503 with a
+      # clear message; the rest of the app is unaffected. GROQ_MODEL is optional and
+      # defaults to llama-3.3-70b-versatile.
       #
       # GOOGLE_APPLICATION_CREDENTIALS_JSON: base64-encoded contents of the Vision
       # service-account JSON key (GOOGLE_APPLICATION_CREDENTIALS, the file-path form, only
@@ -56,5 +61,5 @@ services:
         sync: false
       - key: GOOGLE_APPLICATION_CREDENTIALS_JSON
         sync: false
-      - key: DIALOGFLOW_PROJECT_ID
+      - key: GROQ_API_KEY
         sync: false

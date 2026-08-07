@@ -21,11 +21,17 @@ export function ChatbotWidget() {
     setInput('')
     setSending(true)
     try {
-      const res = await api.post('/api/chatbot/message', { message: text, session_id: sessionId })
+      const res = await api.post('/api/assistant/chat', { message: text, session_id: sessionId })
       setSessionId(res.data.data.session_id)
       setMessages((m) => [...m, { from: 'bot', text: res.data.data.reply }])
-    } catch {
-      setMessages((m) => [...m, { from: 'bot', text: 'Sorry, I had trouble responding. Please try again.' }])
+    } catch (err) {
+      // The backend explains why it couldn't answer (not configured, upstream timeout,
+      // rate limited) — show that rather than a generic string that hides the cause.
+      const reason = err.response?.data?.message
+      setMessages((m) => [
+        ...m,
+        { from: 'bot', text: reason || 'Sorry, I had trouble responding. Please try again.' },
+      ])
     } finally {
       setSending(false)
     }

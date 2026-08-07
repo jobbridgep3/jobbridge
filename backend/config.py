@@ -105,16 +105,20 @@ class Config:
             "(never localhost) — set it in the Render dashboard."
         )
 
-    # --- AI service credentials (optional — stub mode when absent) ---
-    # Vision and Dialogflow live in separate GCP projects/service accounts here, so each
-    # gets its own credential file rather than sharing GOOGLE_APPLICATION_CREDENTIALS.
+    # --- AI service credentials (optional — the feature reports a clear error when absent) ---
+    # Google Vision, used for resume OCR.
     GOOGLE_APPLICATION_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
     # Base64-encoded service-account JSON — used in place of a file path where the
     # credentials file can't be delivered to disk (e.g. Render, whose builds start from
     # a fresh git clone with no way to place a git-ignored secret file on it).
     GOOGLE_APPLICATION_CREDENTIALS_JSON = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON", "")
-    DIALOGFLOW_PROJECT_ID = os.environ.get("DIALOGFLOW_PROJECT_ID", "")
-    DIALOGFLOW_CREDENTIALS_PATH = os.environ.get("DIALOGFLOW_CREDENTIALS_PATH", "")
+
+    # Groq (Llama 3.3 70B) powers the AI assistant — see services/assistant_service.py.
+    # Deliberately NOT passed through _require(): CI boots create_app() with no secrets
+    # set, so making this mandatory would break the build. The endpoint returns 503 when
+    # it's blank rather than failing at import/boot time.
+    GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+    GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 
     # --- Admin seed (used only by seed.py) ---
     ADMIN_SEED_EMAIL = os.environ.get("ADMIN_SEED_EMAIL", "")
