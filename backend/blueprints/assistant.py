@@ -41,20 +41,34 @@ user sends it through /chat exactly like a typed message, so voice input reuses 
 pipeline unchanged rather than duplicating it. This separation is also what keeps a
 future text-to-speech feature (reply -> audio) addable later as its own equally-separate
 module/endpoint, without touching this one or /chat.
+
+Feature 2 addition — on-demand report generation: report_intent_service.detect() runs
+right after the FAQ check, for authenticated users only. A match short-circuits Groq
+entirely (deterministic whitelisted SQL -> file, via report_generation_service.py —
+never freeform AI-written SQL, matching the same "never let the LLM fabricate the data"
+posture the FAQ/retrieval paths already have) and returns a reply containing a markdown
+download link, which ReactMarkdown (Phase 6) already renders as a real clickable link.
+GET /download/<token> is the actual security boundary — it requires a valid JWT and
+checks the requester's identity against the token's recorded owner
+(report_download_cache.py) before streaming anything, independent of the token's own
+obscurity. A non-match (or a role not permitted for the matched report) falls through
+to the normal chat pipeline, same as an FAQ non-match does today.
 """
 
+import io
 import json
 import uuid
 
-from flask import Blueprint, request
+from flask import Blueprint, current_app, request, send_file
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 
 from extensions import limiter
 from models.vacancy import Vacancy
-from services import document_extraction, faq_lookup, transcription_service
+from services import document_extraction, faq_lookup, report_download_cache, report_intent_service, transcription_service
 from services.assistant_retrieval import build_context
 from services.assistant_service import get_reply
 from services.matching_service import rank_vacancies_for_text
+from services.report_generation_service import generate_report_file
 from utils.client_ip import get_client_ip
 from utils.responses import fail, ok
 
@@ -123,6 +137,14 @@ def chat():
 
     role = get_jwt().get("role") if get_jwt_identity() else None
     identity = get_jwt_identity()
+
+    if identity:
+        intent = report_intent_service.detect(message, role)
+        if intent:
+            report_reply = _try_generate_report(intent, identity, role, session_id)
+            if report_reply is not None:
+                return report_reply
+
     context = build_context(role, identity)
     history = _clean_history(data.get("history"))
 
@@ -130,6 +152,30 @@ def chat():
     if result["mode"] == "error":
         return fail(result["detail"], 503, {"session_id": result["session_id"]})
     return ok(result)
+
+
+def _try_generate_report(intent: dict, identity: str, role: str, session_id: str):
+    """Returns a Flask response if report generation succeeded, or None to fall through
+    to the normal chat pipeline (role_intent_service already role-checked the match, but
+    generate_report_file re-checks independently — defense in depth, never a single check).
+
+    A generation failure (e.g. the PDF renderer's native libs being unavailable) must
+    never surface as a raw 500 — same "report failure honestly, never crash the request"
+    posture every other AI-touching service in this app already follows.
+    """
+    try:
+        generated = generate_report_file(intent["report_key"], intent["format"], identity, role, intent["date_from"])
+    except Exception as exc:  # noqa: BLE001
+        current_app.logger.error("Report generation failed for %s/%s: %s", intent["report_key"], intent["format"], exc)
+        return fail("Sorry, I couldn't generate that file right now. Please try again in a moment.", 503)
+    if not generated:
+        return None
+
+    filename, mimetype, file_bytes = generated
+    token = report_download_cache.stage(file_bytes, filename, mimetype, identity)
+    download_url = f"{request.host_url.rstrip('/')}/api/assistant/download/{token}"
+    reply = f"Here's your generated file: [Download {filename}]({download_url})\n\nThis link will expire in 15 minutes."
+    return ok({"reply": reply, "session_id": session_id or uuid.uuid4().hex, "mode": "report"})
 
 
 def _format_matches(ranked: list) -> str:
@@ -209,3 +255,18 @@ def transcribe_audio():
     if result["mode"] == "error":
         return fail(result["detail"], 503)
     return ok({"transcript": result["transcript"]})
+
+
+@assistant_bp.get("/download/<token>")
+@jwt_required()
+def download_report(token):
+    identity = get_jwt_identity()
+    entry = report_download_cache.retrieve(token, identity)
+    if not entry:
+        return fail("This download link has expired or is invalid.", 404)
+    return send_file(
+        io.BytesIO(entry["bytes"]),
+        mimetype=entry["mimetype"],
+        as_attachment=True,
+        download_name=entry["filename"],
+    )

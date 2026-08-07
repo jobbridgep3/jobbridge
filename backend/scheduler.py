@@ -178,6 +178,16 @@ def _auto_archive_expired_announcements(app):
             logger.info("APScheduler: auto-archived %d expired announcement(s).", len(expired))
 
 
+def _sweep_expired_report_downloads(app):
+    """Prunes expired entries from the AI assistant's in-memory generated-report
+    download cache (report_download_cache.py) — pure in-process memory, no DB/app
+    context actually needed, but wrapped the same way as every other job for consistency."""
+    with app.app_context():
+        from services.report_download_cache import sweep_expired
+
+        sweep_expired()
+
+
 def init_scheduler(app):
     if scheduler.running:
         return
@@ -213,5 +223,9 @@ def init_scheduler(app):
     scheduler.add_job(
         lambda: _auto_archive_expired_announcements(app),
         trigger="cron", minute=50, id="auto_archive_expired_announcements", replace_existing=True,
+    )
+    scheduler.add_job(
+        lambda: _sweep_expired_report_downloads(app),
+        trigger="cron", minute=5, id="sweep_expired_report_downloads", replace_existing=True,
     )
     scheduler.start()
