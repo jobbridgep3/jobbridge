@@ -18,6 +18,7 @@ import {
 
 import { ChartCard } from '../../../components/ui/ChartCard'
 import { useChartGridColors } from '../../../config/chartTheme'
+import { useIsMobile } from '../../../hooks/useMediaQuery'
 import api from '../../../lib/axios'
 
 const BLUE = '#2563eb'
@@ -45,6 +46,10 @@ const FUNNEL_COLORS = {
 
 export function AnalyticsCharts({ apiBase = '/api/admin' }) {
   const { grid, axis } = useChartGridColors()
+  const isMobile = useIsMobile()
+  const chartHeight = isMobile ? 220 : 280
+  const catAxisWidth = isMobile ? 72 : 110
+  const catTickSize = isMobile ? 10 : 12
   const { data, isLoading } = useQuery({
     queryKey: [apiBase, 'dashboard', 'analytics'],
     queryFn: async () => (await api.get(`${apiBase}/dashboard/analytics`)).data.data,
@@ -60,7 +65,7 @@ export function AnalyticsCharts({ apiBase = '/api/admin' }) {
         isEmpty={!data?.monthly_registrations?.some((d) => d.jobseekers || d.employers)}
         emptyTitle="No registrations in this period"
       >
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={chartHeight}>
           <LineChart data={data?.monthly_registrations}>
             <CartesianGrid strokeDasharray="3 3" stroke={grid} />
             <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke={axis} />
@@ -80,7 +85,7 @@ export function AnalyticsCharts({ apiBase = '/api/admin' }) {
         isEmpty={!data?.monthly_applications?.some((d) => d.count)}
         emptyTitle="No applications in this period"
       >
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={chartHeight}>
           <AreaChart data={data?.monthly_applications}>
             <CartesianGrid strokeDasharray="3 3" stroke={grid} />
             <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke={axis} />
@@ -98,7 +103,7 @@ export function AnalyticsCharts({ apiBase = '/api/admin' }) {
         isEmpty={!data?.employment_trends?.some((d) => d.placements)}
         emptyTitle="No placements in this period"
       >
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={chartHeight}>
           <LineChart data={data?.employment_trends}>
             <CartesianGrid strokeDasharray="3 3" stroke={grid} />
             <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke={axis} />
@@ -116,7 +121,7 @@ export function AnalyticsCharts({ apiBase = '/api/admin' }) {
         isEmpty={!data?.hiring_funnel?.some((d) => d.count)}
         emptyTitle="No applications yet"
       >
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={chartHeight}>
           <BarChart data={data?.hiring_funnel?.map((d) => ({ ...d, label: FUNNEL_LABELS[d.status] || d.status }))}>
             <CartesianGrid strokeDasharray="3 3" stroke={grid} />
             <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke={axis} interval={0} angle={-20} textAnchor="end" height={60} />
@@ -138,11 +143,11 @@ export function AnalyticsCharts({ apiBase = '/api/admin' }) {
         isEmpty={!data?.job_category_distribution?.length}
         emptyTitle="No active vacancies yet"
       >
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={chartHeight}>
           <BarChart data={data?.job_category_distribution} layout="vertical" margin={{ left: 16 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={grid} />
             <XAxis type="number" tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
-            <YAxis dataKey="category" type="category" tick={{ fontSize: 12 }} stroke={axis} width={110} />
+            <YAxis dataKey="category" type="category" tick={{ fontSize: catTickSize }} stroke={axis} width={catAxisWidth} />
             <Tooltip />
             <Bar dataKey="count" name="Active Vacancies" fill={BLUE} radius={[0, 4, 4, 0]} />
           </BarChart>
@@ -156,11 +161,11 @@ export function AnalyticsCharts({ apiBase = '/api/admin' }) {
         isEmpty={!data?.top_skills?.length}
         emptyTitle="No skill data yet"
       >
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={chartHeight}>
           <BarChart data={data?.top_skills} layout="vertical" margin={{ left: 16 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={grid} />
             <XAxis type="number" tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
-            <YAxis dataKey="skill" type="category" tick={{ fontSize: 12 }} stroke={axis} width={110} />
+            <YAxis dataKey="skill" type="category" tick={{ fontSize: catTickSize }} stroke={axis} width={catAxisWidth} />
             <Tooltip />
             <Bar dataKey="count" name="Vacancies Requesting" fill={BLUE} radius={[0, 4, 4, 0]} />
           </BarChart>
