@@ -6,6 +6,7 @@ import {
 
 import { ChartCard } from '../../../components/ui/ChartCard'
 import { useChartGridColors } from '../../../config/chartTheme'
+import { useIsMobile } from '../../../hooks/useMediaQuery'
 import api from '../../../lib/axios'
 
 const BLUE = '#2563eb'
@@ -20,6 +21,8 @@ const STATUS_LABELS = {
 
 export function AnalyticsCharts({ dateRange }) {
   const { grid, axis } = useChartGridColors()
+  const isMobile = useIsMobile()
+  const chartHeight = isMobile ? 220 : 280
   const { data, isLoading } = useQuery({
     queryKey: ['employer', 'dashboard', 'analytics', dateRange],
     queryFn: async () => (
@@ -39,11 +42,11 @@ export function AnalyticsCharts({ dateRange }) {
         isEmpty={!data?.applications_per_vacancy?.length}
         emptyTitle="No applications yet"
       >
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={chartHeight}>
           <BarChart data={data?.applications_per_vacancy} layout="vertical" margin={{ left: 16 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={grid} />
             <XAxis type="number" tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
-            <YAxis dataKey="vacancy" type="category" tick={{ fontSize: 12 }} stroke={axis} width={110} />
+            <YAxis dataKey="vacancy" type="category" tick={{ fontSize: isMobile ? 10 : 12 }} stroke={axis} width={isMobile ? 72 : 110} />
             <Tooltip />
             <Bar dataKey="count" name="Applications" fill={BLUE} radius={[0, 4, 4, 0]} />
           </BarChart>
@@ -57,12 +60,13 @@ export function AnalyticsCharts({ dateRange }) {
         isEmpty={!data?.applicant_status?.some((d) => d.count)}
         emptyTitle="No applicants yet"
       >
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={chartHeight}>
           <PieChart>
             <Pie
               // Only chart non-zero statuses — labeling zero-value slices crowds
               // every label on top of each other at a single point on the circle.
-              data={data?.applicant_status?.filter((d) => d.count > 0)} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={90}
+              data={data?.applicant_status?.filter((d) => d.count > 0)} dataKey="count" nameKey="status" cx="50%" cy="50%"
+              outerRadius={isMobile ? 65 : 90}
               label={(entry) => STATUS_LABELS[entry.status] || entry.status}
             >
               {data?.applicant_status?.filter((d) => d.count > 0).map((d) => (
@@ -82,7 +86,7 @@ export function AnalyticsCharts({ dateRange }) {
         isEmpty={!data?.monthly_applications?.some((d) => d.count)}
         emptyTitle="No applications in this period"
       >
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={chartHeight}>
           <AreaChart data={data?.monthly_applications}>
             <CartesianGrid strokeDasharray="3 3" stroke={grid} />
             <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke={axis} />
@@ -100,10 +104,18 @@ export function AnalyticsCharts({ dateRange }) {
         isEmpty={!data?.hiring_funnel?.some((d) => d.count)}
         emptyTitle="No applications yet"
       >
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={chartHeight}>
           <BarChart data={data?.hiring_funnel}>
             <CartesianGrid strokeDasharray="3 3" stroke={grid} />
-            <XAxis dataKey="stage" tick={{ fontSize: 12 }} stroke={axis} />
+            <XAxis
+              dataKey="stage"
+              tick={{ fontSize: isMobile ? 10 : 12 }}
+              stroke={axis}
+              interval={0}
+              angle={isMobile ? -30 : 0}
+              textAnchor={isMobile ? 'end' : 'middle'}
+              height={isMobile ? 60 : 30}
+            />
             <YAxis tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
             <Tooltip />
             <Bar dataKey="count" name="Count" fill={BLUE} radius={[4, 4, 0, 0]} />

@@ -328,7 +328,7 @@ export default function EmployerInterviews() {
 
               {panel === 'edit' && (
                 <div className="space-y-3 rounded-lg border border-slate-200 p-3">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <Label>Date</Label>
                       <DatePicker value={editForm.date} onChange={(date) => setEditForm({ ...editForm, date })} />
@@ -338,7 +338,7 @@ export default function EmployerInterviews() {
                       <TimePicker value={to12h(editForm.time)} onChange={(t) => setEditForm({ ...editForm, time: to24h(t) })} />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <Label>Mode</Label>
                       <Select value={editForm.mode} onChange={(e) => setEditForm({ ...editForm, mode: e.target.value })}>
@@ -395,7 +395,7 @@ export default function EmployerInterviews() {
 
               {panel === 'result' && (
                 <div className="space-y-3 rounded-lg border border-slate-200 p-3">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
                       <Label>Result</Label>
                       <Select value={resultForm.result} onChange={(e) => setResultForm({ ...resultForm, result: e.target.value })}>
