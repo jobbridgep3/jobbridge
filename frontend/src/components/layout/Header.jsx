@@ -49,7 +49,7 @@ export function Header({ breadcrumbItems = [] }) {
               </span>
             )}
           </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-80">
+          <DropdownMenuContent className="w-[calc(100vw-2rem)] max-w-80 sm:w-80">
             <p className="px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">Notifications</p>
             {!recent?.length ? (
               <p className="px-2.5 py-3 text-sm text-text-muted">No notifications yet.</p>

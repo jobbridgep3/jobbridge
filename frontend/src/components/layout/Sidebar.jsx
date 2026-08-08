@@ -92,7 +92,7 @@ export function Sidebar({ role }) {
           type="button"
           aria-label="Open menu"
           onClick={() => setMobileOpen(true)}
-          className="fixed bottom-4 left-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-primary-800 text-white shadow-lg hover:bg-primary-900 md:hidden"
+          className="fixed bottom-4 left-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-primary-800 text-white shadow-lg hover:bg-primary-900 lg:hidden"
         >
           <Menu className="h-5 w-5" />
         </button>
@@ -105,7 +105,7 @@ export function Sidebar({ role }) {
               key="backdrop"
               {...modalOverlay}
               onClick={closeMobile}
-              className="fixed inset-0 z-40 bg-surface-overlay md:hidden"
+              className="fixed inset-0 z-40 bg-surface-overlay lg:hidden"
             />
             <motion.aside
               key="drawer"
@@ -116,7 +116,7 @@ export function Sidebar({ role }) {
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ duration: 0.2, ease: 'easeInOut' }}
-              className="fixed inset-y-0 left-0 z-50 flex w-[264px] flex-col bg-primary-950 text-slate-200 shadow-xl md:hidden"
+              className="fixed inset-y-0 left-0 z-50 flex w-[264px] flex-col bg-primary-950 text-slate-200 shadow-xl lg:hidden"
             >
               <div className="flex h-16 items-center gap-2 border-b border-white/10 px-4">
                 <img src={jobbridgeLogo} alt="JobBridge" className="h-7 w-7 shrink-0" />
@@ -152,7 +152,7 @@ export function Sidebar({ role }) {
         custom={collapsed}
         variants={sidebarWidth}
         animate="animate"
-        className="sticky top-0 z-30 hidden h-screen shrink-0 flex-col border-r border-slate-200 bg-primary-950 text-slate-200 md:flex"
+        className="sticky top-0 z-30 hidden h-screen shrink-0 flex-col border-r border-slate-200 bg-primary-950 text-slate-200 lg:flex"
       >
         <div className="flex h-16 items-center gap-2 border-b border-white/10 px-4">
           <img src={jobbridgeLogo} alt="JobBridge" className="h-7 w-7 shrink-0" />

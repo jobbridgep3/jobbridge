@@ -87,7 +87,7 @@ export function AppShell() {
       <Sidebar role={user?.role} />
       <div className="flex min-h-screen flex-1 flex-col">
         <Header breadcrumbItems={breadcrumbItems} />
-        <motion.main key={location.pathname} {...pageTransition} className="flex-1 p-6">
+        <motion.main key={location.pathname} {...pageTransition} className="flex-1 overflow-x-hidden p-4 sm:p-6">
           <Outlet />
         </motion.main>
       </div>

@@ -30,7 +30,8 @@ export function DialogContent({ className, children, title, description, ...prop
           ref={setContainer}
           {...modalContent}
           className={cn(
-            'fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl bg-surface p-6 shadow-xl',
+            'fixed inset-x-3 top-1/2 z-50 max-h-[calc(100vh-1.5rem)] w-auto -translate-y-1/2 overflow-y-auto rounded-xl bg-surface p-4 shadow-xl',
+            'sm:inset-x-auto sm:left-1/2 sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:max-h-[85vh] sm:p-6',
             className
           )}
         >
