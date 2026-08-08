@@ -122,45 +122,123 @@ export const EMPLOYER_NAV_GROUPS = [
 
 export const EMPLOYER_NAV = flattenNavItems(EMPLOYER_NAV_GROUPS)
 
-export const STAFF_NAV = [
+export const STAFF_NAV_GROUPS = [
   { label: 'Dashboard', href: '/staff/dashboard', icon: LayoutDashboard },
-  { label: 'Jobseeker Management', href: '/staff/jobseekers', icon: Users },
-  { label: 'Employer Management', href: '/staff/employers', icon: Building2 },
-  { label: 'Job Vacancy Management', href: '/staff/vacancies', icon: Briefcase },
-  { label: 'Interview Oversight', href: '/staff/interviews', icon: CalendarCheck },
-  { label: 'Referral Letters', href: '/staff/referrals', icon: FileText },
-  { label: 'Employment Monitoring', href: '/staff/employment', icon: FileCheck2 },
-  { label: 'Job Fair Management', href: '/staff/jobfair', icon: MapPinned },
-  { label: 'ManPower Skills Management', href: '/staff/training', icon: Award },
-  { label: 'DILP Management', href: '/staff/dilp', icon: HandCoins },
-  { label: 'OWWA Management', href: '/staff/owwa', icon: Plane },
-  { label: 'SPES Management', href: '/staff/spes', icon: GraduationCap },
-  { label: 'LMI Reports', href: '/staff/lmi', icon: FileBarChart },
-  { label: 'Announcements', href: '/staff/announcements', icon: Megaphone },
-  { label: 'Notifications', href: '/staff/notifications', icon: Bell },
-  { label: 'Settings', href: '/staff/settings', icon: Settings },
+  {
+    label: 'User Management',
+    icon: Users,
+    items: [
+      { label: 'Jobseeker Management', href: '/staff/jobseekers', icon: Users },
+      { label: 'Employer Management', href: '/staff/employers', icon: Building2 },
+    ],
+  },
+  {
+    label: 'Recruitment Services',
+    icon: Briefcase,
+    items: [
+      { label: 'Job Vacancy Management', href: '/staff/vacancies', icon: Briefcase },
+      { label: 'Interview Oversight', href: '/staff/interviews', icon: CalendarCheck },
+      { label: 'Referral Letters', href: '/staff/referrals', icon: FileText },
+    ],
+  },
+  {
+    label: 'Employment Services',
+    icon: FileCheck2,
+    items: [{ label: 'Employment Monitoring', href: '/staff/employment', icon: FileCheck2 }],
+  },
+  {
+    label: 'Programs',
+    icon: Layers,
+    items: [
+      { label: 'Job Fair Management', href: '/staff/jobfair', icon: MapPinned },
+      { label: 'SPES Management', href: '/staff/spes', icon: GraduationCap },
+      { label: 'DILP Management', href: '/staff/dilp', icon: HandCoins },
+      { label: 'OWWA Management', href: '/staff/owwa', icon: Plane },
+      { label: 'ManPower Skills Management', href: '/staff/training', icon: Award },
+    ],
+  },
+  {
+    label: 'Reports & Analytics',
+    icon: FileBarChart,
+    items: [{ label: 'LMI Reports', href: '/staff/lmi', icon: FileBarChart }],
+  },
+  {
+    label: 'Communications',
+    icon: Megaphone,
+    items: [
+      { label: 'Announcements', href: '/staff/announcements', icon: Megaphone },
+      { label: 'Notifications', href: '/staff/notifications', icon: Bell },
+    ],
+  },
+  {
+    label: 'System',
+    icon: Settings,
+    items: [{ label: 'Settings', href: '/staff/settings', icon: Settings }],
+  },
 ]
 
-export const ADMIN_NAV = [
+export const STAFF_NAV = flattenNavItems(STAFF_NAV_GROUPS)
+
+export const ADMIN_NAV_GROUPS = [
   { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
-  { label: 'Jobseeker Management', href: '/admin/jobseekers', icon: Users },
-  { label: 'Employer Management', href: '/admin/employers', icon: Building2 },
-  { label: 'Staff Management', href: '/admin/staff', icon: UserCog },
-  { label: 'Job Vacancy Management', href: '/admin/vacancies', icon: Briefcase },
-  { label: 'Interview Oversight', href: '/admin/interviews', icon: CalendarCheck },
-  { label: 'Referral Letters', href: '/admin/referrals', icon: FileText },
-  { label: 'Employment Monitoring', href: '/admin/employment', icon: FileCheck2 },
-  { label: 'Job Fair Management', href: '/admin/jobfair', icon: MapPinned },
-  { label: 'ManPower Skills Management', href: '/admin/training', icon: Award },
-  { label: 'DILP Management', href: '/admin/dilp', icon: HandCoins },
-  { label: 'OWWA Management', href: '/admin/owwa', icon: Plane },
-  { label: 'SPES Management', href: '/admin/spes', icon: GraduationCap },
-  { label: 'LMI Reports', href: '/admin/lmi', icon: FileBarChart },
-  { label: 'Announcements', href: '/admin/announcements', icon: Megaphone },
-  { label: 'Audit Trail', href: '/admin/audit', icon: ShieldCheck },
-  { label: 'Notifications', href: '/admin/notifications', icon: Bell },
-  { label: 'Settings', href: '/admin/settings', icon: Settings },
+  {
+    label: 'User Management',
+    icon: Users,
+    items: [
+      { label: 'Jobseeker Management', href: '/admin/jobseekers', icon: Users },
+      { label: 'Employer Management', href: '/admin/employers', icon: Building2 },
+      { label: 'Staff Management', href: '/admin/staff', icon: UserCog },
+    ],
+  },
+  {
+    label: 'Recruitment Services',
+    icon: Briefcase,
+    items: [
+      { label: 'Job Vacancy Management', href: '/admin/vacancies', icon: Briefcase },
+      { label: 'Interview Oversight', href: '/admin/interviews', icon: CalendarCheck },
+      { label: 'Referral Letters', href: '/admin/referrals', icon: FileText },
+    ],
+  },
+  {
+    label: 'Employment Services',
+    icon: FileCheck2,
+    items: [{ label: 'Employment Monitoring', href: '/admin/employment', icon: FileCheck2 }],
+  },
+  {
+    label: 'Programs',
+    icon: Layers,
+    items: [
+      { label: 'Job Fair Management', href: '/admin/jobfair', icon: MapPinned },
+      { label: 'SPES Management', href: '/admin/spes', icon: GraduationCap },
+      { label: 'DILP Management', href: '/admin/dilp', icon: HandCoins },
+      { label: 'OWWA Management', href: '/admin/owwa', icon: Plane },
+      { label: 'ManPower Skills Management', href: '/admin/training', icon: Award },
+    ],
+  },
+  {
+    label: 'Reports & Analytics',
+    icon: FileBarChart,
+    items: [
+      { label: 'LMI Reports', href: '/admin/lmi', icon: FileBarChart },
+      { label: 'Audit Trail', href: '/admin/audit', icon: ShieldCheck },
+    ],
+  },
+  {
+    label: 'Communications',
+    icon: Megaphone,
+    items: [
+      { label: 'Announcements', href: '/admin/announcements', icon: Megaphone },
+      { label: 'Notifications', href: '/admin/notifications', icon: Bell },
+    ],
+  },
+  {
+    label: 'System',
+    icon: Settings,
+    items: [{ label: 'Settings', href: '/admin/settings', icon: Settings }],
+  },
 ]
+
+export const ADMIN_NAV = flattenNavItems(ADMIN_NAV_GROUPS)
 
 export const NAV_BY_ROLE = {
   jobseeker: JOBSEEKER_NAV,
@@ -175,8 +253,8 @@ export const NAV_BY_ROLE = {
 export const SIDEBAR_NAV_BY_ROLE = {
   jobseeker: JOBSEEKER_NAV_GROUPS,
   employer: EMPLOYER_NAV_GROUPS,
-  staff: STAFF_NAV,
-  admin: ADMIN_NAV,
+  staff: STAFF_NAV_GROUPS,
+  admin: ADMIN_NAV_GROUPS,
 }
 
 export const ROLE_LABELS = {
