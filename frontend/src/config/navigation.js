@@ -78,19 +78,49 @@ export const JOBSEEKER_NAV_GROUPS = [
 
 export const JOBSEEKER_NAV = flattenNavItems(JOBSEEKER_NAV_GROUPS)
 
-export const EMPLOYER_NAV = [
+export const EMPLOYER_NAV_GROUPS = [
   { label: 'Dashboard', href: '/employer/dashboard', icon: LayoutDashboard },
-  { label: 'My Profile', href: '/employer/profile', icon: Users },
-  { label: 'Company Profile', href: '/employer/company', icon: Building2 },
-  { label: 'Vacancy Management', href: '/employer/vacancies', icon: Briefcase },
-  { label: 'Applicant Management', href: '/employer/applicants', icon: ClipboardList },
-  { label: 'Referral Management', href: '/employer/referrals', icon: Send },
-  { label: 'Interview Management', href: '/employer/interviews', icon: CalendarCheck },
-  { label: 'Job Fair', href: '/employer/jobfair', icon: MapPinned },
-  { label: 'Employment Monitoring', href: '/employer/employment', icon: FileCheck2 },
-  { label: 'Notifications', href: '/employer/notifications', icon: Bell },
-  { label: 'Settings', href: '/employer/settings', icon: Settings },
+  {
+    label: 'Company',
+    icon: Building2,
+    items: [
+      { label: 'My Profile', href: '/employer/profile', icon: Users },
+      { label: 'Company Profile', href: '/employer/company', icon: Building2 },
+    ],
+  },
+  {
+    label: 'Recruitment Services',
+    icon: Briefcase,
+    items: [
+      { label: 'Vacancy Management', href: '/employer/vacancies', icon: Briefcase },
+      { label: 'Applicant Management', href: '/employer/applicants', icon: ClipboardList },
+      { label: 'Referral Management', href: '/employer/referrals', icon: Send },
+      { label: 'Interview Management', href: '/employer/interviews', icon: CalendarCheck },
+    ],
+  },
+  {
+    label: 'Employment Services',
+    icon: FileCheck2,
+    items: [{ label: 'Employment Monitoring', href: '/employer/employment', icon: FileCheck2 }],
+  },
+  {
+    label: 'Programs',
+    icon: Layers,
+    items: [{ label: 'Job Fair', href: '/employer/jobfair', icon: MapPinned }],
+  },
+  {
+    label: 'Communications',
+    icon: Bell,
+    items: [{ label: 'Notifications', href: '/employer/notifications', icon: Bell }],
+  },
+  {
+    label: 'System',
+    icon: Settings,
+    items: [{ label: 'Settings', href: '/employer/settings', icon: Settings }],
+  },
 ]
+
+export const EMPLOYER_NAV = flattenNavItems(EMPLOYER_NAV_GROUPS)
 
 export const STAFF_NAV = [
   { label: 'Dashboard', href: '/staff/dashboard', icon: LayoutDashboard },
@@ -144,7 +174,7 @@ export const NAV_BY_ROLE = {
  * (no entry has `.items`), so Sidebar renders them exactly as before. */
 export const SIDEBAR_NAV_BY_ROLE = {
   jobseeker: JOBSEEKER_NAV_GROUPS,
-  employer: EMPLOYER_NAV,
+  employer: EMPLOYER_NAV_GROUPS,
   staff: STAFF_NAV,
   admin: ADMIN_NAV,
 }
