@@ -11,6 +11,7 @@ import {
   GraduationCap,
   HandCoins,
   Handshake,
+  Layers,
   LayoutDashboard,
   MapPinned,
   Megaphone,
@@ -24,21 +25,58 @@ import {
   Users,
 } from 'lucide-react'
 
-export const JOBSEEKER_NAV = [
+/** Flattens a mixed array of leaf items ({label,href,icon}) and group entries
+ * ({label,icon,items:[...]}) into a plain array of leaf items. One level of
+ * nesting only — groups cannot contain sub-groups. */
+function flattenNavItems(entries) {
+  return entries.flatMap((entry) => (entry.items ? entry.items : [entry]))
+}
+
+export const JOBSEEKER_NAV_GROUPS = [
   { label: 'Dashboard', href: '/jobseeker/dashboard', icon: LayoutDashboard },
-  { label: 'My Profile', href: '/jobseeker/profile', icon: Users },
-  { label: 'Job Search', href: '/jobseeker/jobs', icon: Search },
-  { label: 'My Applications', href: '/jobseeker/applications', icon: ClipboardList },
-  { label: 'Employment Monitoring', href: '/jobseeker/employment', icon: Briefcase },
-  { label: 'Interview Schedule', href: '/jobseeker/interviews', icon: CalendarCheck },
-  { label: 'Job Fair', href: '/jobseeker/jobfair', icon: MapPinned },
-  { label: 'SPES', href: '/jobseeker/spes', icon: GraduationCap },
-  { label: 'Manpower Skills Training', href: '/jobseeker/training', icon: Award },
-  { label: 'DILP', href: '/jobseeker/dilp', icon: HandCoins },
-  { label: 'OWWA', href: '/jobseeker/owwa', icon: Plane },
-  { label: 'Notifications', href: '/jobseeker/notifications', icon: Bell },
-  { label: 'Settings', href: '/jobseeker/settings', icon: Settings },
+  {
+    label: 'My Account',
+    icon: Users,
+    items: [{ label: 'My Profile', href: '/jobseeker/profile', icon: Users }],
+  },
+  {
+    label: 'Job Search',
+    icon: Search,
+    items: [
+      { label: 'Job Search', href: '/jobseeker/jobs', icon: Search },
+      { label: 'My Applications', href: '/jobseeker/applications', icon: ClipboardList },
+      { label: 'Interview Schedule', href: '/jobseeker/interviews', icon: CalendarCheck },
+    ],
+  },
+  {
+    label: 'Employment Services',
+    icon: Briefcase,
+    items: [{ label: 'Employment Monitoring', href: '/jobseeker/employment', icon: Briefcase }],
+  },
+  {
+    label: 'Programs',
+    icon: Layers,
+    items: [
+      { label: 'Job Fair', href: '/jobseeker/jobfair', icon: MapPinned },
+      { label: 'SPES', href: '/jobseeker/spes', icon: GraduationCap },
+      { label: 'DILP', href: '/jobseeker/dilp', icon: HandCoins },
+      { label: 'OWWA', href: '/jobseeker/owwa', icon: Plane },
+      { label: 'Manpower Skills Training', href: '/jobseeker/training', icon: Award },
+    ],
+  },
+  {
+    label: 'Communications',
+    icon: Bell,
+    items: [{ label: 'Notifications', href: '/jobseeker/notifications', icon: Bell }],
+  },
+  {
+    label: 'System',
+    icon: Settings,
+    items: [{ label: 'Settings', href: '/jobseeker/settings', icon: Settings }],
+  },
 ]
+
+export const JOBSEEKER_NAV = flattenNavItems(JOBSEEKER_NAV_GROUPS)
 
 export const EMPLOYER_NAV = [
   { label: 'Dashboard', href: '/employer/dashboard', icon: LayoutDashboard },
@@ -96,6 +134,16 @@ export const ADMIN_NAV = [
 
 export const NAV_BY_ROLE = {
   jobseeker: JOBSEEKER_NAV,
+  employer: EMPLOYER_NAV,
+  staff: STAFF_NAV,
+  admin: ADMIN_NAV,
+}
+
+/** Mixed shape (leaf | group) for the accordion sidebar. Consumed only by
+ * Sidebar.jsx. Roles not yet converted reuse their existing flat array
+ * (no entry has `.items`), so Sidebar renders them exactly as before. */
+export const SIDEBAR_NAV_BY_ROLE = {
+  jobseeker: JOBSEEKER_NAV_GROUPS,
   employer: EMPLOYER_NAV,
   staff: STAFF_NAV,
   admin: ADMIN_NAV,
