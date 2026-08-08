@@ -7,6 +7,7 @@ import {
 import { ChartCard } from '../../../components/ui/ChartCard'
 import { StatCard } from '../../../components/ui/StatCard'
 import { useChartGridColors } from '../../../config/chartTheme'
+import { useIsMobile } from '../../../hooks/useMediaQuery'
 import api from '../../../lib/axios'
 
 const BLUE = '#2563eb'
@@ -15,6 +16,10 @@ const SLATE = '#64748b'
 
 export function VacancyAnalytics() {
   const { grid, axis } = useChartGridColors()
+  const isMobile = useIsMobile()
+  const chartHeight = isMobile ? 220 : 260
+  const catAxisWidth = isMobile ? 72 : 110
+  const catTickSize = isMobile ? 10 : 12
   const { data, isLoading } = useQuery({
     queryKey: ['staff', 'vacancies', 'analytics'],
     queryFn: async () => (await api.get('/api/staff/vacancies/analytics')).data.data,
@@ -35,7 +40,7 @@ export function VacancyAnalytics() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <ChartCard title="Vacancies per Month" icon={TrendingUp} isLoading={isLoading} isEmpty={!data?.vacancies_per_month?.some((d) => d.count)} emptyTitle="No data yet">
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={chartHeight}>
             <BarChart data={data?.vacancies_per_month}>
               <CartesianGrid strokeDasharray="3 3" stroke={grid} />
               <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke={axis} />
@@ -47,11 +52,11 @@ export function VacancyAnalytics() {
         </ChartCard>
 
         <ChartCard title="By Industry" icon={Briefcase} isLoading={isLoading} isEmpty={!data?.by_industry?.length} emptyTitle="No data yet">
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={chartHeight}>
             <BarChart data={data?.by_industry} layout="vertical" margin={{ left: 16 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={grid} />
               <XAxis type="number" tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
-              <YAxis dataKey="label" type="category" tick={{ fontSize: 12 }} stroke={axis} width={110} />
+              <YAxis dataKey="label" type="category" tick={{ fontSize: catTickSize }} stroke={axis} width={catAxisWidth} />
               <Tooltip />
               <Bar dataKey="count" fill={GREEN} radius={[0, 4, 4, 0]} />
             </BarChart>
@@ -59,11 +64,11 @@ export function VacancyAnalytics() {
         </ChartCard>
 
         <ChartCard title="By Municipality" icon={MapPin} isLoading={isLoading} isEmpty={!data?.by_municipality?.length} emptyTitle="No data yet">
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={chartHeight}>
             <BarChart data={data?.by_municipality} layout="vertical" margin={{ left: 16 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={grid} />
               <XAxis type="number" tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
-              <YAxis dataKey="label" type="category" tick={{ fontSize: 12 }} stroke={axis} width={110} />
+              <YAxis dataKey="label" type="category" tick={{ fontSize: catTickSize }} stroke={axis} width={catAxisWidth} />
               <Tooltip />
               <Bar dataKey="count" fill={BLUE} radius={[0, 4, 4, 0]} />
             </BarChart>
@@ -71,9 +76,9 @@ export function VacancyAnalytics() {
         </ChartCard>
 
         <ChartCard title="By Employment Type" icon={PieChartIcon} isLoading={isLoading} isEmpty={!data?.by_employment_type?.length} emptyTitle="No data yet">
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={chartHeight}>
             <PieChart>
-              <Pie data={data?.by_employment_type} dataKey="count" nameKey="label" cx="50%" cy="50%" outerRadius={80} label={(e) => e.label}>
+              <Pie data={data?.by_employment_type} dataKey="count" nameKey="label" cx="50%" cy="50%" outerRadius={isMobile ? 65 : 80} label={(e) => e.label}>
                 {data?.by_employment_type?.map((d, i) => (
                   <Cell key={d.label} fill={[BLUE, GREEN, SLATE, '#d97706', '#dc2626'][i % 5]} />
                 ))}
@@ -84,11 +89,11 @@ export function VacancyAnalytics() {
         </ChartCard>
 
         <ChartCard title="Top Employers" icon={Building2} isLoading={isLoading} isEmpty={!data?.top_employers?.length} emptyTitle="No data yet">
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={chartHeight}>
             <BarChart data={data?.top_employers} layout="vertical" margin={{ left: 16 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={grid} />
               <XAxis type="number" tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
-              <YAxis dataKey="label" type="category" tick={{ fontSize: 12 }} stroke={axis} width={110} />
+              <YAxis dataKey="label" type="category" tick={{ fontSize: catTickSize }} stroke={axis} width={catAxisWidth} />
               <Tooltip />
               <Bar dataKey="count" fill={GREEN} radius={[0, 4, 4, 0]} />
             </BarChart>
@@ -96,11 +101,11 @@ export function VacancyAnalytics() {
         </ChartCard>
 
         <ChartCard title="Applications per Vacancy" icon={Users} isLoading={isLoading} isEmpty={!data?.applications_per_vacancy?.length} emptyTitle="No applications yet">
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={chartHeight}>
             <BarChart data={data?.applications_per_vacancy} layout="vertical" margin={{ left: 16 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={grid} />
               <XAxis type="number" tick={{ fontSize: 12 }} stroke={axis} allowDecimals={false} />
-              <YAxis dataKey="label" type="category" tick={{ fontSize: 12 }} stroke={axis} width={110} />
+              <YAxis dataKey="label" type="category" tick={{ fontSize: catTickSize }} stroke={axis} width={catAxisWidth} />
               <Tooltip />
               <Bar dataKey="count" fill={BLUE} radius={[0, 4, 4, 0]} />
             </BarChart>

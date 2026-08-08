@@ -403,7 +403,7 @@ export default function StaffJobFair({ basePath = '/staff' }) {
               <Label>Description</Label>
               <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <Label>Venue</Label>
                 <Input value={form.venue} onChange={(e) => setForm({ ...form, venue: e.target.value })} />
@@ -415,7 +415,7 @@ export default function StaffJobFair({ basePath = '/staff' }) {
             </div>
             <div>
               <Label>Starts</Label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <DatePicker
                   value={splitScheduledDate(form.event_date).date}
                   onChange={(date) => setForm({ ...form, event_date: joinScheduledDate(date, splitScheduledDate(form.event_date).time) })}
@@ -428,7 +428,7 @@ export default function StaffJobFair({ basePath = '/staff' }) {
             </div>
             <div>
               <Label>Ends (optional)</Label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <DatePicker
                   value={splitScheduledDate(form.end_time).date}
                   onChange={(date) => setForm({ ...form, end_time: joinScheduledDate(date, splitScheduledDate(form.end_time).time) })}
@@ -441,7 +441,7 @@ export default function StaffJobFair({ basePath = '/staff' }) {
             </div>
             <div>
               <Label>Registration Deadline (optional)</Label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <DatePicker
                   value={splitScheduledDate(form.registration_deadline).date}
                   onChange={(date) =>
@@ -456,7 +456,7 @@ export default function StaffJobFair({ basePath = '/staff' }) {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <Label>Max Employer Slots</Label>
                 <Input type="number" min="1" value={form.max_employer_slots} onChange={(e) => setForm({ ...form, max_employer_slots: e.target.value })} />
@@ -466,7 +466,7 @@ export default function StaffJobFair({ basePath = '/staff' }) {
                 <Input type="number" min="1" value={form.max_jobseeker_slots} onChange={(e) => setForm({ ...form, max_jobseeker_slots: e.target.value })} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <Label>Contact Person</Label>
                 <Input value={form.contact_person} onChange={(e) => setForm({ ...form, contact_person: e.target.value })} />

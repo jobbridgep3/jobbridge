@@ -126,7 +126,7 @@ export default function StaffTraining() {
             </div>
             <div>
               <Label>Schedule</Label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <DatePicker
                   value={splitScheduledDate(form.schedule).date}
                   onChange={(date) => setForm({ ...form, schedule: joinScheduledDate(date, splitScheduledDate(form.schedule).time) })}

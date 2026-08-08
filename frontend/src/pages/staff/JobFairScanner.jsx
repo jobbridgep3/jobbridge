@@ -87,7 +87,7 @@ export default function StaffJobFairScanner({ basePath = '/staff' }) {
         <ArrowLeft className="h-4 w-4" /> Back to Job Fairs
       </Link>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Registered" value={dashboard?.total_registered ?? '–'} icon={Users} tone="primary" />
         <StatCard label="Attended" value={dashboard?.total_attended ?? '–'} icon={UserCheck} tone="success" />
         <StatCard label="Attendance Rate" value={dashboard ? `${dashboard.attendance_rate}%` : '–'} icon={Percent} tone="warning" />
