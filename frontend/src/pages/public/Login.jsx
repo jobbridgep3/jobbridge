@@ -141,8 +141,11 @@ export default function Login() {
                   matching reduced box size, so the layout doesn't reserve the full
                   unscaled width) fixes the overflow without touching the widget itself
                   or its verification behavior — CSS transform is purely visual, clicks
-                  still register correctly. Reset to native size from sm: up. */}
-              <div className="h-[64px] w-[250px] origin-top-left scale-[0.82] overflow-hidden sm:h-auto sm:w-auto sm:scale-100 sm:overflow-visible">
+                  still register correctly. Uses the classic `transform: scale()`
+                  property (not Tailwind v4's default standalone `scale` property) for
+                  broader compatibility with older WebViews some in-app browsers
+                  (Messenger/Facebook) still ship. Reset to native size from sm: up. */}
+              <div className="h-[64px] w-[250px] origin-top-left overflow-hidden [transform:scale(0.82)] sm:h-auto sm:w-auto sm:overflow-visible sm:[transform:none]">
                 <ReCAPTCHA
                   ref={recaptchaRef}
                   sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
