@@ -65,7 +65,7 @@ export default function Login() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-4 py-10">
+    <div className="relative flex min-h-screen min-h-[100dvh] items-center justify-center overflow-hidden p-4 py-6 sm:py-10">
       <BackgroundSlideshow images={LOGIN_SLIDESHOW_IMAGES} />
 
       <Link
@@ -103,12 +103,12 @@ export default function Login() {
         </div>
 
         {/* Sign-in form panel */}
-        <div className="flex flex-col justify-center p-6 sm:p-8">
-          <Link to="/" className="mb-6 flex flex-col items-center text-center sm:hidden">
-            <img src={logo} alt="JobBridge" className="mb-2 h-9 w-9" />
+        <div className="flex flex-col justify-center p-4 sm:p-8">
+          <Link to="/" className="mb-4 flex flex-col items-center text-center sm:hidden">
+            <img src={logo} alt="JobBridge" className="mb-2 h-8 w-8" />
             <span className="text-lg font-semibold text-primary-900 dark:text-primary-300">JobBridge</span>
           </Link>
-          <div className="mb-6">
+          <div className="mb-4 sm:mb-6">
             <h1 className="text-lg font-semibold text-text-primary">Sign in to your account</h1>
             <p className="mt-1 text-sm text-text-secondary">Welcome back! Please enter your credentials.</p>
           </div>
@@ -135,13 +135,22 @@ export default function Login() {
               <FormError>{errors.password?.message}</FormError>
             </div>
             <div>
-              <ReCAPTCHA
-                ref={recaptchaRef}
-                sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
-                onChange={(token) => setRecaptchaToken(token)}
-                onExpired={() => setRecaptchaToken(null)}
-                onErrored={() => setRecaptchaToken(null)}
-              />
+              {/* Google's reCAPTCHA checkbox renders at a fixed 304x78px regardless of
+                  container width, which overflows narrow phones (<~380px) once the
+                  card's own padding is subtracted. Scaling the wrapper down (with a
+                  matching reduced box size, so the layout doesn't reserve the full
+                  unscaled width) fixes the overflow without touching the widget itself
+                  or its verification behavior — CSS transform is purely visual, clicks
+                  still register correctly. Reset to native size from sm: up. */}
+              <div className="h-[64px] w-[250px] origin-top-left scale-[0.82] overflow-hidden sm:h-auto sm:w-auto sm:scale-100 sm:overflow-visible">
+                <ReCAPTCHA
+                  ref={recaptchaRef}
+                  sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
+                  onChange={(token) => setRecaptchaToken(token)}
+                  onExpired={() => setRecaptchaToken(null)}
+                  onErrored={() => setRecaptchaToken(null)}
+                />
+              </div>
             </div>
             <Button type="submit" className="w-full" disabled={isSubmitting || !recaptchaToken}>
               {isSubmitting ? 'Logging in…' : 'Log In'}
