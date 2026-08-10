@@ -19,6 +19,7 @@ import { EducationSection } from './profile-sections/EducationSection'
 import { EmploymentInfoSection } from './profile-sections/EmploymentInfoSection'
 import { PersonalInfoSection } from './profile-sections/PersonalInfoSection'
 import { computeCompletion } from './profile-sections/requiredFields'
+import { ResumeScanModal } from './profile-sections/ResumeScanModal'
 import { ResumeUploadSection } from './profile-sections/ResumeUploadSection'
 import { SkillsSection } from './profile-sections/SkillsSection'
 
@@ -38,6 +39,7 @@ export default function JobseekerProfile() {
 
   const [form, setForm] = useState(null)
   const [uploadingResume, setUploadingResume] = useState(false)
+  const [scanState, setScanState] = useState({ open: false, phase: 'scanning', stepIndex: 0, extractedAt: null, errorDetail: null })
   // Session-only (not persisted to backend or localStorage, per spec) — resets to
   // all-expanded on every page load.
   const [openSections, setOpenSections] = useState({ personal: true, education: true, employment: true, skills: true })
@@ -78,11 +80,22 @@ export default function JobseekerProfile() {
 
   const uploadResume = async (file) => {
     setUploadingResume(true)
+    setScanState({ open: true, phase: 'scanning', stepIndex: 0, extractedAt: null, errorDetail: null })
     const fd = new FormData()
     fd.append('file', file)
     try {
-      const res = await api.post('/api/profile/resume', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-      const { resume_url, ocr_status } = res.data.data
+      const res = await api.post('/api/profile/resume', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        // Real, measured progress of sending the file to our own server — once it hits
+        // 100%, our backend is now calling Gemini + validating the response, which has
+        // no further observable signal, so step 2 just holds until the request resolves.
+        onUploadProgress: (evt) => {
+          if (evt.total && evt.loaded >= evt.total) {
+            setScanState((s) => (s.stepIndex < 1 ? { ...s, stepIndex: 1 } : s))
+          }
+        },
+      })
+      const { resume_url, extracted_at, ocr_status, ocr_detail } = res.data.data
       const toastConfig = OCR_TOAST[ocr_status] || OCR_TOAST.error
       toastConfig.fn(res.data.message || toastConfig.message)
       // The endpoint no longer returns a full profile object or auto-saves extracted
@@ -91,8 +104,19 @@ export default function JobseekerProfile() {
       // (personal/education/employment/skills) isn't merged into the form yet; that
       // merge-with-highlight wiring is Phase 4.
       setForm((f) => ({ ...f, resume_url }))
-    } catch {
+      if (ocr_status === 'real') {
+        // "Filling your profile" corresponds to the setForm merge just above, which has
+        // already happened synchronously by this point — not an artificial delay.
+        setScanState({ open: true, phase: 'done', stepIndex: 2, extractedAt: extracted_at, errorDetail: null })
+      } else {
+        setScanState({ open: true, phase: 'error', stepIndex: 1, extractedAt: null, errorDetail: ocr_detail })
+      }
+    } catch (err) {
       toast.error('Could not process resume.')
+      setScanState({
+        open: true, phase: 'error', stepIndex: 0, extractedAt: null,
+        errorDetail: err.response?.data?.message || 'Something went wrong while uploading your resume.',
+      })
     } finally {
       setUploadingResume(false)
     }
@@ -260,6 +284,15 @@ export default function JobseekerProfile() {
       <div id="section-documents">
         <DocumentsSection form={form} onUploadDocument={uploadDocument} onDeleteDocument={deleteDocument} uploadingDocType={uploadingDocType} />
       </div>
+
+      <ResumeScanModal
+        open={scanState.open}
+        phase={scanState.phase}
+        stepIndex={scanState.stepIndex}
+        extractedAt={scanState.extractedAt}
+        errorDetail={scanState.errorDetail}
+        onClose={() => setScanState((s) => ({ ...s, open: false }))}
+      />
     </motion.div>
   )
 }
