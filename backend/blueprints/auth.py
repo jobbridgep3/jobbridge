@@ -184,8 +184,9 @@ def verify_otp():
         )
 
     if payload["purpose"] == "register":
-        # Auto-issue a JWT so the frontend can immediately drive /complete-profile
-        # (resume upload) without a separate login step in between.
+        # Auto-issue a JWT so the frontend can immediately land the user on their
+        # role's landing page (jobseeker: /jobseeker/profile, employer: /employer/company)
+        # without a separate login step in between.
         token = create_access_token(identity=str(user.id), additional_claims={"role": user.role, "email": user.email})
         return ok({"token": token, "user": user.to_dict()}, "Verified successfully.")
 

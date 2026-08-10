@@ -12,7 +12,6 @@ import RegisterChoice from './pages/public/RegisterChoice'
 import VerifyOtp from './pages/public/VerifyOtp'
 import ForgotPassword from './pages/public/ForgotPassword'
 import ResetPassword from './pages/public/ResetPassword'
-import CompleteProfile from './pages/public/CompleteProfile'
 import PublicAnnouncements from './pages/public/Announcements'
 import AnnouncementDetails from './pages/public/AnnouncementDetails'
 import DashboardAnnouncementDetails from './pages/dashboard/AnnouncementDetails'
@@ -140,7 +139,6 @@ export default function App() {
       <Route path="/verify-otp" element={<VerifyOtp />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/complete-profile" element={<CompleteProfile />} />
 
       <Route element={<ProtectedRoute />}>
         {/* Announcement detail opened from any authenticated dashboard —

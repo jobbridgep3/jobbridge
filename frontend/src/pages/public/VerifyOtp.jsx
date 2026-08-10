@@ -42,7 +42,7 @@ export default function VerifyOtp() {
         const { token, user } = res.data.data
         setAuth(token, user)
         toast.success('Account verified!')
-        navigate(user.role === 'employer' ? '/employer/company' : '/complete-profile')
+        navigate(user.role === 'employer' ? '/employer/company' : '/jobseeker/profile')
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid code.')
