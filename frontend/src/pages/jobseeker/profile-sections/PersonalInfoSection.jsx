@@ -8,8 +8,10 @@ import { RequiredLabel } from '../../../components/ui/RequiredLabel'
 import { cn, sanitizeDigits } from '../../../lib/utils'
 import { CIVIL_STATUSES, GENDERS } from './options'
 
+const HIGHLIGHT_CLASS = 'border-emerald-300 bg-emerald-50 focus:border-emerald-400'
+
 export function PersonalInfoSection({
-  form, setForm, onUploadPicture, uploadingPicture, missingKeys = new Set(), open, onToggle,
+  form, setForm, onUploadPicture, uploadingPicture, missingKeys = new Set(), highlightedFields = new Set(), clearHighlight, open, onToggle,
 }) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: { 'image/*': [] },
@@ -21,6 +23,8 @@ export function PersonalInfoSection({
   })
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
+  const onBlur = (field) => () => clearHighlight?.(field)
+  const fieldClass = (field) => cn(missingKeys.has(field) && 'border-red-300 focus:border-red-400', highlightedFields.has(field) && HIGHLIGHT_CLASS)
 
   return (
     <CollapsibleCard title="Personal Information" open={open} onToggle={onToggle} contentClassName="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -48,11 +52,7 @@ export function PersonalInfoSection({
 
         <div>
           <Label><RequiredLabel label="Full Name" missing={missingKeys.has('full_name')} /></Label>
-          <Input
-            value={form.full_name || ''}
-            onChange={set('full_name')}
-            className={cn(missingKeys.has('full_name') && 'border-red-300 focus:border-red-400')}
-          />
+          <Input value={form.full_name || ''} onChange={set('full_name')} onBlur={onBlur('full_name')} className={fieldClass('full_name')} />
         </div>
         <div>
           <Label>Email Address</Label>
@@ -65,7 +65,8 @@ export function PersonalInfoSection({
             inputMode="numeric"
             maxLength={15}
             onChange={(e) => setForm((f) => ({ ...f, contact_number: sanitizeDigits(e.target.value) }))}
-            className={cn(missingKeys.has('contact_number') && 'border-red-300 focus:border-red-400')}
+            onBlur={onBlur('contact_number')}
+            className={fieldClass('contact_number')}
           />
         </div>
         <div>
@@ -73,20 +74,19 @@ export function PersonalInfoSection({
           <div className="flex items-center gap-2">
             <DatePicker
               value={form.date_of_birth || ''}
-              onChange={(value) => setForm((f) => ({ ...f, date_of_birth: value }))}
+              onChange={(value) => {
+                setForm((f) => ({ ...f, date_of_birth: value }))
+                clearHighlight?.('date_of_birth')
+              }}
               maxDate={new Date().toISOString().slice(0, 10)}
-              className={cn(missingKeys.has('date_of_birth') && 'border-red-300 focus:border-red-400')}
+              className={fieldClass('date_of_birth')}
             />
             {form.age != null && <span className="whitespace-nowrap text-xs text-slate-400">{form.age} yrs old</span>}
           </div>
         </div>
         <div>
           <Label><RequiredLabel label="Gender" missing={missingKeys.has('gender')} /></Label>
-          <Select
-            value={form.gender || ''}
-            onChange={set('gender')}
-            className={cn(missingKeys.has('gender') && 'border-red-300 focus:border-red-400')}
-          >
+          <Select value={form.gender || ''} onChange={set('gender')} onBlur={onBlur('gender')} className={fieldClass('gender')}>
             <option value="">Select…</option>
             {GENDERS.map((g) => (
               <option key={g} value={g}>{g}</option>
@@ -95,11 +95,7 @@ export function PersonalInfoSection({
         </div>
         <div>
           <Label><RequiredLabel label="Civil Status" missing={missingKeys.has('civil_status')} /></Label>
-          <Select
-            value={form.civil_status || ''}
-            onChange={set('civil_status')}
-            className={cn(missingKeys.has('civil_status') && 'border-red-300 focus:border-red-400')}
-          >
+          <Select value={form.civil_status || ''} onChange={set('civil_status')} onBlur={onBlur('civil_status')} className={fieldClass('civil_status')}>
             <option value="">Select…</option>
             {CIVIL_STATUSES.map((c) => (
               <option key={c} value={c}>{c}</option>
@@ -108,43 +104,33 @@ export function PersonalInfoSection({
         </div>
         <div>
           <Label><RequiredLabel label="Nationality" missing={missingKeys.has('nationality')} /></Label>
-          <Input
-            value={form.nationality || ''}
-            onChange={set('nationality')}
-            className={cn(missingKeys.has('nationality') && 'border-red-300 focus:border-red-400')}
-          />
+          <Input value={form.nationality || ''} onChange={set('nationality')} onBlur={onBlur('nationality')} className={fieldClass('nationality')} />
         </div>
         <div>
           <Label><RequiredLabel label="Barangay" missing={missingKeys.has('barangay')} /></Label>
-          <Input
-            value={form.barangay || ''}
-            onChange={set('barangay')}
-            className={cn(missingKeys.has('barangay') && 'border-red-300 focus:border-red-400')}
-          />
+          <Input value={form.barangay || ''} onChange={set('barangay')} onBlur={onBlur('barangay')} className={fieldClass('barangay')} />
         </div>
         <div>
           <Label><RequiredLabel label="Municipality" missing={missingKeys.has('municipality')} /></Label>
-          <Input
-            value={form.municipality || ''}
-            onChange={set('municipality')}
-            className={cn(missingKeys.has('municipality') && 'border-red-300 focus:border-red-400')}
-          />
+          <Input value={form.municipality || ''} onChange={set('municipality')} onBlur={onBlur('municipality')} className={fieldClass('municipality')} />
         </div>
         <div>
           <Label><RequiredLabel label="Province" missing={missingKeys.has('province')} /></Label>
-          <Input
-            value={form.province || ''}
-            onChange={set('province')}
-            className={cn(missingKeys.has('province') && 'border-red-300 focus:border-red-400')}
-          />
+          <Input value={form.province || ''} onChange={set('province')} onBlur={onBlur('province')} className={fieldClass('province')} />
         </div>
         <div>
           <Label>Region</Label>
-          <Input value={form.region_name || ''} onChange={set('region_name')} placeholder="e.g. Region IV-A (CALABARZON)" />
+          <Input
+            value={form.region_name || ''}
+            onChange={set('region_name')}
+            onBlur={onBlur('region_name')}
+            placeholder="e.g. Region IV-A (CALABARZON)"
+            className={fieldClass('region_name')}
+          />
         </div>
         <div>
           <Label>ZIP Code</Label>
-          <Input value={form.zip_code || ''} onChange={set('zip_code')} placeholder="e.g. 4000" />
+          <Input value={form.zip_code || ''} onChange={set('zip_code')} onBlur={onBlur('zip_code')} placeholder="e.g. 4000" className={fieldClass('zip_code')} />
         </div>
     </CollapsibleCard>
   )

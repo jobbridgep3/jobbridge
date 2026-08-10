@@ -18,6 +18,7 @@ import { DocumentsSection } from './profile-sections/DocumentsSection'
 import { EducationSection } from './profile-sections/EducationSection'
 import { EmploymentInfoSection } from './profile-sections/EmploymentInfoSection'
 import { PersonalInfoSection } from './profile-sections/PersonalInfoSection'
+import { isExtractionEmpty, mergeExtractedIntoForm } from './profile-sections/mergeExtracted'
 import { computeCompletion } from './profile-sections/requiredFields'
 import { ResumeScanModal } from './profile-sections/ResumeScanModal'
 import { ResumeUploadSection } from './profile-sections/ResumeUploadSection'
@@ -40,6 +41,9 @@ export default function JobseekerProfile() {
   const [form, setForm] = useState(null)
   const [uploadingResume, setUploadingResume] = useState(false)
   const [scanState, setScanState] = useState({ open: false, phase: 'scanning', stepIndex: 0, extractedAt: null, errorDetail: null })
+  // Session-only, cleared per key on edit/blur (see clearHighlight below) — never
+  // persisted, purely a "review this" visual cue for fields auto-filled this session.
+  const [highlightedFields, setHighlightedFields] = useState(new Set())
   // Session-only (not persisted to backend or localStorage, per spec) — resets to
   // all-expanded on every page load.
   const [openSections, setOpenSections] = useState({ personal: true, education: true, employment: true, skills: true })
@@ -95,21 +99,41 @@ export default function JobseekerProfile() {
           }
         },
       })
-      const { resume_url, extracted_at, ocr_status, ocr_detail } = res.data.data
-      const toastConfig = OCR_TOAST[ocr_status] || OCR_TOAST.error
-      toastConfig.fn(res.data.message || toastConfig.message)
-      // The endpoint no longer returns a full profile object or auto-saves extracted
-      // fields (see backend Phase 1 notes) — only resume_url is persisted server-side,
-      // so only that is patched into local form state here. res.data.data.extracted
-      // (personal/education/employment/skills) isn't merged into the form yet; that
-      // merge-with-highlight wiring is Phase 4.
-      setForm((f) => ({ ...f, resume_url }))
-      if (ocr_status === 'real') {
-        // "Filling your profile" corresponds to the setForm merge just above, which has
+      const { resume_url, extracted, extracted_at, ocr_status, ocr_detail } = res.data.data
+      // A "real" ocr_status with nothing usable in it is treated as an empty-extraction
+      // failure, not a success — decided before picking the toast, so the toast and the
+      // modal's phase never contradict each other (e.g. a success toast followed by the
+      // modal flipping to its error state).
+      const isEmpty = ocr_status === 'real' && isExtractionEmpty(extracted)
+      const toastConfig = ocr_status === 'real' && !isEmpty ? OCR_TOAST.real : OCR_TOAST.error
+      // The backend's own message text is only trustworthy when it agrees with our
+      // local isEmpty decision — it always says "processed" for ocr_status "real",
+      // which would read as a false success if we've decided to treat this as empty.
+      toastConfig.fn(!isEmpty ? res.data.message || toastConfig.message : toastConfig.message)
+
+      if (ocr_status === 'real' && !isEmpty) {
+        // Merge against the LATEST form state (functional update), not the `form`
+        // this closure captured when the upload started — the user may have edited
+        // fields while the request was in flight. mergeExtractedIntoForm never
+        // overwrites a field that already has a value (see mergeExtracted.js).
+        let newHighlights = new Set()
+        setForm((f) => {
+          const { form: merged, highlightedKeys } = mergeExtractedIntoForm({ ...f, resume_url }, extracted)
+          newHighlights = highlightedKeys
+          return merged
+        })
+        setHighlightedFields((prev) => new Set([...prev, ...newHighlights]))
+        // "Filling your profile" corresponds to the merge just above, which has
         // already happened synchronously by this point — not an artificial delay.
         setScanState({ open: true, phase: 'done', stepIndex: 2, extractedAt: extracted_at, errorDetail: null })
       } else {
-        setScanState({ open: true, phase: 'error', stepIndex: 1, extractedAt: null, errorDetail: ocr_detail })
+        setForm((f) => ({ ...f, resume_url }))
+        setScanState({
+          open: true, phase: 'error', stepIndex: isEmpty ? 2 : 1, extractedAt: null,
+          errorDetail: isEmpty
+            ? "We couldn't find any information to extract from this document. Please fill in your details manually."
+            : ocr_detail,
+        })
       }
     } catch (err) {
       toast.error('Could not process resume.')
@@ -201,6 +225,14 @@ export default function JobseekerProfile() {
 
   const toggleSection = (key) => setOpenSections((s) => ({ ...s, [key]: !s[key] }))
 
+  const clearHighlight = (key) =>
+    setHighlightedFields((s) => {
+      if (!s.has(key)) return s
+      const next = new Set(s)
+      next.delete(key)
+      return next
+    })
+
   // resume_url stays tagged section "documents" in requiredFields.js for checklist
   // grouping (still labeled "Documents"), but physically renders in its own section
   // at the top of the page — redirect just that one item's scroll target, and expand
@@ -250,6 +282,8 @@ export default function JobseekerProfile() {
           onUploadPicture={uploadPicture}
           uploadingPicture={uploadingPicture}
           missingKeys={missingKeys}
+          highlightedFields={highlightedFields}
+          clearHighlight={clearHighlight}
           open={openSections.personal}
           onToggle={() => toggleSection('personal')}
         />
@@ -268,6 +302,8 @@ export default function JobseekerProfile() {
           form={form}
           setForm={setForm}
           missingKeys={missingKeys}
+          highlightedFields={highlightedFields}
+          clearHighlight={clearHighlight}
           open={openSections.employment}
           onToggle={() => toggleSection('employment')}
         />
@@ -277,6 +313,8 @@ export default function JobseekerProfile() {
           form={form}
           setForm={setForm}
           missingKeys={missingKeys}
+          highlightedFields={highlightedFields}
+          clearHighlight={clearHighlight}
           open={openSections.skills}
           onToggle={() => toggleSection('skills')}
         />

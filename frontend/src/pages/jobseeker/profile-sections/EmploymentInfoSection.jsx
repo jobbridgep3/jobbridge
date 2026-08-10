@@ -8,13 +8,24 @@ import { RequiredLabel } from '../../../components/ui/RequiredLabel'
 import { cn } from '../../../lib/utils'
 import { EMPLOYMENT_STATUSES, EMPLOYMENT_TYPES } from './options'
 
-export function EmploymentInfoSection({ form, setForm, missingKeys = new Set(), open, onToggle }) {
+const HIGHLIGHT_CLASS = 'border-emerald-300 bg-emerald-50 focus:border-emerald-400'
+
+export function EmploymentInfoSection({
+  form, setForm, missingKeys = new Set(), highlightedFields = new Set(), clearHighlight, open, onToggle,
+}) {
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
+  const onBlur = (field) => () => clearHighlight?.(field)
+  const fieldClass = (field) => cn(missingKeys.has(field) && 'border-red-300 focus:border-red-400', highlightedFields.has(field) && HIGHLIGHT_CLASS)
 
   const addWorkExperience = () =>
     setForm((f) => ({ ...f, work_experiences: [...(f.work_experiences || []), { company: '', position: '', start_date: '', end_date: '' }] }))
+  // Any edit to an entry clears just that entry's auto-fill highlight, never affecting
+  // sibling entries.
   const updateWorkExperience = (idx, field, value) =>
-    setForm((f) => ({ ...f, work_experiences: f.work_experiences.map((w, i) => (i === idx ? { ...w, [field]: value } : w)) }))
+    setForm((f) => ({
+      ...f,
+      work_experiences: f.work_experiences.map((w, i) => (i === idx ? { ...w, [field]: value, _highlighted: false } : w)),
+    }))
   const removeWorkExperience = (idx) => setForm((f) => ({ ...f, work_experiences: f.work_experiences.filter((_, i) => i !== idx) }))
 
   return (
@@ -25,7 +36,8 @@ export function EmploymentInfoSection({ form, setForm, missingKeys = new Set(), 
             <Select
               value={form.employment_status || ''}
               onChange={set('employment_status')}
-              className={cn(missingKeys.has('employment_status') && 'border-red-300 focus:border-red-400')}
+              onBlur={onBlur('employment_status')}
+              className={fieldClass('employment_status')}
             >
               <option value="">Select…</option>
               {EMPLOYMENT_STATUSES.map((s) => (
@@ -38,7 +50,8 @@ export function EmploymentInfoSection({ form, setForm, missingKeys = new Set(), 
             <Select
               value={form.employment_type || ''}
               onChange={set('employment_type')}
-              className={cn(missingKeys.has('employment_type') && 'border-red-300 focus:border-red-400')}
+              onBlur={onBlur('employment_type')}
+              className={fieldClass('employment_type')}
             >
               <option value="">Select…</option>
               {EMPLOYMENT_TYPES.map((t) => (
@@ -51,7 +64,8 @@ export function EmploymentInfoSection({ form, setForm, missingKeys = new Set(), 
             <Input
               value={form.preferred_job_position || ''}
               onChange={set('preferred_job_position')}
-              className={cn(missingKeys.has('preferred_job_position') && 'border-red-300 focus:border-red-400')}
+              onBlur={onBlur('preferred_job_position')}
+              className={fieldClass('preferred_job_position')}
             />
           </div>
           <div>
@@ -59,7 +73,8 @@ export function EmploymentInfoSection({ form, setForm, missingKeys = new Set(), 
             <Input
               value={form.preferred_industry || ''}
               onChange={set('preferred_industry')}
-              className={cn(missingKeys.has('preferred_industry') && 'border-red-300 focus:border-red-400')}
+              onBlur={onBlur('preferred_industry')}
+              className={fieldClass('preferred_industry')}
             />
           </div>
           <div>
@@ -67,12 +82,19 @@ export function EmploymentInfoSection({ form, setForm, missingKeys = new Set(), 
             <Input
               value={form.preferred_work_location || ''}
               onChange={set('preferred_work_location')}
-              className={cn(missingKeys.has('preferred_work_location') && 'border-red-300 focus:border-red-400')}
+              onBlur={onBlur('preferred_work_location')}
+              className={fieldClass('preferred_work_location')}
             />
           </div>
           <div>
             <Label>Expected Salary (Optional)</Label>
-            <Input placeholder="e.g. ₱15,000 or Negotiable" value={form.expected_salary || ''} onChange={set('expected_salary')} />
+            <Input
+              placeholder="e.g. ₱15,000 or Negotiable"
+              value={form.expected_salary || ''}
+              onChange={set('expected_salary')}
+              onBlur={onBlur('expected_salary')}
+              className={fieldClass('expected_salary')}
+            />
           </div>
         </div>
 
@@ -85,9 +107,25 @@ export function EmploymentInfoSection({ form, setForm, missingKeys = new Set(), 
           </div>
           <div className="space-y-4">
             {(form.work_experiences || []).map((w, idx) => (
-              <div key={idx} className="grid grid-cols-1 gap-3 rounded-lg border border-slate-100 p-3 sm:grid-cols-4">
-                <Input placeholder="Company" value={w.company} onChange={(e) => updateWorkExperience(idx, 'company', e.target.value)} />
-                <Input placeholder="Position" value={w.position} onChange={(e) => updateWorkExperience(idx, 'position', e.target.value)} />
+              <div
+                key={idx}
+                className={cn(
+                  'grid grid-cols-1 gap-3 rounded-lg border border-slate-100 p-3 sm:grid-cols-4',
+                  w._highlighted && 'border-emerald-300 bg-emerald-50'
+                )}
+              >
+                <Input
+                  placeholder="Company"
+                  value={w.company}
+                  onChange={(e) => updateWorkExperience(idx, 'company', e.target.value)}
+                  onBlur={() => updateWorkExperience(idx, 'company', w.company)}
+                />
+                <Input
+                  placeholder="Position"
+                  value={w.position}
+                  onChange={(e) => updateWorkExperience(idx, 'position', e.target.value)}
+                  onBlur={() => updateWorkExperience(idx, 'position', w.position)}
+                />
                 <DatePicker
                   placeholder="Start date"
                   value={w.start_date || ''}

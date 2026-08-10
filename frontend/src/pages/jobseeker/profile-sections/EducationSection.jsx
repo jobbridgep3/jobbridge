@@ -4,6 +4,7 @@ import { Button } from '../../../components/ui/Button'
 import { CollapsibleCard } from '../../../components/ui/CollapsibleCard'
 import { Input, Select } from '../../../components/ui/Input'
 import { RequiredLabel } from '../../../components/ui/RequiredLabel'
+import { cn } from '../../../lib/utils'
 import { ATTAINMENT_LEVELS } from './options'
 
 export function EducationSection({ form, setForm, missingKeys = new Set(), open, onToggle }) {
@@ -12,8 +13,10 @@ export function EducationSection({ form, setForm, missingKeys = new Set(), open,
       ...f,
       educations: [...(f.educations || []), { school: '', degree: '', graduation_year: '', attainment_level: '', honors: '' }],
     }))
+  // Any edit to an entry clears just that entry's auto-fill highlight, never affecting
+  // sibling entries.
   const updateEducation = (idx, field, value) =>
-    setForm((f) => ({ ...f, educations: f.educations.map((e, i) => (i === idx ? { ...e, [field]: value } : e)) }))
+    setForm((f) => ({ ...f, educations: f.educations.map((e, i) => (i === idx ? { ...e, [field]: value, _highlighted: false } : e)) }))
   const removeEducation = (idx) => setForm((f) => ({ ...f, educations: f.educations.filter((_, i) => i !== idx) }))
 
   return (
@@ -32,9 +35,21 @@ export function EducationSection({ form, setForm, missingKeys = new Set(), open,
         <p className="text-xs text-red-600">Add at least one entry with a School Name and Highest Attainment selected.</p>
       )}
       {(form.educations || []).map((e, idx) => (
-        <div key={idx} className="grid grid-cols-1 gap-3 rounded-lg border border-slate-100 p-3 sm:grid-cols-2 lg:grid-cols-5">
-          <Input placeholder="School Name" value={e.school} onChange={(ev) => updateEducation(idx, 'school', ev.target.value)} />
-          <Select value={e.attainment_level || ''} onChange={(ev) => updateEducation(idx, 'attainment_level', ev.target.value)}>
+        <div
+          key={idx}
+          className={cn('grid grid-cols-1 gap-3 rounded-lg border border-slate-100 p-3 sm:grid-cols-2 lg:grid-cols-5', e._highlighted && 'border-emerald-300 bg-emerald-50')}
+        >
+          <Input
+            placeholder="School Name"
+            value={e.school}
+            onChange={(ev) => updateEducation(idx, 'school', ev.target.value)}
+            onBlur={() => updateEducation(idx, 'school', e.school)}
+          />
+          <Select
+            value={e.attainment_level || ''}
+            onChange={(ev) => updateEducation(idx, 'attainment_level', ev.target.value)}
+            onBlur={() => updateEducation(idx, 'attainment_level', e.attainment_level)}
+          >
             <option value="">Highest Attainment…</option>
             {ATTAINMENT_LEVELS.map((lvl) => (
               <option key={lvl} value={lvl}>{lvl}</option>
@@ -44,14 +59,21 @@ export function EducationSection({ form, setForm, missingKeys = new Set(), open,
             placeholder="Course/Program (N/A if not applicable)"
             value={e.degree || ''}
             onChange={(ev) => updateEducation(idx, 'degree', ev.target.value)}
+            onBlur={() => updateEducation(idx, 'degree', e.degree)}
           />
           <Input
             placeholder="Year Graduated"
             value={e.graduation_year || ''}
             onChange={(ev) => updateEducation(idx, 'graduation_year', ev.target.value)}
+            onBlur={() => updateEducation(idx, 'graduation_year', e.graduation_year)}
           />
           <div className="flex gap-2">
-            <Input placeholder="Honors (optional)" value={e.honors || ''} onChange={(ev) => updateEducation(idx, 'honors', ev.target.value)} />
+            <Input
+              placeholder="Honors (optional)"
+              value={e.honors || ''}
+              onChange={(ev) => updateEducation(idx, 'honors', ev.target.value)}
+              onBlur={() => updateEducation(idx, 'honors', e.honors)}
+            />
             <Button variant="ghost" size="icon" onClick={() => removeEducation(idx)}>
               <Trash2 className="h-4 w-4 text-red-500" />
             </Button>
