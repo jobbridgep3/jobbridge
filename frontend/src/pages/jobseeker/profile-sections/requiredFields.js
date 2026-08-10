@@ -18,11 +18,6 @@ export const REQUIRED_FIELDS = [
     key: 'government_id', section: 'documents', label: 'Valid Government ID',
     check: (f) => (f.documents || []).some((d) => d.document_type === 'government_id'),
   },
-  { key: 'employment_status', section: 'employment', label: 'Employment Status', check: (f) => Boolean(f.employment_status) },
-  { key: 'preferred_job_position', section: 'employment', label: 'Preferred Job Position', check: (f) => Boolean(f.preferred_job_position) },
-  { key: 'preferred_industry', section: 'employment', label: 'Preferred Industry', check: (f) => Boolean(f.preferred_industry) },
-  { key: 'preferred_work_location', section: 'employment', label: 'Preferred Work Location', check: (f) => Boolean(f.preferred_work_location) },
-  { key: 'employment_type', section: 'employment', label: 'Employment Type Preferred', check: (f) => Boolean(f.employment_type) },
   {
     key: 'educations', section: 'education', label: 'At Least One Education Entry',
     check: (f) => (f.educations || []).some((e) => e.school && e.attainment_level),
@@ -30,7 +25,10 @@ export const REQUIRED_FIELDS = [
   { key: 'technical_skills', section: 'skills', label: 'Technical Skills', check: (f) => Boolean(f.technical_skills?.length) },
   { key: 'soft_skills', section: 'skills', label: 'Soft Skills', check: (f) => Boolean(f.soft_skills?.length) },
   // Intentionally excluded (optional, matches existing UI labeling):
-  // expected_salary, work_experiences, languages_spoken, certifications.
+  // expected_salary, work_experiences, languages_spoken, certifications, and the
+  // entire Employment Information section (employment_status, employment_type,
+  // preferred_job_position, preferred_industry, preferred_work_location) — a
+  // jobseeker can complete their profile without ever filling it in.
 ]
 
 export const SECTION_LABELS = {

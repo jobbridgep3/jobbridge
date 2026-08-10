@@ -28,11 +28,6 @@ REQUIRED_FIELDS = [
         "government_id", "documents", "Valid Government ID",
         lambda p: "government_id" in {d.document_type for d in p.documents},
     ),
-    ("employment_status", "employment", "Employment Status", lambda p: bool(p.employment_status)),
-    ("preferred_job_position", "employment", "Preferred Job Position", lambda p: bool(p.preferred_job_position)),
-    ("preferred_industry", "employment", "Preferred Industry", lambda p: bool(p.preferred_industry)),
-    ("preferred_work_location", "employment", "Preferred Work Location", lambda p: bool(p.preferred_work_location)),
-    ("employment_type", "employment", "Employment Type Preferred", lambda p: bool(p.employment_type)),
     (
         "educations", "education", "At Least One Education Entry",
         lambda p: any(e.school and e.attainment_level for e in p.educations),
@@ -40,7 +35,10 @@ REQUIRED_FIELDS = [
     ("technical_skills", "skills", "Technical Skills", lambda p: bool(p.technical_skills)),
     ("soft_skills", "skills", "Soft Skills", lambda p: bool(p.soft_skills)),
     # Intentionally excluded (optional, matches existing UI labeling):
-    # expected_salary, work_experiences, languages_spoken, certifications.
+    # expected_salary, work_experiences, languages_spoken, certifications, and the
+    # entire Employment Information section (employment_status, employment_type,
+    # preferred_job_position, preferred_industry, preferred_work_location) — a
+    # jobseeker can complete their profile without ever filling it in.
 ]
 
 
