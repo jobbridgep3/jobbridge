@@ -1,10 +1,27 @@
-"""Thin backward-compatible facade over services.resume_parsing.
+"""Flat skill-keyword list used by unrelated non-resume features.
 
-Kept as a separate module (rather than folding callers over to the new path)
-because services/dashboard_service.py imports SKILL_KEYWORDS from this exact path
-for an unrelated vacancy-analytics keyword-frequency widget, not for resume parsing.
+Historically re-exported from services.resume_parsing (the old Vision-OCR resume
+field-mapper), but that package was removed when resume extraction moved to Gemini.
+The list itself is still needed here as-is by:
+  - services/dashboard_service.py — vacancy-analytics keyword-frequency widget
+  - blueprints/employer.py's suggest_skills() — job-posting skill suggestions
+Neither of those is part of resume parsing, so the list is kept verbatim in this
+module rather than removed along with the rest of the old parser.
 """
 
-from .resume_parsing import parse_resume_text  # noqa: F401
-from .resume_parsing.fields.skills import SKILL_KEYWORDS  # noqa: F401
-from .resume_parsing.spacy_model import preload_nlp_model  # noqa: F401
+TECHNICAL_SKILL_KEYWORDS = [
+    "microsoft office", "excel", "word", "powerpoint", "data entry", "python", "java",
+    "javascript", "sql", "web development", "graphic design", "photoshop",
+    "video editing", "social media", "carpentry", "welding", "electrical", "plumbing",
+    "cooking", "baking", "driving", "typing", "cashiering", "inventory management",
+    "warehousing", "housekeeping", "caregiving", "nursing", "teaching", "tutoring",
+    "accounting", "bookkeeping", "sales", "marketing",
+]
+
+SOFT_SKILL_KEYWORDS = [
+    "customer service", "communication", "teamwork", "leadership", "time management",
+    "problem solving", "adaptability", "work ethic", "attention to detail",
+    "multitasking", "interpersonal skills", "critical thinking", "patience", "flexibility",
+]
+
+SKILL_KEYWORDS = TECHNICAL_SKILL_KEYWORDS + SOFT_SKILL_KEYWORDS

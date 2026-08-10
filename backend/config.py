@@ -106,12 +106,21 @@ class Config:
         )
 
     # --- AI service credentials (optional — the feature reports a clear error when absent) ---
-    # Google Vision, used for resume OCR.
+    # Google Vision — used for SPES/DILP/OWWA program-document text extraction
+    # (blueprints/programs.py). No longer used for Profile Management resume
+    # extraction, which moved to Gemini (below).
     GOOGLE_APPLICATION_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
     # Base64-encoded service-account JSON — used in place of a file path where the
     # credentials file can't be delivered to disk (e.g. Render, whose builds start from
     # a fresh git clone with no way to place a git-ignored secret file on it).
     GOOGLE_APPLICATION_CREDENTIALS_JSON = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON", "")
+
+    # Gemini — powers Profile Management resume upload/extraction (structured document
+    # understanding, replacing the old Vision OCR + regex pipeline). Deliberately NOT
+    # passed through _require(): CI/local boot without the key set must not break; the
+    # endpoint returns a clear error when it's blank.
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+    GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite")
 
     # Groq (Qwen3.6 27B) powers the AI assistant — see services/assistant_service.py.
     # Migrated from llama-3.3-70b-versatile, which Groq shut down for free/developer-tier
