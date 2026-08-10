@@ -1,14 +1,16 @@
 import { UserRound } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
+import { CollapsibleCard } from '../../../components/ui/CollapsibleCard'
 import { DatePicker } from '../../../components/ui/DatePicker'
 import { Input, Label, Select } from '../../../components/ui/Input'
 import { RequiredLabel } from '../../../components/ui/RequiredLabel'
 import { cn, sanitizeDigits } from '../../../lib/utils'
 import { CIVIL_STATUSES, GENDERS } from './options'
 
-export function PersonalInfoSection({ form, setForm, onUploadPicture, uploadingPicture, missingKeys = new Set() }) {
+export function PersonalInfoSection({
+  form, setForm, onUploadPicture, uploadingPicture, missingKeys = new Set(), open, onToggle,
+}) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: { 'image/*': [] },
     maxFiles: 1,
@@ -21,11 +23,7 @@ export function PersonalInfoSection({ form, setForm, onUploadPicture, uploadingP
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Personal Information</CardTitle>
-      </CardHeader>
-      <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <CollapsibleCard title="Personal Information" open={open} onToggle={onToggle} contentClassName="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2 flex items-center gap-4">
           <div
             {...(onUploadPicture ? getRootProps() : {})}
@@ -148,7 +146,6 @@ export function PersonalInfoSection({ form, setForm, onUploadPicture, uploadingP
           <Label>ZIP Code</Label>
           <Input value={form.zip_code || ''} onChange={set('zip_code')} placeholder="e.g. 4000" />
         </div>
-      </CardContent>
-    </Card>
+    </CollapsibleCard>
   )
 }

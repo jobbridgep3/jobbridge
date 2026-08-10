@@ -2,7 +2,7 @@ import { X } from 'lucide-react'
 import { useState } from 'react'
 
 import { Badge } from '../../../components/ui/Badge'
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
+import { CollapsibleCard } from '../../../components/ui/CollapsibleCard'
 import { Button } from '../../../components/ui/Button'
 import { Input } from '../../../components/ui/Input'
 import { RequiredLabel } from '../../../components/ui/RequiredLabel'
@@ -14,7 +14,7 @@ const GROUPS = [
   { field: 'certifications', label: 'Certifications (TESDA, NC II, etc.)' },
 ]
 
-export function SkillsSection({ form, setForm, missingKeys = new Set() }) {
+export function SkillsSection({ form, setForm, missingKeys = new Set(), open, onToggle }) {
   const addItem = (field, value) => {
     if (!value.trim()) return
     setForm((f) => ({ ...f, [field]: [...new Set([...(f[field] || []), value.trim()])] }))
@@ -22,11 +22,7 @@ export function SkillsSection({ form, setForm, missingKeys = new Set() }) {
   const removeItem = (field, value) => setForm((f) => ({ ...f, [field]: f[field].filter((s) => s !== value) }))
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Skills</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <CollapsibleCard title="Skills" open={open} onToggle={onToggle} contentClassName="space-y-6">
         {GROUPS.map(({ field, label, requiredKey }) => (
           <div key={field}>
             <p className="mb-2 text-sm font-medium text-slate-700">
@@ -46,8 +42,7 @@ export function SkillsSection({ form, setForm, missingKeys = new Set() }) {
             <ChipInput onAdd={(value) => addItem(field, value)} />
           </div>
         ))}
-      </CardContent>
-    </Card>
+    </CollapsibleCard>
   )
 }
 

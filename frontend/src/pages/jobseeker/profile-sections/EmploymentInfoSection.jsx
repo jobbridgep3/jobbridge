@@ -1,14 +1,14 @@
 import { Plus, Trash2 } from 'lucide-react'
 
 import { Button } from '../../../components/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
+import { CollapsibleCard } from '../../../components/ui/CollapsibleCard'
 import { DatePicker } from '../../../components/ui/DatePicker'
 import { Input, Label, Select } from '../../../components/ui/Input'
 import { RequiredLabel } from '../../../components/ui/RequiredLabel'
 import { cn } from '../../../lib/utils'
 import { EMPLOYMENT_STATUSES, EMPLOYMENT_TYPES } from './options'
 
-export function EmploymentInfoSection({ form, setForm, missingKeys = new Set() }) {
+export function EmploymentInfoSection({ form, setForm, missingKeys = new Set(), open, onToggle }) {
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
 
   const addWorkExperience = () =>
@@ -18,11 +18,7 @@ export function EmploymentInfoSection({ form, setForm, missingKeys = new Set() }
   const removeWorkExperience = (idx) => setForm((f) => ({ ...f, work_experiences: f.work_experiences.filter((_, i) => i !== idx) }))
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Employment Information</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <CollapsibleCard title="Employment Information" open={open} onToggle={onToggle} contentClassName="space-y-6">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label><RequiredLabel label="Employment Status" missing={missingKeys.has('employment_status')} /></Label>
@@ -114,7 +110,6 @@ export function EmploymentInfoSection({ form, setForm, missingKeys = new Set() }
             {!form.work_experiences?.length && <p className="text-sm text-slate-400">No work experience added yet.</p>}
           </div>
         </div>
-      </CardContent>
-    </Card>
+    </CollapsibleCard>
   )
 }

@@ -8,8 +8,15 @@ import { cn } from '../../lib/utils'
  * corresponding section (via `id="section-<key>"` on each Card in the page) when an
  * unchecked item is clicked. `sectionLabels` defaults to the jobseeker map so the
  * existing jobseeker Profile page needs no changes; Company/HR Profile pass their
- * own (companySections/requiredFields.js, hr-sections/requiredFields.js). */
-export function CompletionChecklist({ completion, sectionLabels = JOBSEEKER_SECTION_LABELS }) {
+ * own (companySections/requiredFields.js, hr-sections/requiredFields.js).
+ *
+ * `onNavigate(item)` optionally overrides the default scroll-to-`item.section`
+ * behavior — used by the jobseeker Profile page (collapsible sections) to expand a
+ * collapsed section and/or redirect a field to a differently-located section (e.g.
+ * resume_url, tagged section "documents" for grouping purposes but physically
+ * rendered in its own section at the top of the page) before scrolling to it. Omit
+ * it to keep the plain default behavior. */
+export function CompletionChecklist({ completion, sectionLabels = JOBSEEKER_SECTION_LABELS, onNavigate }) {
   const { results, completedCount, totalCount } = completion
 
   const bySection = results.reduce((acc, item) => {
@@ -20,6 +27,8 @@ export function CompletionChecklist({ completion, sectionLabels = JOBSEEKER_SECT
   const scrollToSection = (key) => {
     document.getElementById(`section-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+
+  const handleClick = (item) => (onNavigate ? onNavigate(item) : scrollToSection(item.section))
 
   return (
     <Card>
@@ -41,7 +50,7 @@ export function CompletionChecklist({ completion, sectionLabels = JOBSEEKER_SECT
                   <button
                     type="button"
                     disabled={item.ok}
-                    onClick={() => scrollToSection(item.section)}
+                    onClick={() => handleClick(item)}
                     className={cn(
                       'flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-sm transition-colors',
                       item.ok ? 'text-slate-400 line-through' : 'text-slate-700 hover:bg-slate-50',

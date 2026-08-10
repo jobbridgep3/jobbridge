@@ -19,10 +19,13 @@ import { EducationSection } from './profile-sections/EducationSection'
 import { EmploymentInfoSection } from './profile-sections/EmploymentInfoSection'
 import { PersonalInfoSection } from './profile-sections/PersonalInfoSection'
 import { computeCompletion } from './profile-sections/requiredFields'
+import { ResumeUploadSection } from './profile-sections/ResumeUploadSection'
 import { SkillsSection } from './profile-sections/SkillsSection'
 
+const COLLAPSIBLE_SECTIONS = ['personal', 'education', 'employment', 'skills']
+
 const OCR_TOAST = {
-  real: { fn: toast.success, message: 'Resume processed — profile auto-filled from OCR.' },
+  real: { fn: toast.success, message: 'Resume processed. Review the extracted fields below, then save your profile.' },
   error: { fn: toast.error, message: "We couldn't automatically read this resume. Please fill in your details manually." },
 }
 
@@ -35,6 +38,9 @@ export default function JobseekerProfile() {
 
   const [form, setForm] = useState(null)
   const [uploadingResume, setUploadingResume] = useState(false)
+  // Session-only (not persisted to backend or localStorage, per spec) — resets to
+  // all-expanded on every page load.
+  const [openSections, setOpenSections] = useState({ personal: true, education: true, employment: true, skills: true })
   const [uploadingPicture, setUploadingPicture] = useState(false)
   const [uploadingDocType, setUploadingDocType] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -76,13 +82,15 @@ export default function JobseekerProfile() {
     fd.append('file', file)
     try {
       const res = await api.post('/api/profile/resume', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
-      const { ocr_status } = res.data.data
+      const { resume_url, ocr_status } = res.data.data
       const toastConfig = OCR_TOAST[ocr_status] || OCR_TOAST.error
       toastConfig.fn(res.data.message || toastConfig.message)
-      // Unlike picture/document uploads, resume OCR is meant to autofill blank
-      // profile fields (personal/education/employment/skills) — so this one
-      // intentionally merges the full response rather than a narrow patch.
-      refreshFrom(res.data.data)
+      // The endpoint no longer returns a full profile object or auto-saves extracted
+      // fields (see backend Phase 1 notes) — only resume_url is persisted server-side,
+      // so only that is patched into local form state here. res.data.data.extracted
+      // (personal/education/employment/skills) isn't merged into the form yet; that
+      // merge-with-highlight wiring is Phase 4.
+      setForm((f) => ({ ...f, resume_url }))
     } catch {
       toast.error('Could not process resume.')
     } finally {
@@ -167,6 +175,20 @@ export default function JobseekerProfile() {
   const completion = useMemo(() => (form ? computeCompletion(form) : null), [form])
   const missingKeys = useMemo(() => new Set((completion?.missingFields || []).map((f) => f.key)), [completion])
 
+  const toggleSection = (key) => setOpenSections((s) => ({ ...s, [key]: !s[key] }))
+
+  // resume_url stays tagged section "documents" in requiredFields.js for checklist
+  // grouping (still labeled "Documents"), but physically renders in its own section
+  // at the top of the page — redirect just that one item's scroll target, and expand
+  // a collapsed section before scrolling to it so the click never lands on a hidden card.
+  const navigateToSection = (item) => {
+    const targetId = item.key === 'resume_url' ? 'resume' : item.section
+    if (COLLAPSIBLE_SECTIONS.includes(item.section)) {
+      setOpenSections((s) => ({ ...s, [item.section]: true }))
+    }
+    document.getElementById(`section-${targetId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   if (isLoading || !form) return <CardSkeleton />
 
   return (
@@ -192,8 +214,11 @@ export default function JobseekerProfile() {
       />
 
       <ProgressBar percent={completion.profileCompletion} />
-      <CompletionChecklist completion={completion} />
+      <CompletionChecklist completion={completion} onNavigate={navigateToSection} />
 
+      <div id="section-resume">
+        <ResumeUploadSection form={form} onUploadResume={uploadResume} uploadingResume={uploadingResume} missingKeys={missingKeys} />
+      </div>
       <div id="section-personal">
         <PersonalInfoSection
           form={form}
@@ -201,27 +226,39 @@ export default function JobseekerProfile() {
           onUploadPicture={uploadPicture}
           uploadingPicture={uploadingPicture}
           missingKeys={missingKeys}
+          open={openSections.personal}
+          onToggle={() => toggleSection('personal')}
         />
       </div>
       <div id="section-education">
-        <EducationSection form={form} setForm={setForm} missingKeys={missingKeys} />
+        <EducationSection
+          form={form}
+          setForm={setForm}
+          missingKeys={missingKeys}
+          open={openSections.education}
+          onToggle={() => toggleSection('education')}
+        />
       </div>
       <div id="section-employment">
-        <EmploymentInfoSection form={form} setForm={setForm} missingKeys={missingKeys} />
+        <EmploymentInfoSection
+          form={form}
+          setForm={setForm}
+          missingKeys={missingKeys}
+          open={openSections.employment}
+          onToggle={() => toggleSection('employment')}
+        />
       </div>
       <div id="section-skills">
-        <SkillsSection form={form} setForm={setForm} missingKeys={missingKeys} />
+        <SkillsSection
+          form={form}
+          setForm={setForm}
+          missingKeys={missingKeys}
+          open={openSections.skills}
+          onToggle={() => toggleSection('skills')}
+        />
       </div>
       <div id="section-documents">
-        <DocumentsSection
-          form={form}
-          onUploadResume={uploadResume}
-          uploadingResume={uploadingResume}
-          onUploadDocument={uploadDocument}
-          onDeleteDocument={deleteDocument}
-          uploadingDocType={uploadingDocType}
-          missingKeys={missingKeys}
-        />
+        <DocumentsSection form={form} onUploadDocument={uploadDocument} onDeleteDocument={deleteDocument} uploadingDocType={uploadingDocType} />
       </div>
     </motion.div>
   )
