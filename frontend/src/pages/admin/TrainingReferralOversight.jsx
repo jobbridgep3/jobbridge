@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
 import { useMemo, useState } from 'react'
@@ -9,6 +9,7 @@ import { DatePicker } from '../../components/ui/DatePicker'
 import { Label, Select } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
 
@@ -16,6 +17,7 @@ const APPLICATION_STATUSES = ['pending', 'pooled', 'submitted_to_tesda', 'for_te
 const BATCH_STATUSES = ['forming', 'submitted_to_tesda', 'for_tesda_response', 'completed', 'declined']
 
 export default function AdminTrainingReferralOversight() {
+  const queryClient = useQueryClient()
   const [status, setStatus] = useState('')
   const [batchId, setBatchId] = useState('')
   const [dateFrom, setDateFrom] = useState('')
@@ -30,6 +32,10 @@ export default function AdminTrainingReferralOversight() {
   const { data: batches, isLoading: batchesLoading } = useQuery({
     queryKey: ['admin', 'training_referral', 'batches', batchStatus],
     queryFn: async () => (await api.get('/api/staff/training-referral/batches', { params: batchStatus ? { status: batchStatus } : {} })).data.data,
+  })
+
+  useSocket({
+    'training_referral:board_update': () => queryClient.invalidateQueries({ queryKey: ['admin', 'training_referral'] }),
   })
 
   const filteredApplications = useMemo(() => {

@@ -35,7 +35,10 @@ export default function StaffTrainingReferralQueue() {
   })
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['staff', 'training_referral'] })
-  useSocket({ 'training_referral:status_change': invalidate })
+  useSocket({
+    'training_referral:status_change': invalidate,
+    'training_referral:board_update': invalidate,
+  })
 
   const pool = useMutation({
     mutationFn: async () => {

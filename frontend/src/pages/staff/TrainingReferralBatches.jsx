@@ -30,8 +30,10 @@ export default function StaffTrainingReferralBatches() {
     queryFn: async () => (await api.get('/api/staff/training-referral/batches')).data.data,
   })
 
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['staff', 'training_referral'] })
   useSocket({
-    'training_referral:status_change': () => queryClient.invalidateQueries({ queryKey: ['staff', 'training_referral'] }),
+    'training_referral:status_change': invalidate,
+    'training_referral:board_update': invalidate,
   })
 
   const create = useMutation({

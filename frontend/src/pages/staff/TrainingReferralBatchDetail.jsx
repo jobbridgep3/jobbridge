@@ -35,7 +35,10 @@ export default function StaffTrainingReferralBatchDetail() {
   })
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey })
-  useSocket({ 'training_referral:status_change': invalidate })
+  useSocket({
+    'training_referral:status_change': invalidate,
+    'training_referral:board_update': invalidate,
+  })
 
   const uploadProposal = useMutation({
     mutationFn: (file) => {

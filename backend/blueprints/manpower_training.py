@@ -25,7 +25,7 @@ from services.email_service import (
     send_manpower_referral_received_email,
     send_manpower_referral_submitted_email,
 )
-from services.notification_service import notify_user
+from services.notification_service import notify_role, notify_user
 from utils.decorators import role_required
 from utils.responses import fail, ok
 
@@ -37,6 +37,15 @@ def _notify_application(application: ManpowerTrainingApplication, title: str, me
         socket_event="training_referral:status_change",
         socket_payload={"application_id": str(application.id), "new_status": application.status},
     )
+
+
+def _notify_board(kind: str, record_id):
+    """Pings staff + admin that an application/batch changed, so their queue/batch/oversight
+    views can live-refetch from the REST endpoints (payload carries no PII — just enough to
+    know something changed)."""
+    payload = {"type": kind, "id": str(record_id)}
+    notify_role("staff", "training_referral:board_update", payload)
+    notify_role("admin", "training_referral:board_update", payload)
 
 manpower_training_bp = Blueprint("manpower_training", __name__, url_prefix="/api")
 
@@ -84,6 +93,7 @@ def apply_manpower_training():
         profile.user.email, profile.full_name, program_interest, application.application_date.strftime("%B %d, %Y"),
     )
     _notify_application(application, "Manpower Skills Training application received", "Your application is under review by PESO staff.")
+    _notify_board("application", application.id)
 
     return ok(application.to_dict(), "Manpower Skills Training application submitted.", 201)
 
@@ -103,6 +113,7 @@ def withdraw_manpower_application(application_id):
     application.remarks = "Withdrawn by applicant."
     db.session.commit()
     log_audit(User.query.get(profile.user_id), "Withdraw", "training_referral", application.id)
+    _notify_board("application", application.id)
     return ok(application.to_dict(), "Application withdrawn.")
 
 
@@ -155,6 +166,7 @@ def staff_decline_manpower_application(application_id):
     batch_name = application.batch.batch_name if application.batch else None
     send_manpower_referral_declined_email(application.jobseeker_profile.user.email, application.jobseeker_profile.full_name, batch_name, remarks)
     _notify_application(application, "Manpower Skills Training application declined", remarks)
+    _notify_board("application", application.id)
 
     return ok(application.to_dict(), "Applicant declined.")
 
@@ -183,6 +195,7 @@ def staff_create_manpower_batch():
     db.session.add(batch)
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Create", "training_referral_batch", batch.id)
+    _notify_board("batch", batch.id)
     return ok(batch.to_dict(), "Batch created.", 201)
 
 
@@ -226,6 +239,7 @@ def staff_pool_into_batch(batch_id):
         application.staff_id = get_jwt_identity()
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Pool", "training_referral_batch", batch.id, details=f"{len(applications)} applicant(s) pooled")
+    _notify_board("batch", batch.id)
     return ok(batch.to_dict(), f"{len(applications)} applicant(s) added to {batch.batch_name}.")
 
 
@@ -256,6 +270,7 @@ def staff_upload_manpower_proposal(batch_id):
     batch = ManpowerTrainingBatch.query.get(batch_id)
     batch.project_proposal_url = url
     db.session.commit()
+    _notify_board("batch", batch.id)
     return ok(batch.to_dict(), "Project proposal uploaded.")
 
 
@@ -311,6 +326,7 @@ def staff_submit_batch_to_tesda(batch_id):
     log_audit(User.query.get(get_jwt_identity()), "Submit to TESDA", "training_referral_batch", batch.id)
 
     _email_batch_cascade(affected, "submitted_to_tesda", batch.batch_name, submitted_date_str=batch.submitted_to_tesda_date.strftime("%B %d, %Y"))
+    _notify_board("batch", batch.id)
 
     return ok(batch.to_dict(), "Batch submitted to TESDA.")
 
@@ -330,6 +346,7 @@ def staff_follow_up_batch(batch_id):
     log_audit(User.query.get(get_jwt_identity()), "Follow Up", "training_referral_batch", batch.id)
 
     _email_batch_cascade(affected, "for_tesda_response", batch.batch_name)
+    _notify_board("batch", batch.id)
 
     return ok(batch.to_dict(), "Batch marked as awaiting TESDA response.")
 
@@ -350,6 +367,7 @@ def staff_complete_batch(batch_id):
     log_audit(User.query.get(get_jwt_identity()), "Mark Completed", "training_referral_batch", batch.id)
 
     _email_batch_cascade(affected, "completed", batch.batch_name)
+    _notify_board("batch", batch.id)
 
     return ok(batch.to_dict(), "Batch marked completed — training confirmed.")
 
@@ -375,5 +393,6 @@ def staff_decline_batch(batch_id):
     log_audit(User.query.get(get_jwt_identity()), "Mark Declined", "training_referral_batch", batch.id, details=remarks)
 
     _email_batch_cascade(affected, "declined", batch.batch_name, remarks=remarks)
+    _notify_board("batch", batch.id)
 
     return ok(batch.to_dict(), "Batch marked declined.")
