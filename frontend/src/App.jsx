@@ -80,6 +80,9 @@ import StaffJobFairScanner from './pages/staff/JobFairScanner'
 import StaffTraining from './pages/staff/Training'
 import StaffDILP from './pages/staff/DILP'
 import StaffOWWA from './pages/staff/OWWA'
+import StaffTrainingReferralQueue from './pages/staff/TrainingReferralQueue'
+import StaffTrainingReferralBatches from './pages/staff/TrainingReferralBatches'
+import StaffTrainingReferralBatchDetail from './pages/staff/TrainingReferralBatchDetail'
 import StaffSPES from './pages/staff/SPES'
 import StaffLMI from './pages/staff/LMI'
 import StaffAnnouncements from './pages/staff/Announcements'
@@ -208,6 +211,9 @@ export default function App() {
             <Route path="training" element={<StaffTraining />} />
             <Route path="dilp" element={<StaffDILP />} />
             <Route path="owwa" element={<StaffOWWA />} />
+            <Route path="training-referral/queue" element={<StaffTrainingReferralQueue />} />
+            <Route path="training-referral/batches" element={<StaffTrainingReferralBatches />} />
+            <Route path="training-referral/batches/:id" element={<StaffTrainingReferralBatchDetail />} />
             <Route path="spes" element={<StaffSPES />} />
             <Route path="lmi" element={<StaffLMI />} />
             <Route path="announcements" element={<StaffAnnouncements />} />

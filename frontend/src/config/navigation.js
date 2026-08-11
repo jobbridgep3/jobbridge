@@ -156,6 +156,7 @@ export const STAFF_NAV_GROUPS = [
       { label: 'DILP Management', href: '/staff/dilp', icon: HandCoins },
       { label: 'OWWA Management', href: '/staff/owwa', icon: Plane },
       { label: 'ManPower Skills Management', href: '/staff/training', icon: Award },
+      { label: 'Training Referral Management', href: '/staff/training-referral/queue', icon: Send },
     ],
   },
   {
