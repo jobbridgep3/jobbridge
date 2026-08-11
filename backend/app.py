@@ -78,6 +78,7 @@ def _register_blueprints(app: Flask):
     from blueprints.jobs import jobs_bp
     from blueprints.lmi import lmi_bp
     from blueprints.lookups import lookups_bp
+    from blueprints.manpower_training import manpower_training_bp
     from blueprints.notifications import notifications_bp
     from blueprints.profile import profile_bp
     from blueprints.programs import programs_bp
@@ -91,6 +92,7 @@ def _register_blueprints(app: Flask):
         auth_bp, account_bp,
         health_bp, profile_bp, jobs_bp, interviews_bp, employment_bp,
         jobfair_bp, staff_jobfair_bp, programs_bp, referrals_bp, training_bp, staff_training_bp,
+        manpower_training_bp,
         notifications_bp, settings_bp, admin_settings_bp,
         employer_bp, company_bp, vacancies_bp, applicants_bp, applicant_tools_bp, employer_referrals_bp,
         staff_bp, lmi_bp, admin_bp, announcements_bp, assistant_bp, lookups_bp, public_home_bp, contact_bp,

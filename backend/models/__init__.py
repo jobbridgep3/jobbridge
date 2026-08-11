@@ -11,6 +11,7 @@ from models.employment import EmploymentRecord, EmploymentStatusHistory
 from models.interview import Interview, InterviewRescheduleRequest
 from models.jobfair import JobFair, JobFairBooth, JobFairBoothVisit, JobFairRegistration
 from models.jobseeker import Education, JobseekerDocument, JobseekerProfile, WorkExperience
+from models.manpower_training import ManpowerTrainingApplication, ManpowerTrainingBatch
 from models.notification import Notification
 from models.otp import OtpCode
 from models.program import ProgramApplication
@@ -51,6 +52,8 @@ __all__ = [
     "TrainingProgram",
     "TrainingEnrollment",
     "ProgramApplication",
+    "ManpowerTrainingApplication",
+    "ManpowerTrainingBatch",
     "Announcement",
     "Notification",
     "AuditTrail",
