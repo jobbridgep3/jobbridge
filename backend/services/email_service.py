@@ -571,6 +571,91 @@ def send_interview_result_email(to: str, job_title: str, company_name: str, resu
     return send_email(to, f"Interview result — {job_title}: {result_label}", html)
 
 
+def send_manpower_referral_received_email(to: str, full_name: str, program_interest: str, application_date_str: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Your Manpower Skills Training Application Has Been Received</h2>
+      <p>Dear {full_name},</p>
+      <p>We have received your application for the Manpower Skills Training Program
+      (Program interest: <b>{program_interest}</b>).</p>
+      <p>Your application is currently under review by our PESO staff. You will be notified once
+      you are added to a training batch.</p>
+      <p><b>Application Date:</b> {application_date_str}</p>
+      <p>Thank you for your interest in our program.</p>
+      <p>Best regards,<br/>Public Employment Service Office (PESO)<br/>Municipality of Pila, Laguna</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, "Your Manpower Skills Training Application Has Been Received", html)
+
+
+def send_manpower_referral_submitted_email(to: str, full_name: str, batch_name: str, submitted_date_str: str):
+    url = f"{current_app.config['FRONTEND_URL']}/jobseeker/training-referral"
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Your Application Has Been Submitted to TESDA</h2>
+      <p>Dear {full_name},</p>
+      <p>Good news! You have been included in <b>{batch_name}</b> for the Manpower Skills Training
+      Program. Your batch's project proposal has been finalized and submitted to TESDA for
+      evaluation on {submitted_date_str}.</p>
+      <p>We will notify you as soon as we receive a response from TESDA regarding your training
+      schedule.</p>
+      <p><a href="{url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">View My Application</a></p>
+      <p>Best regards,<br/>Public Employment Service Office (PESO)<br/>Municipality of Pila, Laguna</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, "Your Application Has Been Submitted to TESDA", html)
+
+
+def send_manpower_referral_awaiting_response_email(to: str, full_name: str, batch_name: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Update on Your Manpower Skills Training Application</h2>
+      <p>Dear {full_name},</p>
+      <p>We wanted to give you a quick update: our office is currently following up with TESDA
+      regarding <b>{batch_name}</b>. We will notify you immediately once a decision is received.</p>
+      <p>Thank you for your patience.</p>
+      <p>Best regards,<br/>Public Employment Service Office (PESO)<br/>Municipality of Pila, Laguna</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, "Update on Your Manpower Skills Training Application", html)
+
+
+def send_manpower_referral_completed_email(to: str, full_name: str, batch_name: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Your Manpower Skills Training Has Been Confirmed</h2>
+      <p>Dear {full_name},</p>
+      <p>Congratulations! TESDA has confirmed your training slot under <b>{batch_name}</b>.</p>
+      <p>Please proceed to the Public Employment Service Office for further instructions
+      regarding your training schedule and requirements.</p>
+      <p>Best regards,<br/>Public Employment Service Office (PESO)<br/>Municipality of Pila, Laguna</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, "Your Manpower Skills Training Has Been Confirmed", html)
+
+
+def send_manpower_referral_declined_email(to: str, full_name: str, batch_name: str | None, remarks: str):
+    batch_clause = f" under <b>{batch_name}</b>" if batch_name else ""
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Update on Your Manpower Skills Training Application</h2>
+      <p>Dear {full_name},</p>
+      <p>We regret to inform you that your application for the Manpower Skills Training Program{batch_clause}
+      was not accepted at this time.</p>
+      <p><b>Reason:</b> {remarks}</p>
+      <p>We encourage you to apply again for future training batches. You may also browse other
+      job opportunities and programs available through our portal.</p>
+      <p>Best regards,<br/>Public Employment Service Office (PESO)<br/>Municipality of Pila, Laguna</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, "Update on Your Manpower Skills Training Application", html)
+
+
 def send_application_status_email(to: str, full_name: str, job_title: str, company_name: str, status_label: str, note: str | None = None):
     applications_url = f"{current_app.config['FRONTEND_URL']}/jobseeker/applications"
     note_html = f"<p><b>Note from the employer:</b> {note}</p>" if note else ""

@@ -18,8 +18,25 @@ from models.jobseeker import JobseekerProfile
 from models.manpower_training import ManpowerTrainingApplication, ManpowerTrainingBatch
 from models.user import User
 from services.audit_service import log_audit
+from services.email_service import (
+    send_manpower_referral_awaiting_response_email,
+    send_manpower_referral_completed_email,
+    send_manpower_referral_declined_email,
+    send_manpower_referral_received_email,
+    send_manpower_referral_submitted_email,
+)
+from services.notification_service import notify_user
 from utils.decorators import role_required
 from utils.responses import fail, ok
+
+
+def _notify_application(application: ManpowerTrainingApplication, title: str, message: str):
+    notify_user(
+        application.jobseeker_profile.user_id, "training_referral_status", title, message,
+        link="/jobseeker/training-referral",
+        socket_event="training_referral:status_change",
+        socket_payload={"application_id": str(application.id), "new_status": application.status},
+    )
 
 manpower_training_bp = Blueprint("manpower_training", __name__, url_prefix="/api")
 
@@ -62,6 +79,12 @@ def apply_manpower_training():
     db.session.add(application)
     db.session.commit()
     log_audit(User.query.get(profile.user_id), "Create", "training_referral", application.id)
+
+    send_manpower_referral_received_email(
+        profile.user.email, profile.full_name, program_interest, application.application_date.strftime("%B %d, %Y"),
+    )
+    _notify_application(application, "Manpower Skills Training application received", "Your application is under review by PESO staff.")
+
     return ok(application.to_dict(), "Manpower Skills Training application submitted.", 201)
 
 
@@ -128,6 +151,11 @@ def staff_decline_manpower_application(application_id):
     application.staff_id = get_jwt_identity()
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Decline", "training_referral", application.id)
+
+    batch_name = application.batch.batch_name if application.batch else None
+    send_manpower_referral_declined_email(application.jobseeker_profile.user.email, application.jobseeker_profile.full_name, batch_name, remarks)
+    _notify_application(application, "Manpower Skills Training application declined", remarks)
+
     return ok(application.to_dict(), "Applicant declined.")
 
 
@@ -234,14 +262,32 @@ def staff_upload_manpower_proposal(batch_id):
 def _cascade_batch_status(batch: ManpowerTrainingBatch, new_status: str, remarks: str | None = None):
     """Updates the batch + every still-pooled (non-individually-declined) linked application
     to new_status in a single transaction, so a failure can't leave batch/applications split
-    across two different statuses."""
+    across two different statuses. Returns the applications that were cascaded, for
+    post-commit email/notification fan-out."""
     batch.status = new_status
+    affected = []
     for application in batch.applications:
         if application.status == "declined":
             continue
         application.status = new_status
         if remarks:
             application.remarks = remarks
+        affected.append(application)
+    return affected
+
+
+def _email_batch_cascade(applications, new_status: str, batch_name: str, submitted_date_str: str | None = None, remarks: str | None = None):
+    for application in applications:
+        profile = application.jobseeker_profile
+        if new_status == "submitted_to_tesda":
+            send_manpower_referral_submitted_email(profile.user.email, profile.full_name, batch_name, submitted_date_str)
+        elif new_status == "for_tesda_response":
+            send_manpower_referral_awaiting_response_email(profile.user.email, profile.full_name, batch_name)
+        elif new_status == "completed":
+            send_manpower_referral_completed_email(profile.user.email, profile.full_name, batch_name)
+        elif new_status == "declined":
+            send_manpower_referral_declined_email(profile.user.email, profile.full_name, batch_name, remarks)
+        _notify_application(application, f"Manpower Skills Training — {batch_name}", remarks or f"Status updated to {new_status.replace('_', ' ')}.")
 
 
 @manpower_training_bp.put("/staff/training-referral/batches/<batch_id>/submit-to-tesda")
@@ -260,9 +306,12 @@ def staff_submit_batch_to_tesda(batch_id):
         return fail("Upload the project proposal document before submitting to TESDA.", 400)
 
     batch.submitted_to_tesda_date = datetime.utcnow()
-    _cascade_batch_status(batch, "submitted_to_tesda")
+    affected = _cascade_batch_status(batch, "submitted_to_tesda")
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Submit to TESDA", "training_referral_batch", batch.id)
+
+    _email_batch_cascade(affected, "submitted_to_tesda", batch.batch_name, submitted_date_str=batch.submitted_to_tesda_date.strftime("%B %d, %Y"))
+
     return ok(batch.to_dict(), "Batch submitted to TESDA.")
 
 
@@ -276,9 +325,12 @@ def staff_follow_up_batch(batch_id):
     if batch.status != "submitted_to_tesda":
         return fail("Only batches already submitted to TESDA can be marked for follow-up.", 400)
 
-    _cascade_batch_status(batch, "for_tesda_response")
+    affected = _cascade_batch_status(batch, "for_tesda_response")
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Follow Up", "training_referral_batch", batch.id)
+
+    _email_batch_cascade(affected, "for_tesda_response", batch.batch_name)
+
     return ok(batch.to_dict(), "Batch marked as awaiting TESDA response.")
 
 
@@ -293,9 +345,12 @@ def staff_complete_batch(batch_id):
         return fail("Only batches submitted to TESDA can be marked completed.", 400)
 
     batch.tesda_response_date = datetime.utcnow()
-    _cascade_batch_status(batch, "completed")
+    affected = _cascade_batch_status(batch, "completed")
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Mark Completed", "training_referral_batch", batch.id)
+
+    _email_batch_cascade(affected, "completed", batch.batch_name)
+
     return ok(batch.to_dict(), "Batch marked completed — training confirmed.")
 
 
@@ -315,7 +370,10 @@ def staff_decline_batch(batch_id):
         return fail("A reason is required to decline this batch.", 400)
 
     batch.tesda_response_date = datetime.utcnow()
-    _cascade_batch_status(batch, "declined", remarks=remarks)
+    affected = _cascade_batch_status(batch, "declined", remarks=remarks)
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Mark Declined", "training_referral_batch", batch.id, details=remarks)
+
+    _email_batch_cascade(affected, "declined", batch.batch_name, remarks=remarks)
+
     return ok(batch.to_dict(), "Batch marked declined.")
