@@ -107,6 +107,7 @@ import AdminJobFairScanner from './pages/admin/JobFairScanner'
 import AdminTraining from './pages/admin/Training'
 import AdminDILP from './pages/admin/DILP'
 import AdminOWWA from './pages/admin/OWWA'
+import AdminTrainingReferralOversight from './pages/admin/TrainingReferralOversight'
 import AdminSPES from './pages/admin/SPES'
 import AdminLMI from './pages/admin/LMI'
 import AdminAnnouncements from './pages/admin/Announcements'
@@ -242,6 +243,7 @@ export default function App() {
             <Route path="training" element={<AdminTraining />} />
             <Route path="dilp" element={<AdminDILP />} />
             <Route path="owwa" element={<AdminOWWA />} />
+            <Route path="training-referral" element={<AdminTrainingReferralOversight />} />
             <Route path="spes" element={<AdminSPES />} />
             <Route path="lmi" element={<AdminLMI />} />
             <Route path="announcements" element={<AdminAnnouncements />} />
