@@ -49,7 +49,7 @@ export default function StaffTrainingReferralBatches() {
   return (
     <motion.div {...fadeIn} className="space-y-4">
       <PageHeader
-        title="Training Referral Batches"
+        title="ManPower Skills Management — Batches"
         description="Pool of applicants formalized for TESDA project proposal submission."
         actions={
           <>

@@ -74,7 +74,7 @@ export default function AdminTrainingReferralOversight() {
 
   return (
     <motion.div {...fadeIn} className="space-y-4">
-      <PageHeader title="Training Referral Oversight" description="Read-only view of all Manpower Skills Training Referral applications and batches." />
+      <PageHeader title="ManPower Skills Management" description="Read-only view of all ManPower Skills Management applications and batches." />
 
       <Card>
         <CardHeader>

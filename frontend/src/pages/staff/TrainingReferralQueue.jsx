@@ -103,7 +103,7 @@ export default function StaffTrainingReferralQueue() {
   return (
     <motion.div {...fadeIn} className="space-y-4">
       <PageHeader
-        title="Training Referral Management"
+        title="ManPower Skills Management"
         description="Pool pending applicants into batches before submitting a project proposal to TESDA."
         actions={
           <>

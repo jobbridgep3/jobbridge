@@ -85,7 +85,7 @@ export default function JobseekerTrainingReferral() {
   return (
     <motion.div {...fadeIn} className="space-y-6">
       <PageHeader
-        title="Skills Training Referral"
+        title="ManPower Skills Management"
         description="Apply for referral into a TESDA-linked Manpower Skills Training Program. PESO Staff pools applicants into batches before submitting a proposal to TESDA."
       />
 

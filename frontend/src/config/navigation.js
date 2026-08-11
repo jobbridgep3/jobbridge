@@ -1,5 +1,4 @@
 import {
-  Award,
   Bell,
   Briefcase,
   Building2,
@@ -61,8 +60,7 @@ export const JOBSEEKER_NAV_GROUPS = [
       { label: 'SPES', href: '/jobseeker/spes', icon: GraduationCap },
       { label: 'DILP', href: '/jobseeker/dilp', icon: HandCoins },
       { label: 'OWWA', href: '/jobseeker/owwa', icon: Plane },
-      { label: 'Manpower Skills Training', href: '/jobseeker/training', icon: Award },
-      { label: 'Skills Training Referral', href: '/jobseeker/training-referral', icon: Send },
+      { label: 'ManPower Skills Management', href: '/jobseeker/training-referral', icon: Send },
     ],
   },
   {
@@ -155,8 +153,7 @@ export const STAFF_NAV_GROUPS = [
       { label: 'SPES Management', href: '/staff/spes', icon: GraduationCap },
       { label: 'DILP Management', href: '/staff/dilp', icon: HandCoins },
       { label: 'OWWA Management', href: '/staff/owwa', icon: Plane },
-      { label: 'ManPower Skills Management', href: '/staff/training', icon: Award },
-      { label: 'Training Referral Management', href: '/staff/training-referral/queue', icon: Send },
+      { label: 'ManPower Skills Management', href: '/staff/training-referral/queue', icon: Send },
     ],
   },
   {
@@ -214,8 +211,7 @@ export const ADMIN_NAV_GROUPS = [
       { label: 'SPES Management', href: '/admin/spes', icon: GraduationCap },
       { label: 'DILP Management', href: '/admin/dilp', icon: HandCoins },
       { label: 'OWWA Management', href: '/admin/owwa', icon: Plane },
-      { label: 'ManPower Skills Management', href: '/admin/training', icon: Award },
-      { label: 'Training Referral Management', href: '/admin/training-referral', icon: Send },
+      { label: 'ManPower Skills Management', href: '/admin/training-referral', icon: Send },
     ],
   },
   {
