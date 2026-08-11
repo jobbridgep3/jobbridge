@@ -43,6 +43,7 @@ import JobseekerSPES from './pages/jobseeker/SPES'
 import JobseekerTraining from './pages/jobseeker/Training'
 import JobseekerDILP from './pages/jobseeker/DILP'
 import JobseekerOWWA from './pages/jobseeker/OWWA'
+import JobseekerTrainingReferral from './pages/jobseeker/TrainingReferral'
 import JobseekerNotifications from './pages/jobseeker/Notifications'
 import JobseekerSettings from './pages/jobseeker/Settings'
 
@@ -161,6 +162,7 @@ export default function App() {
             <Route path="training" element={<JobseekerTraining />} />
             <Route path="dilp" element={<JobseekerDILP />} />
             <Route path="owwa" element={<JobseekerOWWA />} />
+            <Route path="training-referral" element={<JobseekerTrainingReferral />} />
             <Route path="notifications" element={<JobseekerNotifications />} />
             <Route path="settings" element={<JobseekerSettings />} />
           </Route>

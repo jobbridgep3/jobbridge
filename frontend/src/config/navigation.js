@@ -62,6 +62,7 @@ export const JOBSEEKER_NAV_GROUPS = [
       { label: 'DILP', href: '/jobseeker/dilp', icon: HandCoins },
       { label: 'OWWA', href: '/jobseeker/owwa', icon: Plane },
       { label: 'Manpower Skills Training', href: '/jobseeker/training', icon: Award },
+      { label: 'Skills Training Referral', href: '/jobseeker/training-referral', icon: Send },
     ],
   },
   {

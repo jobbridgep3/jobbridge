@@ -50,6 +50,10 @@ const STATUS_MAP = {
   certificate_issued: { label: 'Certificate Issued', variant: 'success' },
   checked_in: { label: 'Checked In', variant: 'success' },
   not_arrived: { label: 'Not Arrived', variant: 'warning' },
+  pooled: { label: 'Pooled', variant: 'info' },
+  submitted_to_tesda: { label: 'Submitted to TESDA', variant: 'warning' },
+  for_tesda_response: { label: 'Awaiting TESDA Response', variant: 'warning' },
+  forming: { label: 'Forming', variant: 'default' },
 }
 
 export function StatusBadge({ status, label }) {

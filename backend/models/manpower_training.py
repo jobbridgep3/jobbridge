@@ -69,6 +69,8 @@ class ManpowerTrainingApplication(BaseModel):
             "jobseeker_name": self.jobseeker_profile.full_name if self.jobseeker_profile else None,
             "batch_id": str(self.batch_id) if self.batch_id else None,
             "batch_name": self.batch.batch_name if self.batch else None,
+            "submitted_to_tesda_date": self.batch.submitted_to_tesda_date.isoformat() if self.batch and self.batch.submitted_to_tesda_date else None,
+            "tesda_response_date": self.batch.tesda_response_date.isoformat() if self.batch and self.batch.tesda_response_date else None,
             "status": self.status,
             "program_interest": self.program_interest,
             "application_date": self.application_date.isoformat() if self.application_date else None,
