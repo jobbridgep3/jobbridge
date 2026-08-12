@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 
+import { ManpowerKpiCards } from '../../components/manpower/ManpowerKpiCards'
 import { Button } from '../../components/ui/Button'
 import { DataTable } from '../../components/ui/DataTable'
 import { Dialog, DialogContent } from '../../components/ui/Dialog'
@@ -116,12 +117,17 @@ export default function StaffTrainingReferralQueue() {
             <Link to="/staff/training-referral/batches">
               <Button variant="secondary" size="sm">View Batches</Button>
             </Link>
+            <Link to="/staff/training-referral/reports">
+              <Button variant="secondary" size="sm">Reports & Analytics</Button>
+            </Link>
             <Button size="sm" disabled={!selected.size} onClick={() => setPoolDialogOpen(true)}>
               Add {selected.size || ''} to Batch
             </Button>
           </>
         }
       />
+
+      <ManpowerKpiCards />
 
       <DataTable
         columns={columns}

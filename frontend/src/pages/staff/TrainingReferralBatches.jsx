@@ -63,6 +63,9 @@ export default function StaffTrainingReferralBatches() {
             <Link to="/staff/training-referral/queue">
               <Button variant="secondary" size="sm">Applications Queue</Button>
             </Link>
+            <Link to="/staff/training-referral/reports">
+              <Button variant="secondary" size="sm">Reports & Analytics</Button>
+            </Link>
             <Button size="sm" onClick={() => setCreateOpen(true)}>Create New Batch</Button>
           </>
         }

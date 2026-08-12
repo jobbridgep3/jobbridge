@@ -83,6 +83,7 @@ import StaffOWWA from './pages/staff/OWWA'
 import StaffTrainingReferralQueue from './pages/staff/TrainingReferralQueue'
 import StaffTrainingReferralBatches from './pages/staff/TrainingReferralBatches'
 import StaffTrainingReferralBatchDetail from './pages/staff/TrainingReferralBatchDetail'
+import StaffTrainingReferralReports from './pages/staff/TrainingReferralReports'
 import StaffSPES from './pages/staff/SPES'
 import StaffLMI from './pages/staff/LMI'
 import StaffAnnouncements from './pages/staff/Announcements'
@@ -215,6 +216,7 @@ export default function App() {
             <Route path="training-referral/queue" element={<StaffTrainingReferralQueue />} />
             <Route path="training-referral/batches" element={<StaffTrainingReferralBatches />} />
             <Route path="training-referral/batches/:id" element={<StaffTrainingReferralBatchDetail />} />
+            <Route path="training-referral/reports" element={<StaffTrainingReferralReports />} />
             <Route path="spes" element={<StaffSPES />} />
             <Route path="lmi" element={<StaffLMI />} />
             <Route path="announcements" element={<StaffAnnouncements />} />
