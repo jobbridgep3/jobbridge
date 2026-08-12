@@ -10,15 +10,24 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import { useConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { DatePicker } from '../../components/ui/DatePicker'
 import { Dialog, DialogContent } from '../../components/ui/Dialog'
-import { Input, Textarea } from '../../components/ui/Input'
+import { Input, Label, Textarea } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { TimePicker } from '../../components/ui/TimePicker'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
 import { cn } from '../../lib/utils'
+
+function to12h(time24) {
+  return time24 ? dayjs(time24, 'HH:mm').format('h:mm A') : ''
+}
+function to24h(time12) {
+  return time12 ? dayjs(time12, 'h:mm A').format('HH:mm') : ''
+}
 
 const STEPS = [
   { key: 'pending', label: 'Pending', dateField: 'submitted_at' },
@@ -91,7 +100,8 @@ export default function StaffOWWARequestDetail() {
   const [declineOpen, setDeclineOpen] = useState(false)
   const [declineReason, setDeclineReason] = useState('')
   const [completeOpen, setCompleteOpen] = useState(false)
-  const [releaseInstructions, setReleaseInstructions] = useState('')
+  const [appointmentDate, setAppointmentDate] = useState('')
+  const [appointmentTime, setAppointmentTime] = useState('')
   const [remarkText, setRemarkText] = useState('')
 
   const queryKey = ['staff', 'owwa', id]
@@ -124,11 +134,12 @@ export default function StaffOWWARequestDetail() {
   })
 
   const complete = useMutation({
-    mutationFn: () => api.put(`/api/staff/owwa/${id}/complete`, { release_instructions: releaseInstructions }),
+    mutationFn: () => api.put(`/api/staff/owwa/${id}/complete`, { appointment_date: appointmentDate, appointment_time: appointmentTime }),
     onSuccess: () => {
       toast.success('Request marked completed.')
       setCompleteOpen(false)
-      setReleaseInstructions('')
+      setAppointmentDate('')
+      setAppointmentTime('')
       invalidate()
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Could not mark request completed.'),
@@ -180,6 +191,9 @@ export default function StaffOWWARequestDetail() {
               {owwaRequest.notes && <div className="sm:col-span-2"><p className="text-text-muted">Supporting Details</p><p className="text-text-primary">{owwaRequest.notes}</p></div>}
               {owwaRequest.status === 'declined' && owwaRequest.declined_reason && (
                 <div className="sm:col-span-2"><p className="text-text-muted">Declined Reason</p><p className="text-red-600">{owwaRequest.declined_reason}</p></div>
+              )}
+              {owwaRequest.appointment_at && (
+                <div className="sm:col-span-2"><p className="text-text-muted">PESO Appointment</p><p className="text-green-700">{dayjs(owwaRequest.appointment_at).format('MMMM D, YYYY [at] h:mm A')}</p></div>
               )}
             </CardContent>
           </Card>
@@ -276,14 +290,17 @@ export default function StaffOWWARequestDetail() {
       <Dialog open={completeOpen} onOpenChange={setCompleteOpen}>
         <DialogContent title="Mark Request Completed">
           <div className="space-y-3">
-            <p className="text-sm text-text-muted">The applicant will be emailed. Optionally add release/next-step instructions to include in that email.</p>
-            <Textarea
-              placeholder="e.g. Please proceed to the PESO Pila office to coordinate the next steps for claiming your assistance."
-              value={releaseInstructions}
-              onChange={(e) => setReleaseInstructions(e.target.value)}
-            />
+            <p className="text-sm text-text-muted">Select the date and time the applicant should proceed to the PESO Pila office. The applicant will be emailed this appointment.</p>
+            <div>
+              <Label>Schedule Date</Label>
+              <DatePicker value={appointmentDate} onChange={setAppointmentDate} />
+            </div>
+            <div>
+              <Label>Schedule Time</Label>
+              <TimePicker value={to12h(appointmentTime)} onChange={(t) => setAppointmentTime(to24h(t))} />
+            </div>
             <div className="flex justify-end">
-              <Button onClick={() => complete.mutate()} disabled={complete.isPending}>
+              <Button onClick={() => complete.mutate()} disabled={complete.isPending || !appointmentDate || !appointmentTime}>
                 {complete.isPending ? 'Completing…' : 'Confirm Completed'}
               </Button>
             </div>

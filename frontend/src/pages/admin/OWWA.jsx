@@ -87,6 +87,11 @@ export default function AdminOWWA() {
         return `${dayjs().diff(dayjs(r.submitted_at || r.created_at), 'day')}d`
       },
     },
+    {
+      id: 'appointment',
+      header: 'Appointment',
+      cell: ({ row }) => (row.original.appointment_at ? dayjs(row.original.appointment_at).format('MMM D, YYYY h:mm A') : '—'),
+    },
   ]
 
   const kpis = [

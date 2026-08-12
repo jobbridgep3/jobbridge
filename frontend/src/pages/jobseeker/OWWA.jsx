@@ -226,7 +226,17 @@ export default function JobseekerOWWA() {
                   <p className="mt-2 text-sm text-red-600">Reason: {r.declined_reason}</p>
                 )}
                 {r.status === 'completed' && (
-                  <p className="mt-2 text-sm text-green-700">Your assistance has been processed by OWWA. Please proceed to the PESO Pila office for next steps.</p>
+                  <div className="mt-2 rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
+                    <p className="font-medium">Your assistance has been processed by OWWA.</p>
+                    {r.appointment_at ? (
+                      <p className="mt-1">
+                        Please proceed to the <b>PESO Pila Office</b> on <b>{dayjs(r.appointment_at).format('MMMM D, YYYY')}</b> at{' '}
+                        <b>{dayjs(r.appointment_at).format('h:mm A')}</b> to coordinate the next steps.
+                      </p>
+                    ) : (
+                      <p className="mt-1">Please proceed to the PESO Pila office for next steps.</p>
+                    )}
+                  </div>
                 )}
                 {['submitted_to_owwa', 'for_owwa_response'].includes(r.status) && (
                   <p className="mt-2 text-xs text-text-muted">Your application is now with OWWA Region IV-A. PESO Pila is coordinating on your behalf.</p>

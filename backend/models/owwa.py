@@ -32,6 +32,7 @@ class OwwaRequest(BaseModel):
     completed_at = db.Column(db.DateTime(timezone=True), nullable=True)
     declined_at = db.Column(db.DateTime(timezone=True), nullable=True)
     declined_reason = db.Column(db.Text, nullable=True)
+    appointment_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     jobseeker_profile = db.relationship("JobseekerProfile")
     documents = db.relationship("OwwaRequestDocument", back_populates="request", order_by="OwwaRequestDocument.created_at")
@@ -58,6 +59,7 @@ class OwwaRequest(BaseModel):
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             "declined_at": self.declined_at.isoformat() if self.declined_at else None,
             "declined_reason": self.declined_reason,
+            "appointment_at": self.appointment_at.isoformat() if self.appointment_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
         if include_documents:

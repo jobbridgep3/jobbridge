@@ -744,17 +744,20 @@ def send_owwa_request_awaiting_response_email(to: str, jobseeker_name: str, requ
     return send_email(to, f"Update on Your OWWA Assistance Application — Reference #{request_id}", html)
 
 
-def send_owwa_request_completed_email(to: str, jobseeker_name: str, request_id: str, release_instructions: str | None = None):
-    instructions = release_instructions or "Please proceed to the PESO Pila office to coordinate the next steps for claiming your assistance."
+def send_owwa_request_completed_email(to: str, jobseeker_name: str, request_id: str, schedule_date: str, schedule_time: str):
     html = f"""
     <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
       <h2 style="color:#1e3a8a">Your OWWA Assistance Application Has Been Completed</h2>
       <p>Dear {jobseeker_name},</p>
-      <p>We are pleased to inform you that your OWWA Assistance Program application (Reference #{request_id})
-      has been completed. OWWA has processed your assistance.</p>
-      <p>{instructions}</p>
+      <p>Your OWWA Assistance Application has been completed.</p>
+      <p><b>PESO Appointment:</b><br/>
+      Date: {schedule_date}<br/>
+      Time: {schedule_time}</p>
+      <p>Please proceed to the <b>PESO Pila Office</b> on the scheduled date and time to coordinate the next
+      steps regarding your OWWA assistance.</p>
+      <p>Reference Number: {request_id}</p>
       <p>If you have any questions, please contact PESO Pila at {PESO_CONTACT_INFO}.</p>
-      <p>Congratulations,<br/>Public Employment Service Office — Pila, Laguna</p>
+      <p>Thank you,<br/>Public Employment Service Office — Pila, Laguna</p>
       <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
     </div>
     """

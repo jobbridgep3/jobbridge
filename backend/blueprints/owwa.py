@@ -311,18 +311,29 @@ def staff_complete_owwa_request(request_id):
     )
     if error:
         return error
+    data = request.get_json(force=True) or {}
+    appointment_date = (data.get("appointment_date") or "").strip()
+    appointment_time = (data.get("appointment_time") or "").strip()
+    if not appointment_date or not appointment_time:
+        db.session.rollback()
+        return fail("A PESO appointment date and time are required to mark this request completed.", 400)
+    try:
+        appointment_at = datetime.fromisoformat(f"{appointment_date}T{appointment_time}")
+    except ValueError:
+        db.session.rollback()
+        return fail("Invalid appointment date/time.", 400)
+
     owwa_request.completed_at = datetime.utcnow()
-    data = request.get_json(silent=True) or {}
-    release_instructions = (data.get("release_instructions") or "").strip()
+    owwa_request.appointment_at = appointment_at
     db.session.commit()
-    if release_instructions:
-        db.session.add(OwwaRequestRemark(owwa_request_id=owwa_request.id, staff_id=get_jwt_identity(), remark=f"Release instructions: {release_instructions}"))
-        db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Mark Completed", "owwa_request", owwa_request.id)
 
     profile = owwa_request.jobseeker_profile
-    send_owwa_request_completed_email(profile.user.email, profile.full_name, str(owwa_request.id), release_instructions or None)
-    _notify_jobseeker(owwa_request, "OWWA Assistance application completed", "OWWA has processed your assistance.")
+    send_owwa_request_completed_email(
+        profile.user.email, profile.full_name, str(owwa_request.id),
+        appointment_at.strftime("%B %d, %Y"), appointment_at.strftime("%I:%M %p"),
+    )
+    _notify_jobseeker(owwa_request, "OWWA Assistance application completed", "OWWA has processed your assistance. See your appointment details.")
     _notify_board(owwa_request.id, "OWWA request completed", f"{profile.full_name}'s request was marked completed.")
 
     return ok(owwa_request.to_dict(), "Request marked completed.")
