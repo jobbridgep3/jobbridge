@@ -416,6 +416,7 @@ def _parse_owwa_report_filters(args):
         "status": args.get("status") or None,
         "date_from": date.fromisoformat(args["date_from"]) if args.get("date_from") else None,
         "date_to": date.fromisoformat(args["date_to"]) if args.get("date_to") else None,
+        "search": args.get("search") or None,
     }
 
 
@@ -439,13 +440,25 @@ def export_owwa_excel():
         *[[OWWA_STAT_LABELS.get(k, k), v] for k, v in stats.items()],
     ]
     request_rows = [
-        [d["jobseeker_name"], d["email"], d["ofw_relationship"], d["status"], d["submitted_at"], d["verified_at"], d["submitted_to_owwa_at"], d["completed_at"], d["declined_reason"]]
+        [
+            d["reference_number"], d["jobseeker_name"], d["email"], d["ofw_relationship"], d["status"],
+            d["submitted_at"], d["verified_at"], d["submitted_to_owwa_at"], d["for_owwa_response_at"],
+            d["completed_at"], d["appointment_at"], d["declined_reason"], d["remarks"],
+        ]
         for d in (owwa_reporting_service.owwa_report_row(r) for r in requests_)
     ]
 
     buf = build_multi_sheet_excel_report([
         ("Summary", ["PESO Pila, Laguna — OWWA Assistance Program Report", ""], summary_rows),
-        ("Requests", ["Applicant", "Email", "OFW Status / Relationship", "Status", "Submitted", "Verified", "Submitted to OWWA", "Completed", "Declined Reason"], request_rows),
+        (
+            "Requests",
+            [
+                "Reference Number", "Applicant", "Email", "OFW Status / Relationship", "Status", "Date Submitted",
+                "Date Verified", "Date Submitted to OWWA", "OWWA Response/Follow-up Date", "Completion Date",
+                "PESO Appointment", "Declined Reason", "Remarks",
+            ],
+            request_rows,
+        ),
     ])
     log_audit(user, "Export", "owwa_report", details="excel")
     return send_file(

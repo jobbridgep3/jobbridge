@@ -1,8 +1,10 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
+import { Download } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import toast from 'react-hot-toast'
 
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent } from '../../components/ui/Card'
@@ -13,6 +15,7 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
+import { downloadFile, parseBlobError } from '../../lib/download'
 import { fadeIn } from '../../lib/motion'
 
 const OWWA_STATUSES = ['pending', 'verified', 'submitted_to_owwa', 'for_owwa_response', 'completed', 'declined']
@@ -23,8 +26,23 @@ export default function StaffOWWA() {
   const [search, setSearch] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [exporting, setExporting] = useState(null)
 
   const params = { status: status || undefined, search: search || undefined, date_from: dateFrom || undefined, date_to: dateTo || undefined }
+
+  const handleExport = async (format) => {
+    setExporting(format)
+    try {
+      await downloadFile(`/api/staff/owwa/export/${format}`, {
+        params,
+        filename: `owwa_assistance_report.${format === 'excel' ? 'xlsx' : 'pdf'}`,
+      })
+    } catch (err) {
+      toast.error(await parseBlobError(err))
+    } finally {
+      setExporting(null)
+    }
+  }
 
   const { data: requests, isLoading } = useQuery({
     queryKey: ['staff', 'owwa', 'queue', params],
@@ -69,6 +87,16 @@ export default function StaffOWWA() {
       <PageHeader
         title="OWWA Assistance Program"
         description="Review, verify, and follow up on OWWA Assistance requests on behalf of OFWs and beneficiaries."
+        actions={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => handleExport('excel')} disabled={exporting === 'excel'}>
+              <Download className="h-4 w-4" /> {exporting === 'excel' ? 'Exporting…' : 'Export Excel'}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => handleExport('pdf')} disabled={exporting === 'pdf'}>
+              <Download className="h-4 w-4" /> {exporting === 'pdf' ? 'Exporting…' : 'Export PDF'}
+            </Button>
+          </>
+        }
       />
 
       <Card>

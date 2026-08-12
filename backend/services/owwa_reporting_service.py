@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from extensions import db
 from models.jobseeker import JobseekerProfile
-from models.owwa import OWWA_REQUEST_STATUSES, OwwaRequest
+from models.owwa import OWWA_REQUEST_STATUSES, OwwaRequest, OwwaRequestRemark
 from services.dashboard_service import _month_buckets
 
 IN_PROGRESS_STATUSES = ("verified", "submitted_to_owwa", "for_owwa_response")
@@ -69,19 +69,26 @@ def build_owwa_analytics(months: int = 6) -> dict:
     return {"requests_per_month": requests_per_month, "status_distribution": status_distribution}
 
 
-def query_owwa_requests_for_report(status=None, date_from=None, date_to=None):
-    query = OwwaRequest.query.options(selectinload(OwwaRequest.jobseeker_profile).selectinload(JobseekerProfile.user))
+def query_owwa_requests_for_report(status=None, date_from=None, date_to=None, search=None):
+    query = OwwaRequest.query.options(
+        selectinload(OwwaRequest.jobseeker_profile).selectinload(JobseekerProfile.user),
+        selectinload(OwwaRequest.remarks).selectinload(OwwaRequestRemark.staff),
+    )
     if status:
         query = query.filter(OwwaRequest.status == status)
     if date_from:
         query = query.filter(OwwaRequest.submitted_at >= date_from)
     if date_to:
         query = query.filter(OwwaRequest.submitted_at < date_to + timedelta(days=1))
+    if search:
+        query = query.join(JobseekerProfile).filter(JobseekerProfile.full_name.ilike(f"%{search}%"))
     return query.order_by(OwwaRequest.submitted_at.desc()).limit(REPORT_ROW_LIMIT).all()
 
 
 def owwa_report_row(owwa_request) -> dict:
+    remarks_summary = " | ".join(r.remark for r in owwa_request.remarks) if owwa_request.remarks else None
     return {
+        "reference_number": str(owwa_request.id),
         "jobseeker_name": owwa_request.jobseeker_profile.full_name if owwa_request.jobseeker_profile else None,
         "email": owwa_request.jobseeker_profile.user.email if owwa_request.jobseeker_profile and owwa_request.jobseeker_profile.user else None,
         "ofw_relationship": owwa_request.ofw_relationship,
@@ -89,6 +96,9 @@ def owwa_report_row(owwa_request) -> dict:
         "submitted_at": owwa_request.submitted_at,
         "verified_at": owwa_request.verified_at,
         "submitted_to_owwa_at": owwa_request.submitted_to_owwa_at,
+        "for_owwa_response_at": owwa_request.for_owwa_response_at,
         "completed_at": owwa_request.completed_at,
+        "appointment_at": owwa_request.appointment_at,
         "declined_reason": owwa_request.declined_reason,
+        "remarks": remarks_summary,
     }

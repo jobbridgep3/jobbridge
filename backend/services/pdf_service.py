@@ -557,9 +557,10 @@ def generate_owwa_report(stats: dict, request_rows: list[dict], date_str: str, g
         for k, v in stats.items()
     )
     columns = [
-        ("jobseeker_name", "Applicant"), ("email", "Email"), ("ofw_relationship", "OFW Status / Relationship"),
+        ("reference_number", "Reference #"), ("jobseeker_name", "Applicant"), ("ofw_relationship", "OFW Status / Relationship"),
         ("status", "Status"), ("submitted_at", "Submitted"), ("verified_at", "Verified"),
-        ("submitted_to_owwa_at", "Submitted to OWWA"), ("completed_at", "Completed"), ("declined_reason", "Declined Reason"),
+        ("submitted_to_owwa_at", "Submitted to OWWA"), ("for_owwa_response_at", "OWWA Response/Follow-up"),
+        ("completed_at", "Completed"), ("appointment_at", "PESO Appointment"), ("declined_reason", "Declined Reason"),
     ]
 
     body = f"""
