@@ -71,6 +71,9 @@ export default function StaffTrainingReferralQueue() {
     onError: (err) => toast.error(err.response?.data?.message || 'Could not decline applicant.'),
   })
 
+  const selectedBatch = formingBatches?.find((b) => b.id === targetBatchId)
+  const selectedBatchExceedsCapacity = !!selectedBatch && selectedBatch.slots_remaining != null && selected.size > selectedBatch.slots_remaining
+
   const toggle = (id) => {
     const next = new Set(selected)
     next.has(id) ? next.delete(id) : next.add(id)
@@ -137,7 +140,9 @@ export default function StaffTrainingReferralQueue() {
               <Select value={targetBatchId} onChange={(e) => setTargetBatchId(e.target.value)}>
                 <option value="">Select a batch…</option>
                 {formingBatches?.map((b) => (
-                  <option key={b.id} value={b.id}>{b.batch_name} ({b.current_pax}/{b.min_pax})</option>
+                  <option key={b.id} value={b.id} disabled={b.is_full}>
+                    {b.batch_name} ({b.current_pax}/{b.min_pax}{b.max_pax != null ? `, max ${b.max_pax}` : ''}){b.is_full ? ' — FULL' : ''}
+                  </option>
                 ))}
                 <option value="__new__">+ Create New Batch</option>
               </Select>
@@ -148,10 +153,15 @@ export default function StaffTrainingReferralQueue() {
                 <Input value={newBatchName} onChange={(e) => setNewBatchName(e.target.value)} placeholder="e.g. Batch 2026-08 — Welding NC II" />
               </div>
             )}
+            {selectedBatchExceedsCapacity && (
+              <p className="text-xs text-red-600">
+                Only {selectedBatch.slots_remaining} slot(s) remaining in this batch — deselect some applicants first.
+              </p>
+            )}
             <div className="flex justify-end">
               <Button
                 onClick={() => pool.mutate()}
-                disabled={pool.isPending || !targetBatchId || (targetBatchId === '__new__' && !newBatchName.trim())}
+                disabled={pool.isPending || !targetBatchId || (targetBatchId === '__new__' && !newBatchName.trim()) || selectedBatchExceedsCapacity}
               >
                 {pool.isPending ? 'Adding…' : 'Add to Batch'}
               </Button>

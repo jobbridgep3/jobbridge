@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
 import { useMemo, useState } from 'react'
@@ -32,6 +32,7 @@ export default function AdminTrainingReferralOversight() {
   const { data: batches, isLoading: batchesLoading } = useQuery({
     queryKey: ['admin', 'training_referral', 'batches', batchStatus],
     queryFn: async () => (await api.get('/api/staff/training-referral/batches', { params: batchStatus ? { status: batchStatus } : {} })).data.data,
+    placeholderData: keepPreviousData,
   })
 
   useSocket({
@@ -66,6 +67,11 @@ export default function AdminTrainingReferralOversight() {
     { accessorKey: 'batch_name', header: 'Batch Name' },
     { accessorKey: 'status', header: 'Status', cell: ({ row }) => <StatusBadge status={row.original.status} /> },
     { accessorKey: 'current_pax', header: 'Pax', cell: ({ row }) => `${row.original.current_pax}/${row.original.min_pax}` },
+    {
+      accessorKey: 'slots_remaining',
+      header: 'Slots Remaining',
+      cell: ({ row }) => (row.original.max_pax == null ? 'Unlimited' : row.original.is_full ? 'Full' : row.original.slots_remaining),
+    },
     {
       accessorKey: 'submitted_to_tesda_date',
       header: 'Submitted to TESDA',

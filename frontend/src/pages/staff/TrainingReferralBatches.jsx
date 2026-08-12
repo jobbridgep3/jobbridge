@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 
+import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Dialog, DialogContent } from '../../components/ui/Dialog'
@@ -24,6 +25,7 @@ export default function StaffTrainingReferralBatches() {
   const [createOpen, setCreateOpen] = useState(false)
   const [batchName, setBatchName] = useState('')
   const [minPax, setMinPax] = useState(15)
+  const [maxPax, setMaxPax] = useState('')
 
   const { data: batches, isLoading } = useQuery({
     queryKey: ['staff', 'training_referral', 'batches'],
@@ -37,12 +39,15 @@ export default function StaffTrainingReferralBatches() {
   })
 
   const create = useMutation({
-    mutationFn: () => api.post('/api/staff/training-referral/batches', { batch_name: batchName, min_pax: Number(minPax) || 15 }),
+    mutationFn: () => api.post('/api/staff/training-referral/batches', {
+      batch_name: batchName, min_pax: Number(minPax) || 15, max_pax: maxPax ? Number(maxPax) : null,
+    }),
     onSuccess: () => {
       toast.success('Batch created.')
       setCreateOpen(false)
       setBatchName('')
       setMinPax(15)
+      setMaxPax('')
       queryClient.invalidateQueries({ queryKey: ['staff', 'training_referral', 'batches'] })
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Could not create batch.'),
@@ -76,9 +81,17 @@ export default function StaffTrainingReferralBatches() {
                   <CardContent className="space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-sm font-semibold text-text-primary">{batch.batch_name}</p>
-                      <StatusBadge status={batch.status} />
+                      <div className="flex items-center gap-1.5">
+                        {batch.is_full && <Badge variant="danger">Full</Badge>}
+                        <StatusBadge status={batch.status} />
+                      </div>
                     </div>
                     <ProgressBar percent={Math.round((batch.current_pax / batch.min_pax) * 100)} label={`${batch.current_pax}/${batch.min_pax} pax`} />
+                    {batch.max_pax != null && (
+                      <p className="text-xs text-text-muted">
+                        {batch.is_full ? 'No slots remaining' : `${batch.slots_remaining} of ${batch.max_pax} slot(s) remaining`}
+                      </p>
+                    )}
                     <p className="text-xs text-text-muted">Created {dayjs(batch.created_at).format('MMM D, YYYY')}</p>
                   </CardContent>
                 </Card>
@@ -98,6 +111,10 @@ export default function StaffTrainingReferralBatches() {
             <div>
               <Label>Minimum Pax</Label>
               <Input type="number" min={1} value={minPax} onChange={(e) => setMinPax(e.target.value)} />
+            </div>
+            <div>
+              <Label>Maximum Pax (optional — leave blank for unlimited)</Label>
+              <Input type="number" min={1} value={maxPax} onChange={(e) => setMaxPax(e.target.value)} placeholder="Unlimited" />
             </div>
             <div className="flex justify-end">
               <Button onClick={() => create.mutate()} disabled={create.isPending || !batchName.trim()}>

@@ -12,11 +12,13 @@ from datetime import datetime
 
 from flask import Blueprint, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
+from sqlalchemy.orm import selectinload
 
 from extensions import db
 from models.jobseeker import JobseekerProfile
 from models.manpower_training import ManpowerTrainingApplication, ManpowerTrainingBatch
 from models.user import User
+from services import manpower_capacity_service
 from services.audit_service import log_audit
 from services.email_service import (
     send_manpower_referral_awaiting_response_email,
@@ -25,7 +27,7 @@ from services.email_service import (
     send_manpower_referral_received_email,
     send_manpower_referral_submitted_email,
 )
-from services.notification_service import notify_role, notify_user
+from services.notification_service import notify_user
 from utils.decorators import role_required
 from utils.responses import fail, ok
 
@@ -39,13 +41,19 @@ def _notify_application(application: ManpowerTrainingApplication, title: str, me
     )
 
 
-def _notify_board(kind: str, record_id):
-    """Pings staff + admin that an application/batch changed, so their queue/batch/oversight
-    views can live-refetch from the REST endpoints (payload carries no PII — just enough to
-    know something changed)."""
+def _notify_board(kind: str, record_id, title: str, message: str):
+    """Notifies every active staff + admin user that an application/batch changed — a real,
+    persisted Notification (bell/unread-count) per recipient, same fan-out pattern as
+    announcement_notification_service.py::publish_and_notify, plus the live socket ping
+    their queue/batch/oversight pages already listen for."""
     payload = {"type": kind, "id": str(record_id)}
-    notify_role("staff", "training_referral:board_update", payload)
-    notify_role("admin", "training_referral:board_update", payload)
+    staff_link = f"/staff/training-referral/batches/{record_id}" if kind == "batch" else "/staff/training-referral/queue"
+    for role, link in (("staff", staff_link), ("admin", "/admin/training-referral")):
+        for user in User.query.filter_by(role=role, is_active=True).all():
+            notify_user(
+                user.id, "training_referral_board", title, message, link=link,
+                socket_event="training_referral:board_update", socket_payload=payload,
+            )
 
 manpower_training_bp = Blueprint("manpower_training", __name__, url_prefix="/api")
 
@@ -59,7 +67,9 @@ def my_manpower_applications():
     profile = JobseekerProfile.query.filter_by(user_id=get_jwt_identity()).first()
     if not profile:
         return ok([])
-    apps = ManpowerTrainingApplication.query.filter_by(jobseeker_profile_id=profile.id).order_by(
+    apps = ManpowerTrainingApplication.query.options(
+        selectinload(ManpowerTrainingApplication.jobseeker_profile), selectinload(ManpowerTrainingApplication.batch)
+    ).filter_by(jobseeker_profile_id=profile.id).order_by(
         ManpowerTrainingApplication.created_at.desc()
     ).all()
     return ok([a.to_dict() for a in apps])
@@ -93,7 +103,10 @@ def apply_manpower_training():
         profile.user.email, profile.full_name, program_interest, application.application_date.strftime("%B %d, %Y"),
     )
     _notify_application(application, "Manpower Skills Training application received", "Your application is under review by PESO staff.")
-    _notify_board("application", application.id)
+    _notify_board(
+        "application", application.id, "New Manpower Skills Training application",
+        f"{profile.full_name} applied for {program_interest}.",
+    )
 
     return ok(application.to_dict(), "Manpower Skills Training application submitted.", 201)
 
@@ -113,7 +126,10 @@ def withdraw_manpower_application(application_id):
     application.remarks = "Withdrawn by applicant."
     db.session.commit()
     log_audit(User.query.get(profile.user_id), "Withdraw", "training_referral", application.id)
-    _notify_board("application", application.id)
+    _notify_board(
+        "application", application.id, "Manpower Skills Training application withdrawn",
+        f"{profile.full_name} withdrew their application.",
+    )
     return ok(application.to_dict(), "Application withdrawn.")
 
 
@@ -123,7 +139,9 @@ def withdraw_manpower_application(application_id):
 @jwt_required()
 @role_required("staff", "admin")
 def staff_manpower_queue():
-    query = ManpowerTrainingApplication.query
+    query = ManpowerTrainingApplication.query.options(
+        selectinload(ManpowerTrainingApplication.jobseeker_profile), selectinload(ManpowerTrainingApplication.batch)
+    )
     status = request.args.get("status", "pending")
     if status:
         query = query.filter_by(status=status)
@@ -136,7 +154,9 @@ def staff_manpower_queue():
 @role_required("staff", "admin")
 def staff_manpower_applications_all():
     """All applications, unfiltered by default — backs the admin oversight dashboard."""
-    query = ManpowerTrainingApplication.query
+    query = ManpowerTrainingApplication.query.options(
+        selectinload(ManpowerTrainingApplication.jobseeker_profile), selectinload(ManpowerTrainingApplication.batch)
+    )
     if request.args.get("status"):
         query = query.filter_by(status=request.args["status"])
     if request.args.get("batch_id"):
@@ -166,7 +186,10 @@ def staff_decline_manpower_application(application_id):
     batch_name = application.batch.batch_name if application.batch else None
     send_manpower_referral_declined_email(application.jobseeker_profile.user.email, application.jobseeker_profile.full_name, batch_name, remarks)
     _notify_application(application, "Manpower Skills Training application declined", remarks)
-    _notify_board("application", application.id)
+    _notify_board(
+        "application", application.id, "Manpower Skills Training applicant declined",
+        f"{application.jobseeker_profile.full_name} was declined. Reason: {remarks}",
+    )
 
     return ok(application.to_dict(), "Applicant declined.")
 
@@ -175,7 +198,7 @@ def staff_decline_manpower_application(application_id):
 @jwt_required()
 @role_required("staff", "admin")
 def staff_list_manpower_batches():
-    query = ManpowerTrainingBatch.query
+    query = ManpowerTrainingBatch.query.options(selectinload(ManpowerTrainingBatch.applications))
     if request.args.get("status"):
         query = query.filter_by(status=request.args["status"])
     batches = query.order_by(ManpowerTrainingBatch.created_at.desc()).all()
@@ -191,11 +214,18 @@ def staff_create_manpower_batch():
     if not batch_name:
         return fail("Batch name is required.", 400)
 
-    batch = ManpowerTrainingBatch(batch_name=batch_name, min_pax=data.get("min_pax") or 15)
+    min_pax = data.get("min_pax") or 15
+    max_pax = data.get("max_pax")
+    if max_pax is not None:
+        max_pax = int(max_pax)
+        if max_pax < min_pax:
+            return fail(f"Maximum pax ({max_pax}) cannot be less than minimum pax ({min_pax}).", 400)
+
+    batch = ManpowerTrainingBatch(batch_name=batch_name, min_pax=min_pax, max_pax=max_pax)
     db.session.add(batch)
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Create", "training_referral_batch", batch.id)
-    _notify_board("batch", batch.id)
+    _notify_board("batch", batch.id, "New Manpower Skills Training batch created", f'Batch "{batch_name}" was created.')
     return ok(batch.to_dict(), "Batch created.", 201)
 
 
@@ -206,7 +236,9 @@ def staff_manpower_batch_detail(batch_id):
     batch = ManpowerTrainingBatch.query.get(batch_id)
     if not batch:
         return fail("Batch not found.", 404)
-    applications = ManpowerTrainingApplication.query.filter_by(batch_id=batch.id).order_by(
+    applications = ManpowerTrainingApplication.query.options(
+        selectinload(ManpowerTrainingApplication.jobseeker_profile)
+    ).filter_by(batch_id=batch.id).order_by(
         ManpowerTrainingApplication.created_at.asc()
     ).all()
     payload = batch.to_dict()
@@ -218,16 +250,19 @@ def staff_manpower_batch_detail(batch_id):
 @jwt_required()
 @role_required("staff", "admin")
 def staff_pool_into_batch(batch_id):
-    batch = ManpowerTrainingBatch.query.get(batch_id)
-    if not batch:
-        return fail("Batch not found.", 404)
-    if batch.status != "forming":
-        return fail("This batch is no longer accepting applicants.", 400)
-
     data = request.get_json(force=True) or {}
     application_ids = data.get("application_ids") or []
     if not application_ids:
         return fail("Select at least one applicant to pool.", 400)
+
+    # Lock the batch row before checking capacity, and don't commit until the
+    # applicants are written — this is what actually prevents two concurrent
+    # pool requests from both claiming the same last slot(s). See
+    # services/manpower_capacity_service.py (mirrors vacancy_capacity_service.py's
+    # SELECT ... FOR UPDATE pattern, the only locking precedent in this codebase).
+    batch, capacity_ok, error = manpower_capacity_service.lock_batch_and_check_capacity(batch_id, len(application_ids))
+    if not capacity_ok:
+        return fail(error, 404 if batch is None else 400)
 
     applications = ManpowerTrainingApplication.query.filter(
         ManpowerTrainingApplication.id.in_(application_ids),
@@ -239,7 +274,10 @@ def staff_pool_into_batch(batch_id):
         application.staff_id = get_jwt_identity()
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Pool", "training_referral_batch", batch.id, details=f"{len(applications)} applicant(s) pooled")
-    _notify_board("batch", batch.id)
+    _notify_board(
+        "batch", batch.id, "Applicants pooled into batch",
+        f'{len(applications)} applicant(s) added to "{batch.batch_name}".',
+    )
     return ok(batch.to_dict(), f"{len(applications)} applicant(s) added to {batch.batch_name}.")
 
 
@@ -270,7 +308,7 @@ def staff_upload_manpower_proposal(batch_id):
     batch = ManpowerTrainingBatch.query.get(batch_id)
     batch.project_proposal_url = url
     db.session.commit()
-    _notify_board("batch", batch.id)
+    _notify_board("batch", batch.id, "Project proposal uploaded", f'Proposal uploaded for "{batch.batch_name}".')
     return ok(batch.to_dict(), "Project proposal uploaded.")
 
 
@@ -314,7 +352,7 @@ def staff_submit_batch_to_tesda(batch_id):
         return fail("Batch not found.", 404)
     if batch.status != "forming":
         return fail("This batch has already been submitted.", 400)
-    pooled_count = len([a for a in batch.applications if a.status != "declined"])
+    pooled_count = manpower_capacity_service.get_pooled_count(batch)
     if pooled_count < batch.min_pax:
         return fail(f"At least {batch.min_pax} pooled applicants are required (currently {pooled_count}).", 400)
     if not batch.project_proposal_url:
@@ -326,7 +364,7 @@ def staff_submit_batch_to_tesda(batch_id):
     log_audit(User.query.get(get_jwt_identity()), "Submit to TESDA", "training_referral_batch", batch.id)
 
     _email_batch_cascade(affected, "submitted_to_tesda", batch.batch_name, submitted_date_str=batch.submitted_to_tesda_date.strftime("%B %d, %Y"))
-    _notify_board("batch", batch.id)
+    _notify_board("batch", batch.id, "Batch submitted to TESDA", f'"{batch.batch_name}" was submitted to TESDA.')
 
     return ok(batch.to_dict(), "Batch submitted to TESDA.")
 
@@ -346,7 +384,10 @@ def staff_follow_up_batch(batch_id):
     log_audit(User.query.get(get_jwt_identity()), "Follow Up", "training_referral_batch", batch.id)
 
     _email_batch_cascade(affected, "for_tesda_response", batch.batch_name)
-    _notify_board("batch", batch.id)
+    _notify_board(
+        "batch", batch.id, "Batch marked awaiting TESDA response",
+        f'"{batch.batch_name}" is awaiting TESDA response.',
+    )
 
     return ok(batch.to_dict(), "Batch marked as awaiting TESDA response.")
 
@@ -367,7 +408,10 @@ def staff_complete_batch(batch_id):
     log_audit(User.query.get(get_jwt_identity()), "Mark Completed", "training_referral_batch", batch.id)
 
     _email_batch_cascade(affected, "completed", batch.batch_name)
-    _notify_board("batch", batch.id)
+    _notify_board(
+        "batch", batch.id, "Batch marked completed",
+        f'"{batch.batch_name}" training was confirmed by TESDA.',
+    )
 
     return ok(batch.to_dict(), "Batch marked completed — training confirmed.")
 
@@ -393,6 +437,6 @@ def staff_decline_batch(batch_id):
     log_audit(User.query.get(get_jwt_identity()), "Mark Declined", "training_referral_batch", batch.id, details=remarks)
 
     _email_batch_cascade(affected, "declined", batch.batch_name, remarks=remarks)
-    _notify_board("batch", batch.id)
+    _notify_board("batch", batch.id, "Batch marked declined", f'"{batch.batch_name}" was declined. Reason: {remarks}')
 
     return ok(batch.to_dict(), "Batch marked declined.")

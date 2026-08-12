@@ -7,6 +7,7 @@ import { useDropzone } from 'react-dropzone'
 import { Link, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 
+import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import { Dialog, DialogContent } from '../../components/ui/Dialog'
@@ -108,12 +109,22 @@ export default function StaffTrainingReferralBatchDetail() {
       <PageHeader
         title={batch.batch_name}
         description={`Status: ${batch.status.replace(/_/g, ' ')}`}
-        actions={<StatusBadge status={batch.status} />}
+        actions={
+          <>
+            {batch.is_full && <Badge variant="danger">Full</Badge>}
+            <StatusBadge status={batch.status} />
+          </>
+        }
       />
 
       <Card>
         <CardContent className="space-y-3">
           <ProgressBar percent={Math.round((batch.current_pax / batch.min_pax) * 100)} label={`${batch.current_pax}/${batch.min_pax} pax pooled`} />
+          {batch.max_pax != null && (
+            <p className="text-xs text-text-muted">
+              {batch.is_full ? 'No slots remaining (batch full)' : `${batch.slots_remaining} of ${batch.max_pax} slot(s) remaining`}
+            </p>
+          )}
           {batch.submitted_to_tesda_date && (
             <p className="text-xs text-text-muted">Submitted to TESDA {dayjs(batch.submitted_to_tesda_date).format('MMM D, YYYY')}</p>
           )}

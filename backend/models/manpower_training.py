@@ -15,6 +15,7 @@ class ManpowerTrainingBatch(BaseModel):
 
     batch_name = db.Column(db.String(255), nullable=False)
     min_pax = db.Column(db.Integer, nullable=False, default=15)
+    max_pax = db.Column(db.Integer, nullable=True)  # None = unlimited, matches JobFair.max_*_slots convention
     status = db.Column(db.String(20), default="forming", nullable=False)
     project_proposal_url = db.Column(db.String(1000), nullable=True)
     submitted_to_tesda_date = db.Column(db.DateTime(timezone=True), nullable=True)
@@ -28,11 +29,16 @@ class ManpowerTrainingBatch(BaseModel):
 
     def to_dict(self):
         pooled_apps = [a for a in self.applications if a.status != "declined"]
+        current_pax = len(pooled_apps)
+        slots_remaining = max(self.max_pax - current_pax, 0) if self.max_pax is not None else None
         return {
             "id": str(self.id),
             "batch_name": self.batch_name,
             "min_pax": self.min_pax,
-            "current_pax": len(pooled_apps),
+            "max_pax": self.max_pax,
+            "current_pax": current_pax,
+            "slots_remaining": slots_remaining,
+            "is_full": slots_remaining is not None and slots_remaining <= 0,
             "status": self.status,
             "project_proposal_url": self.project_proposal_url,
             "submitted_to_tesda_date": self.submitted_to_tesda_date.isoformat() if self.submitted_to_tesda_date else None,
