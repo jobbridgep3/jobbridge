@@ -14,6 +14,7 @@ from models.jobseeker import Education, JobseekerDocument, JobseekerProfile, Wor
 from models.manpower_training import ManpowerTrainingApplication, ManpowerTrainingBatch
 from models.notification import Notification
 from models.otp import OtpCode
+from models.owwa import OwwaRequest, OwwaRequestDocument, OwwaRequestRemark
 from models.program import ProgramApplication
 from models.referral import ReferralLetter
 from models.settings import SystemSetting
@@ -54,6 +55,9 @@ __all__ = [
     "ProgramApplication",
     "ManpowerTrainingApplication",
     "ManpowerTrainingBatch",
+    "OwwaRequest",
+    "OwwaRequestDocument",
+    "OwwaRequestRemark",
     "Announcement",
     "Notification",
     "AuditTrail",
