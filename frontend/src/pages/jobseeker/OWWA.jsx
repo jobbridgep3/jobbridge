@@ -19,7 +19,7 @@ import { fadeIn } from '../../lib/motion'
 import { cn } from '../../lib/utils'
 
 const REQUIREMENTS = [
-  'Application form (may be pre-filled from this page)',
+  'Application form — generated automatically for you once you submit, no upload needed',
   'Proof of OFW status or beneficiary relationship (e.g. OWWA membership, OEC, or a valid ID)',
   'Other supporting documents as applicable',
 ]
@@ -96,13 +96,10 @@ function RequestDocuments({ request, onChanged }) {
   return (
     <div className="mt-3 space-y-3">
       <DocumentUploadSlot
-        label="Application Form"
+        label="Application Form (auto-generated)"
         required
-        multiple
+        multiple={false}
         documents={applicationForms}
-        uploading={uploadingType === 'application_form'}
-        onUpload={request.status === 'pending' ? (file) => upload('application_form', file) : undefined}
-        onDelete={request.status === 'pending' ? remove : undefined}
       />
       <DocumentUploadSlot
         label="Supporting Documents"

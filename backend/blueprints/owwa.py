@@ -111,9 +111,34 @@ def apply_owwa_request():
     db.session.commit()
     log_audit(User.query.get(profile.user_id), "Create", "owwa_request", owwa_request.id)
 
-    send_owwa_request_received_email(profile.user.email, profile.full_name, str(owwa_request.id), owwa_request.submitted_at.strftime("%B %d, %Y"))
+    request_dict = owwa_request.to_dict()
+    profile_dict = profile.to_dict()
+    profile_email = profile.user.email
+    profile_full_name = profile.full_name
+    submitted_at = owwa_request.submitted_at
+    owwa_request_id = owwa_request.id
+
+    # Release the DB connection before the slow, blocking PDF render + Storage
+    # upload call — see the identical comment in blueprints/manpower_training.py's
+    # upload handler.
+    db.session.close()
+
+    from services.pdf_service import generate_owwa_application_form
+    from services.storage_service import upload_file
+
+    pdf_bytes = generate_owwa_application_form(request_dict, profile_dict, profile_email)
+    filename = f"OWWA_Application_Form_{owwa_request_id}.pdf"
+    file_url = upload_file(pdf_bytes, filename, folder=f"owwa-docs/{owwa_request_id}/application_form", content_type="application/pdf")
+
+    db.session.add(OwwaRequestDocument(
+        owwa_request_id=owwa_request_id, document_type="application_form", file_url=file_url, original_filename=filename,
+    ))
+    db.session.commit()
+
+    owwa_request = OwwaRequest.query.get(owwa_request_id)
+    send_owwa_request_received_email(profile_email, profile_full_name, str(owwa_request_id), submitted_at.strftime("%B %d, %Y"))
     _notify_jobseeker(owwa_request, "OWWA Assistance request received", "Your request is under review by PESO staff.")
-    _notify_board(owwa_request.id, "New OWWA Assistance request", f"{profile.full_name} submitted a new OWWA Assistance request.")
+    _notify_board(owwa_request_id, "New OWWA Assistance request", f"{profile_full_name} submitted a new OWWA Assistance request.")
 
     return ok(owwa_request.to_dict(include_documents=True), "OWWA Assistance request submitted.", 201)
 
@@ -139,7 +164,9 @@ def upload_owwa_document(request_id):
         return error
 
     document_type = request.form.get("document_type")
-    if document_type not in ("application_form", "supporting_document"):
+    if document_type == "application_form":
+        return fail("The application form is generated automatically and cannot be uploaded manually.", 400)
+    if document_type not in ("supporting_document",):
         return fail("Invalid document type.", 400)
     if "file" not in request.files:
         return fail("No file uploaded.", 400)
