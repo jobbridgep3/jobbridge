@@ -671,3 +671,108 @@ def send_application_status_email(to: str, full_name: str, job_title: str, compa
     </div>
     """
     return send_email(to, f"Application update — {job_title}: {status_label}", html)
+
+
+PESO_CONTACT_INFO = "jobbridgepilalaguna@gmail.com"
+
+
+def send_owwa_request_received_email(to: str, jobseeker_name: str, request_id: str, submitted_date_str: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">OWWA Assistance Request Received</h2>
+      <p>Dear {jobseeker_name},</p>
+      <p>We have received your application for the OWWA Assistance Program. Your request is now under
+      review by PESO Pila staff.</p>
+      <p><b>Request Details:</b><br/>
+      Reference Number: {request_id}<br/>
+      Date Submitted: {submitted_date_str}<br/>
+      Status: Pending Review</p>
+      <p>Our staff will verify your documents and eligibility with OWWA shortly. You will receive an
+      email update once your application has been reviewed.</p>
+      <p>If you have questions, you may contact PESO Pila at {PESO_CONTACT_INFO}.</p>
+      <p>Thank you,<br/>Public Employment Service Office — Pila, Laguna</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"OWWA Assistance Request Received — Reference #{request_id}", html)
+
+
+def send_owwa_request_verified_email(to: str, jobseeker_name: str, request_id: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Your OWWA Assistance Application Has Been Verified</h2>
+      <p>Dear {jobseeker_name},</p>
+      <p>Good news — your OWWA Assistance Program application (Reference #{request_id}) has been
+      reviewed and verified by PESO Pila staff, including confirmation of your eligibility with OWWA.</p>
+      <p>Your application is now being finalized for submission to OWWA Region IV-A. We will notify
+      you once it has been submitted.</p>
+      <p>Thank you for your patience,<br/>Public Employment Service Office — Pila, Laguna</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"Your OWWA Assistance Application Has Been Verified — Reference #{request_id}", html)
+
+
+def send_owwa_request_submitted_email(to: str, jobseeker_name: str, request_id: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Your OWWA Assistance Application Has Been Submitted to OWWA</h2>
+      <p>Dear {jobseeker_name},</p>
+      <p>Your OWWA Assistance Program application (Reference #{request_id}) has been finalized and
+      submitted to OWWA Region IV-A for processing.</p>
+      <p>PESO Pila will continue to follow up on your application's status. You will be notified as
+      soon as we receive an update from OWWA.</p>
+      <p>Thank you,<br/>Public Employment Service Office — Pila, Laguna</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"Your OWWA Assistance Application Has Been Submitted to OWWA — Reference #{request_id}", html)
+
+
+def send_owwa_request_awaiting_response_email(to: str, jobseeker_name: str, request_id: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Update on Your OWWA Assistance Application</h2>
+      <p>Dear {jobseeker_name},</p>
+      <p>We would like to inform you that your OWWA Assistance Program application (Reference #{request_id})
+      is still being processed by OWWA Region IV-A. PESO Pila continues to follow up on your behalf.</p>
+      <p>We appreciate your patience and will notify you as soon as a decision is received.</p>
+      <p>Thank you,<br/>Public Employment Service Office — Pila, Laguna</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"Update on Your OWWA Assistance Application — Reference #{request_id}", html)
+
+
+def send_owwa_request_completed_email(to: str, jobseeker_name: str, request_id: str, release_instructions: str | None = None):
+    instructions = release_instructions or "Please proceed to the PESO Pila office to coordinate the next steps for claiming your assistance."
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Your OWWA Assistance Application Has Been Completed</h2>
+      <p>Dear {jobseeker_name},</p>
+      <p>We are pleased to inform you that your OWWA Assistance Program application (Reference #{request_id})
+      has been completed. OWWA has processed your assistance.</p>
+      <p>{instructions}</p>
+      <p>If you have any questions, please contact PESO Pila at {PESO_CONTACT_INFO}.</p>
+      <p>Congratulations,<br/>Public Employment Service Office — Pila, Laguna</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"Your OWWA Assistance Application Has Been Completed — Reference #{request_id}", html)
+
+
+def send_owwa_request_declined_email(to: str, jobseeker_name: str, request_id: str, declined_reason: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Update on Your OWWA Assistance Application</h2>
+      <p>Dear {jobseeker_name},</p>
+      <p>We regret to inform you that your OWWA Assistance Program application (Reference #{request_id})
+      was not approved.</p>
+      <p><b>Reason:</b> {declined_reason}</p>
+      <p>If you believe this decision was made in error, or if you would like to reapply with updated
+      documents, please visit or contact PESO Pila at {PESO_CONTACT_INFO}.</p>
+      <p>Thank you for your understanding,<br/>Public Employment Service Office — Pila, Laguna</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"Update on Your OWWA Assistance Application — Reference #{request_id}", html)

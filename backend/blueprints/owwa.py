@@ -21,12 +21,52 @@ from models.jobseeker import JobseekerProfile
 from models.owwa import OwwaRequest, OwwaRequestDocument, OwwaRequestRemark
 from models.user import User
 from services.audit_service import log_audit
+from services.email_service import (
+    send_owwa_request_awaiting_response_email,
+    send_owwa_request_completed_email,
+    send_owwa_request_declined_email,
+    send_owwa_request_received_email,
+    send_owwa_request_submitted_email,
+    send_owwa_request_verified_email,
+)
+from services.notification_service import notify_role, notify_user
 from utils.decorators import role_required
 from utils.responses import fail, ok
 
 owwa_bp = Blueprint("owwa", __name__, url_prefix="/api")
 
 _EAGER_LOAD = (selectinload(OwwaRequest.jobseeker_profile),)
+
+
+def _notify_jobseeker(owwa_request: OwwaRequest, title: str, message: str):
+    notify_user(
+        owwa_request.jobseeker_profile.user_id, "owwa_request_status", title, message,
+        link="/jobseeker/owwa",
+        socket_event="owwa:status_change",
+        socket_payload={"request_id": str(owwa_request.id), "new_status": owwa_request.status},
+    )
+
+
+def _notify_board(record_id, title: str, message: str):
+    """Persisted (bell + unread count) notification for every active staff + admin
+    user, same corrected pattern as manpower_training.py's _notify_board — not the
+    ephemeral notify_role-only approach the ManPower module initially shipped with."""
+    payload = {"id": str(record_id)}
+    for role, link in (("staff", f"/staff/owwa/{record_id}"), ("admin", "/admin/owwa")):
+        for user in User.query.filter_by(role=role, is_active=True).all():
+            notify_user(
+                user.id, "owwa_board", title, message, link=link,
+                socket_event="owwa:board_update", socket_payload=payload,
+            )
+
+
+def _ping_board(record_id):
+    """Lightweight live-refresh ping (no persisted bell notification) for low-stakes
+    events like an internal remark being added — other staff viewing the same
+    request live-sync without every internal note cluttering everyone's inbox."""
+    payload = {"id": str(record_id)}
+    notify_role("staff", "owwa:board_update", payload)
+    notify_role("admin", "owwa:board_update", payload)
 
 
 # ---------- Jobseeker ----------
@@ -67,6 +107,10 @@ def apply_owwa_request():
     db.session.add(owwa_request)
     db.session.commit()
     log_audit(User.query.get(profile.user_id), "Create", "owwa_request", owwa_request.id)
+
+    send_owwa_request_received_email(profile.user.email, profile.full_name, str(owwa_request.id), owwa_request.submitted_at.strftime("%B %d, %Y"))
+    _notify_jobseeker(owwa_request, "OWWA Assistance request received", "Your request is under review by PESO staff.")
+    _notify_board(owwa_request.id, "New OWWA Assistance request", f"{profile.full_name} submitted a new OWWA Assistance request.")
 
     return ok(owwa_request.to_dict(include_documents=True), "OWWA Assistance request submitted.", 201)
 
@@ -181,6 +225,7 @@ def staff_add_owwa_remark(request_id):
     db.session.add(remark)
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Create", "owwa_request_remark", owwa_request.id)
+    _ping_board(owwa_request.id)
     return ok(remark.to_dict(), "Remark added.", 201)
 
 
@@ -205,6 +250,12 @@ def staff_verify_owwa_request(request_id):
     owwa_request.verified_at = datetime.utcnow()
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Verify", "owwa_request", owwa_request.id)
+
+    profile = owwa_request.jobseeker_profile
+    send_owwa_request_verified_email(profile.user.email, profile.full_name, str(owwa_request.id))
+    _notify_jobseeker(owwa_request, "OWWA Assistance application verified", "Your application has been verified and is being finalized for submission to OWWA.")
+    _notify_board(owwa_request.id, "OWWA request verified", f"{profile.full_name}'s request was verified.")
+
     return ok(owwa_request.to_dict(), "Request marked as verified.")
 
 
@@ -218,6 +269,12 @@ def staff_submit_owwa_request(request_id):
     owwa_request.submitted_to_owwa_at = datetime.utcnow()
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Submit to OWWA", "owwa_request", owwa_request.id)
+
+    profile = owwa_request.jobseeker_profile
+    send_owwa_request_submitted_email(profile.user.email, profile.full_name, str(owwa_request.id))
+    _notify_jobseeker(owwa_request, "OWWA Assistance application submitted", "Your application has been submitted to OWWA Region IV-A.")
+    _notify_board(owwa_request.id, "OWWA request submitted to OWWA", f"{profile.full_name}'s request was submitted to OWWA.")
+
     return ok(owwa_request.to_dict(), "Request submitted to OWWA.")
 
 
@@ -233,6 +290,12 @@ def staff_follow_up_owwa_request(request_id):
     owwa_request.for_owwa_response_at = datetime.utcnow()
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Follow Up", "owwa_request", owwa_request.id)
+
+    profile = owwa_request.jobseeker_profile
+    send_owwa_request_awaiting_response_email(profile.user.email, profile.full_name, str(owwa_request.id))
+    _notify_jobseeker(owwa_request, "OWWA Assistance application update", "PESO Pila is following up with OWWA on your behalf.")
+    _notify_board(owwa_request.id, "OWWA request awaiting response", f"{profile.full_name}'s request is awaiting OWWA response.")
+
     return ok(owwa_request.to_dict(), "Request marked as awaiting OWWA response.")
 
 
@@ -253,6 +316,12 @@ def staff_complete_owwa_request(request_id):
         db.session.add(OwwaRequestRemark(owwa_request_id=owwa_request.id, staff_id=get_jwt_identity(), remark=f"Release instructions: {release_instructions}"))
         db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Mark Completed", "owwa_request", owwa_request.id)
+
+    profile = owwa_request.jobseeker_profile
+    send_owwa_request_completed_email(profile.user.email, profile.full_name, str(owwa_request.id), release_instructions or None)
+    _notify_jobseeker(owwa_request, "OWWA Assistance application completed", "OWWA has processed your assistance.")
+    _notify_board(owwa_request.id, "OWWA request completed", f"{profile.full_name}'s request was marked completed.")
+
     return ok(owwa_request.to_dict(), "Request marked completed.")
 
 
@@ -275,4 +344,10 @@ def staff_decline_owwa_request(request_id):
     owwa_request.declined_reason = reason
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Decline", "owwa_request", owwa_request.id, details=reason)
+
+    profile = owwa_request.jobseeker_profile
+    send_owwa_request_declined_email(profile.user.email, profile.full_name, str(owwa_request.id), reason)
+    _notify_jobseeker(owwa_request, "OWWA Assistance application declined", reason)
+    _notify_board(owwa_request.id, "OWWA request declined", f"{profile.full_name}'s request was declined. Reason: {reason}")
+
     return ok(owwa_request.to_dict(), "Request marked declined.")
