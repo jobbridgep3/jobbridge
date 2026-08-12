@@ -54,6 +54,8 @@ const STATUS_MAP = {
   submitted_to_tesda: { label: 'Submitted to TESDA', variant: 'warning' },
   for_tesda_response: { label: 'Awaiting TESDA Response', variant: 'warning' },
   forming: { label: 'Forming', variant: 'default' },
+  submitted_to_owwa: { label: 'Submitted to OWWA', variant: 'info' },
+  for_owwa_response: { label: 'Awaiting OWWA Response', variant: 'warning' },
 }
 
 export function StatusBadge({ status, label }) {
