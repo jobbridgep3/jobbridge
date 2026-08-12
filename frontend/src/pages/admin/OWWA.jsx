@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
 import { CheckCircle2, Clock, Download, FileText, Hourglass, PieChart as PieChartIcon, TrendingUp, XCircle } from 'lucide-react'
@@ -49,6 +49,7 @@ export default function AdminOWWA() {
   const { data: requests, isLoading: requestsLoading } = useQuery({
     queryKey: ['owwa', 'requests', status],
     queryFn: async () => (await api.get('/api/staff/owwa/queue', { params: status ? { status } : {} })).data.data,
+    placeholderData: keepPreviousData,
   })
 
   useSocket({
