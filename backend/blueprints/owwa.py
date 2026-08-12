@@ -35,7 +35,7 @@ from utils.responses import fail, ok
 
 owwa_bp = Blueprint("owwa", __name__, url_prefix="/api")
 
-_EAGER_LOAD = (selectinload(OwwaRequest.jobseeker_profile),)
+_EAGER_LOAD = (selectinload(OwwaRequest.jobseeker_profile).selectinload(JobseekerProfile.user),)
 
 
 def _notify_jobseeker(owwa_request: OwwaRequest, title: str, message: str):

@@ -46,6 +46,8 @@ class OwwaRequest(BaseModel):
             "id": str(self.id),
             "jobseeker_profile_id": str(self.jobseeker_profile_id),
             "jobseeker_name": self.jobseeker_profile.full_name if self.jobseeker_profile else None,
+            "jobseeker_contact": self.jobseeker_profile.contact_number if self.jobseeker_profile else None,
+            "jobseeker_email": self.jobseeker_profile.user.email if self.jobseeker_profile and self.jobseeker_profile.user else None,
             "status": self.status,
             "ofw_relationship": self.ofw_relationship,
             "notes": self.notes,
