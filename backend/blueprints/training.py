@@ -43,6 +43,19 @@ def enroll(program_id):
         enrollment = TrainingEnrollment(program_id=program.id, jobseeker_profile_id=profile.id, status="enrolled")
     db.session.add(enrollment)
     db.session.commit()
+
+    if enrollment.status == "waitlisted":
+        notify_user(
+            profile.user_id, "training_enrollment", "Added to Waitlist",
+            f"You've been added to the waitlist for {program.title}. You'll be notified if a slot opens up.",
+            link="/jobseeker/training", socket_event="training:enrollment_update", socket_payload=enrollment.to_dict(),
+        )
+    else:
+        notify_user(
+            profile.user_id, "training_enrollment", "Training Enrollment Confirmed",
+            f"You're enrolled in {program.title}.",
+            link="/jobseeker/training", socket_event="training:enrollment_update", socket_payload=enrollment.to_dict(),
+        )
     return ok(enrollment.to_dict(), "Enrollment confirmed.", 201)
 
 
@@ -83,10 +96,21 @@ def update_program(program_id):
     if not program:
         return fail("Program not found.", 404)
     data = request.get_json(force=True) or {}
+    old_venue = program.venue
     for field in ("title", "description", "trainer", "venue", "max_slots", "status"):
         if field in data:
             setattr(program, field, data[field])
     db.session.commit()
+
+    if program.venue != old_venue:
+        message = f"{program.title} has a new venue: {program.venue}."
+        for enrollment in program.enrollments:
+            if enrollment.status not in ("attended", "completed", "certificate_issued"):
+                notify_user(
+                    enrollment.jobseeker_profile.user_id, "training_enrollment", "Training Program Updated",
+                    message, link="/jobseeker/training", socket_event="training:program_updated",
+                    socket_payload=enrollment.to_dict(),
+                )
     return ok(program.to_dict(), "Program updated.")
 
 

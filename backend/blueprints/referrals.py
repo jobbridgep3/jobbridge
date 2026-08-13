@@ -16,7 +16,7 @@ from models.user import User
 from models.vacancy import Vacancy
 from services.audit_service import log_audit
 from services.email_service import send_referral_decision_email, send_referral_pending_employer_review_email
-from services.notification_service import notify_role, notify_user
+from services.notification_service import notify_board, notify_user
 from services.application_status_service import is_currently_employed_at_company
 from services.vacancy_capacity_service import VACANCY_FULL_MESSAGE, is_vacancy_full
 from services.pdf_service import generate_referral_letter
@@ -92,8 +92,16 @@ def request_referral_letter():
     db.session.commit()
     log_audit(User.query.get(profile.user_id), "Create", "referral_letters", letter.id, "Referral letter requested")
 
-    notify_role("staff", "referral:requested", letter.to_dict())
-    notify_role("admin", "referral:requested", letter.to_dict())
+    vacancy_title = vacancy.title if vacancy_id else None
+    message = (
+        f"{profile.full_name} requested a referral letter for {vacancy_title}."
+        if vacancy_title else f"{profile.full_name} requested a general referral letter."
+    )
+    notify_board(
+        [("staff", "/staff/referrals"), ("admin", "/admin/referrals")],
+        "referral_board", "New Referral Letter Request", message,
+        socket_event="referral:requested", socket_payload=letter.to_dict(),
+    )
     return ok(letter.to_dict(), "Referral letter request sent to PESO.", 201)
 
 

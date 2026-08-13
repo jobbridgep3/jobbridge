@@ -32,6 +32,7 @@ from services.dashboard_service import (
 from services.email_service import (
     send_accreditation_status_email,
     send_document_status_email,
+    send_employment_status_email,
     send_vacancy_approved_email,
     send_verification_status_email,
 )
@@ -211,6 +212,11 @@ def deactivate_jobseeker(profile_id):
     user.is_active = not user.is_active
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Update", "jobseekers", profile.id, f"is_active={user.is_active}")
+    notify_user(
+        user.id, "account_status", "Account Activated" if user.is_active else "Account Deactivated",
+        "Your account has been activated." if user.is_active else "Your account has been deactivated by PESO.",
+        socket_event="account:status_change", socket_payload={"profile_id": str(profile.id), "is_active": user.is_active},
+    )
     result = profile.to_dict()
     result["is_active"] = user.is_active
     message = "Account has been activated successfully." if user.is_active else "Account has been deactivated successfully."
@@ -1039,6 +1045,9 @@ def staff_close_vacancy(vacancy_id):
     vacancy.status = "closed"
     after = {"status": vacancy.status}
     db.session.commit()
+    notify_user(vacancy.employer_company.user_id, "vacancy_closed", "Vacancy Closed",
+                f"{vacancy.title} has been closed by PESO.",
+                link="/employer/vacancies", socket_event="vacancy:closed", socket_payload={"vacancy_id": str(vacancy.id)})
     log_audit(User.query.get(get_jwt_identity()), "Update", "vacancies", vacancy.id, "Closed by staff", before=before, after=after)
     emit_broadcast("public:homepage_update", {"sections": ["jobs", "stats"]})
     return ok(vacancy.to_dict(), "Vacancy closed.")
@@ -1130,6 +1139,26 @@ def bulk_vacancy_action():
                     vacancy.suspended_reason = remarks
                 log_audit(actor, action.title(), "vacancies", vacancy.id, f"Bulk {action}", before=before, after={"status": new_status})
             db.session.commit()
+
+            if action == "approve":
+                notify_user(
+                    vacancy.employer_company.user_id, "vacancy_approved", "Vacancy Approved",
+                    f"Your job vacancy '{vacancy.title}' has been approved by PESO. You may now publish it to make it visible to job seekers.",
+                    link="/employer/vacancies", socket_event="vacancy:approved", socket_payload={"vacancy_id": str(vacancy.id)},
+                )
+            elif action == "reject":
+                notify_user(vacancy.employer_company.user_id, "vacancy_rejected", "Vacancy Returned",
+                            vacancy.rejection_remarks, socket_event="vacancy:rejected",
+                            socket_payload={"vacancy_id": str(vacancy.id), "remarks": vacancy.rejection_remarks})
+            elif action == "suspend":
+                notify_user(vacancy.employer_company.user_id, "vacancy_suspended", "Vacancy Suspended",
+                            f"{vacancy.title} has been suspended." + (f" Reason: {vacancy.suspended_reason}" if vacancy.suspended_reason else ""),
+                            socket_event="vacancy:suspended", socket_payload={"vacancy_id": str(vacancy.id)})
+            elif action == "close":
+                notify_user(vacancy.employer_company.user_id, "vacancy_closed", "Vacancy Closed",
+                            f"{vacancy.title} has been closed by PESO.",
+                            link="/employer/vacancies", socket_event="vacancy:closed", socket_payload={"vacancy_id": str(vacancy.id)})
+
             succeeded.append(vacancy_id)
         except Exception as exc:  # noqa: BLE001
             db.session.rollback()
@@ -1301,7 +1330,7 @@ def staff_employment_analytics():
 @jwt_required()
 @role_required("staff", "admin")
 def staff_update_employment(record_id):
-    from models.employment import EMPLOYMENT_STATUSES, EmploymentStatusHistory
+    from models.employment import EMPLOYMENT_STATUS_LABELS, EMPLOYMENT_STATUSES, EmploymentStatusHistory
 
     record = EmploymentRecord.query.get(record_id)
     if not record:
@@ -1332,6 +1361,21 @@ def staff_update_employment(record_id):
             application = Application.query.get(record.application_id)
             if application:
                 recalculate_vacancy_status(application.vacancy_id)
+
+        label = EMPLOYMENT_STATUS_LABELS.get(record.status, record.status)
+        jobseeker = record.jobseeker_profile
+        notify_user(
+            jobseeker.user_id, "employment_updated", f"Employment update: {label}",
+            f"Your employment status as {record.position} at {record.employer_company.company_name} is now \"{label}\".",
+            link="/jobseeker/employment", socket_event="employment:updated",
+            socket_payload=record.to_dict(),
+        )
+        jobseeker_user = User.query.get(jobseeker.user_id)
+        if jobseeker_user:
+            send_employment_status_email(
+                jobseeker_user.email, jobseeker.full_name, record.position,
+                record.employer_company.company_name, label, data.get("note"),
+            )
     return ok(record.to_dict(), "Employment record updated.")
 
 
@@ -1362,6 +1406,12 @@ def staff_create_employment():
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Create", "employment", record.id, "Manual walk-in placement entry")
     emit_broadcast("public:homepage_update", {"sections": ["stats"]})
+    notify_user(
+        record.jobseeker_profile.user_id, "employment_created", "Employment Record Added",
+        f"PESO added an employment record for you: {record.position} at {record.employer_company.company_name}.",
+        link="/jobseeker/employment", socket_event="employment:updated",
+        socket_payload=record.to_dict(),
+    )
     return ok(record.to_dict(), "Employment record created.", 201)
 
 

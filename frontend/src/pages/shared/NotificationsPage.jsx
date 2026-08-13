@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import { motion } from 'framer-motion'
-import { Archive, Bell, CheckCheck, Search, Trash2 } from 'lucide-react'
+import { Archive, ArchiveRestore, Bell, CheckCheck, Search, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -26,6 +26,7 @@ const FILTER_TABS = [
   { key: 'all', label: 'All' },
   { key: 'unread', label: 'Unread' },
   { key: 'read', label: 'Read' },
+  { key: 'archived', label: 'Archived' },
 ]
 
 function groupByDate(notifications) {
@@ -57,7 +58,12 @@ export function NotificationsPage() {
     return () => clearTimeout(t)
   }, [searchInput])
 
-  const params = { ...(filter !== 'all' ? { filter } : {}), ...(search ? { search } : {}) }
+  const isArchivedView = filter === 'archived'
+  const params = {
+    archived: isArchivedView ? 'true' : 'false',
+    ...(filter !== 'all' && !isArchivedView ? { filter } : {}),
+    ...(search ? { search } : {}),
+  }
   const { data: notifications, isLoading } = useQuery({
     queryKey: ['notifications', filter, search],
     queryFn: async () => (await api.get('/api/notifications', { params })).data.data,
@@ -66,6 +72,8 @@ export function NotificationsPage() {
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['notifications'] })
   useSocket({
     'notification:new': refresh,
+    'notification:read': refresh,
+    'notification:all_read': refresh,
     'notification:bulk_updated': refresh,
     'notification:archived': refresh,
     'notification:unarchived': refresh,
@@ -153,10 +161,18 @@ export function NotificationsPage() {
         {selected.size > 0 && (
           <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5">
             <span className="text-xs text-text-muted">{selected.size} selected</span>
-            <Button size="sm" variant="ghost" onClick={() => bulkAction('read')}>Mark read</Button>
-            <Button size="sm" variant="ghost" onClick={() => bulkAction('archive')}>
-              <Archive className="h-3.5 w-3.5" /> Archive
-            </Button>
+            {isArchivedView ? (
+              <Button size="sm" variant="ghost" onClick={() => bulkAction('unarchive')}>
+                <ArchiveRestore className="h-3.5 w-3.5" /> Unarchive
+              </Button>
+            ) : (
+              <>
+                <Button size="sm" variant="ghost" onClick={() => bulkAction('read')}>Mark read</Button>
+                <Button size="sm" variant="ghost" onClick={() => bulkAction('archive')}>
+                  <Archive className="h-3.5 w-3.5" /> Archive
+                </Button>
+              </>
+            )}
             <Button size="sm" variant="ghost" className="text-red-600" onClick={bulkDelete}>
               <Trash2 className="h-3.5 w-3.5" /> Delete
             </Button>
@@ -208,18 +224,33 @@ export function NotificationsPage() {
                           </div>
                           <div className="flex shrink-0 items-center gap-1">
                             {!n.is_read && <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary-600" />}
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              aria-label="Archive"
-                              onClick={async (e) => {
-                                e.stopPropagation()
-                                await api.put(`/api/notifications/${n.id}/archive`)
-                                refresh()
-                              }}
-                            >
-                              <Archive className="h-3.5 w-3.5" />
-                            </Button>
+                            {isArchivedView ? (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                aria-label="Unarchive"
+                                onClick={async (e) => {
+                                  e.stopPropagation()
+                                  await api.put(`/api/notifications/${n.id}/unarchive`)
+                                  refresh()
+                                }}
+                              >
+                                <ArchiveRestore className="h-3.5 w-3.5" />
+                              </Button>
+                            ) : (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                aria-label="Archive"
+                                onClick={async (e) => {
+                                  e.stopPropagation()
+                                  await api.put(`/api/notifications/${n.id}/archive`)
+                                  refresh()
+                                }}
+                              >
+                                <Archive className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                             <Button
                               size="icon"
                               variant="ghost"

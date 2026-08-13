@@ -205,6 +205,13 @@ def cancel_document_request(request_id):
         return fail("Only pending requests can be cancelled.", 400)
     req.status = "cancelled"
     db.session.commit()
+
+    notify_user(
+        req.application.jobseeker_profile.user_id, "document_request", "Document Request Cancelled",
+        f"{company.company_name} cancelled their request for: {req.document_label} — for your application to {req.application.vacancy.title}.",
+        link="/jobseeker/applications", socket_event="application:document_request",
+        socket_payload=req.to_dict(),
+    )
     return ok(req.to_dict(), "Request cancelled.")
 
 

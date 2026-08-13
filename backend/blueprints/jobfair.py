@@ -21,7 +21,7 @@ from services.email_service import (
 )
 from services.excel_service import build_excel_report
 from services.matching_service import match_score
-from services.notification_service import notify_role, notify_user
+from services.notification_service import notify_board, notify_user
 from services.pdf_service import generate_table_report, to_bytesio
 from services.qr_service import generate_qr_data_url
 from services.storage_service import upload_file, validate_upload_file
@@ -168,6 +168,19 @@ def register_jobfair(jobfair_id):
         </div>
         """,
     )
+    notify_user(
+        user.id, "jobfair_registered", "Job Fair Registration Confirmed",
+        f"You are registered for {fair.name}. Registration No.: {registration.registration_number}.",
+        link="/jobseeker/jobfair", socket_event="jobfair:registered",
+        socket_payload={"jobfair_id": str(fair.id), "registration_id": str(registration.id)},
+    )
+    notify_board(
+        [("staff", "/staff/jobfair")],
+        "jobfair_board", "New Job Fair Registrant",
+        f"{profile.full_name} registered for {fair.name}.",
+        socket_event="jobfair:registrant",
+        socket_payload={"jobfair_id": str(fair.id), "registration_id": str(registration.id)},
+    )
     return ok(
         {**registration.to_dict(), "qr_data_url": qr_data_url},
         f"Registered! Your registration number is {registration.registration_number}.", 201,
@@ -313,10 +326,13 @@ def register_booth(jobfair_id):
     db.session.add(booth)
     db.session.commit()
     log_audit(User.query.get(company.user_id), "Create", "jobfair_booths", booth.id, f"Booth request for {fair.name}", after={"status": "pending"})
-    notify_role("staff", "jobfair:booth_requested", {
-        "jobfair_id": str(fair.id), "jobfair_name": fair.name,
-        "booth_id": str(booth.id), "company_name": company.company_name,
-    })
+    notify_board(
+        [("staff", "/staff/jobfair")],
+        "jobfair_board", "New Booth Request",
+        f"{company.company_name} requested a booth for {fair.name}.",
+        socket_event="jobfair:booth_requested",
+        socket_payload={"jobfair_id": str(fair.id), "jobfair_name": fair.name, "booth_id": str(booth.id), "company_name": company.company_name},
+    )
     return ok(booth.to_dict(), "Booth request submitted — pending PESO review.", 201)
 
 
@@ -324,6 +340,7 @@ def register_booth(jobfair_id):
 @jwt_required()
 @role_required("employer")
 def update_booth(jobfair_id):
+    fair = JobFair.query.get(jobfair_id)
     company = EmployerCompany.query.filter_by(user_id=get_jwt_identity()).first()
     booth = JobFairBooth.query.filter_by(jobfair_id=jobfair_id, employer_company_id=company.id).first() if company else None
     if not booth:
@@ -332,14 +349,25 @@ def update_booth(jobfair_id):
     for field in ("booth_name", "description"):
         if field in data:
             setattr(booth, field, data[field])
+    was_confirmed = booth.status == "confirmed"
+    cancelled = False
     if data.get("action") == "cancel":
         # Employer withdraws their own request/booth — staff review (approve/
         # reject/suspend) is the only path back to "confirmed", so this never
         # lets an employer self-confirm past that gate.
         if booth.status in ("pending", "confirmed"):
             booth.status = "cancelled"
+            cancelled = True
     db.session.commit()
     log_audit(User.query.get(company.user_id), "Update", "jobfair_booths", booth.id)
+    if was_confirmed and cancelled:
+        notify_board(
+            [("staff", "/staff/jobfair")],
+            "jobfair_board", "Booth Cancelled",
+            f"{company.company_name} cancelled their confirmed booth for {fair.name}.",
+            socket_event="jobfair:booth_cancelled",
+            socket_payload={"jobfair_id": str(jobfair_id), "booth_id": str(booth.id), "company_name": company.company_name},
+        )
     return ok(booth.to_dict(), "Booth updated.")
 
 

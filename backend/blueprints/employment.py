@@ -16,7 +16,7 @@ from models.jobseeker import JobseekerProfile
 from models.user import User
 from services.audit_service import log_audit
 from services.email_service import send_employment_status_email
-from services.notification_service import notify_role, notify_user
+from services.notification_service import notify_board, notify_user
 from services.vacancy_capacity_service import recalculate_vacancy_status
 from sockets.events import emit_broadcast
 from utils.decorators import role_required
@@ -90,7 +90,12 @@ def transition_employment(record, new_status, actor_user, note=None, notify=True
                 jobseeker_user.email, jobseeker.full_name, record.position,
                 record.employer_company.company_name, label, note,
             )
-        notify_role("staff", "employment:updated", record.to_dict())
+        notify_board(
+            [("staff", "/staff/employment")],
+            "employment_board", f"Employment update: {label}",
+            f"{jobseeker.full_name}'s employment status as {record.position} at {record.employer_company.company_name} is now \"{label}\".",
+            socket_event="employment:updated", socket_payload=record.to_dict(),
+        )
     return True, None
 
 
@@ -125,7 +130,12 @@ def create_employment_record_for_application(application):
         link="/jobseeker/employment", socket_event="employment:updated",
         socket_payload=record.to_dict(),
     )
-    notify_role("staff", "employment:updated", record.to_dict())
+    notify_board(
+        [("staff", "/staff/employment")],
+        "employment_board", "New Hire Recorded",
+        f"{application.jobseeker_profile.full_name} was hired for {record.position}.",
+        socket_event="employment:updated", socket_payload=record.to_dict(),
+    )
     return record
 
 

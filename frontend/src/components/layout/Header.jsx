@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { Bell, ChevronDown, LogOut, Settings, UserRound } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -7,6 +7,7 @@ import { Breadcrumb } from '../ui/Breadcrumb'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/DropdownMenu'
 import { resolveIcon, resolveNotificationLink } from '../../config/notificationMeta'
 import { ROLE_DASHBOARD } from '../../config/navigation'
+import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { cn } from '../../lib/utils'
 import { useAuthStore } from '../../store/authStore'
@@ -17,12 +18,25 @@ export function Header({ breadcrumbItems = [] }) {
   const logout = useAuthStore((s) => s.logout)
   const unreadCount = useUiStore((s) => s.unreadCount)
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const basePath = ROLE_DASHBOARD[user?.role]?.split('/dashboard')[0]
 
   const { data: recent } = useQuery({
     queryKey: ['notifications', 'preview'],
     queryFn: async () => (await api.get('/api/notifications', { params: { limit: 5 } })).data.data,
     enabled: Boolean(user),
+  })
+
+  const invalidatePreview = () => queryClient.invalidateQueries({ queryKey: ['notifications', 'preview'] })
+  useSocket({
+    'notification:new': invalidatePreview,
+    'notification:read': invalidatePreview,
+    'notification:all_read': invalidatePreview,
+    'notification:archived': invalidatePreview,
+    'notification:unarchived': invalidatePreview,
+    'notification:deleted': invalidatePreview,
+    'notification:bulk_updated': invalidatePreview,
+    'notification:bulk_deleted': invalidatePreview,
   })
 
   const handleLogout = () => {

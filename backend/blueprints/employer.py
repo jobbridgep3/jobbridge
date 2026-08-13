@@ -16,7 +16,7 @@ from schemas.vacancy_schemas import VacancyWriteSchema
 from services.application_status_service import build_timeline, is_currently_employed_at_company, transition_application
 from services.audit_service import log_audit
 from services.matching_service import rank_jobseekers_for_vacancy
-from services.notification_service import notify_role
+from services.notification_service import notify_board
 from sockets.events import emit_broadcast
 from services.profile_completion_service import COMPANY_REQUIRED_FIELDS, HR_REQUIRED_FIELDS, compute_completion
 from services.vacancy_capacity_service import annotate_capacity, recalculate_vacancy_status
@@ -484,7 +484,13 @@ def submit_accreditation():
 
     company.accreditation_status = "pending_review"
     db.session.commit()
-    notify_role("staff", "employer:accreditation_submitted", {"employer_id": str(company.id), "company_name": company.company_name})
+    notify_board(
+        [("staff", f"/staff/employers/{company.id}")],
+        "employer_board", "New Accreditation Submission",
+        f"{company.company_name} submitted documents for accreditation review.",
+        socket_event="employer:accreditation_submitted",
+        socket_payload={"employer_id": str(company.id), "company_name": company.company_name},
+    )
     log_audit(User.query.get(company.user_id), "Update", "employers", company.id, "Submitted for accreditation")
     return ok(company.to_dict(), "Submitted for PESO/Admin accreditation review.")
 
@@ -632,7 +638,12 @@ def update_vacancy(vacancy_id):
 
     db.session.commit()
     if reverted_to_pending:
-        notify_role("staff", "vacancy:submitted", {"vacancy_id": str(vacancy.id), "title": vacancy.title})
+        notify_board(
+            [("staff", f"/staff/vacancies/{vacancy.id}")],
+            "vacancy_board", "Vacancy Submitted for Review",
+            f"{vacancy.title} was submitted for PESO approval.",
+            socket_event="vacancy:submitted", socket_payload={"vacancy_id": str(vacancy.id), "title": vacancy.title},
+        )
     log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, before=before, after={"status": vacancy.status})
     # Openings (and other capacity-relevant fields) may have just changed —
     # refresh every live listener (Job Search, Homepage, Employer Vacancies).
@@ -660,7 +671,12 @@ def submit_vacancy(vacancy_id):
     vacancy.status = "pending"
     vacancy.submitted_at = now_manila()
     db.session.commit()
-    notify_role("staff", "vacancy:submitted", {"vacancy_id": str(vacancy.id), "title": vacancy.title})
+    notify_board(
+        [("staff", f"/staff/vacancies/{vacancy.id}")],
+        "vacancy_board", "Vacancy Submitted for Review",
+        f"{vacancy.title} was submitted for PESO approval.",
+        socket_event="vacancy:submitted", socket_payload={"vacancy_id": str(vacancy.id), "title": vacancy.title},
+    )
     log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, "Submitted for approval", before=before, after={"status": vacancy.status})
     return ok(vacancy.to_dict(), "Vacancy submitted for PESO Staff approval.")
 

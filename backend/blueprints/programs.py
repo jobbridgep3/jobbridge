@@ -13,7 +13,7 @@ from models.program import ProgramApplication
 from models.user import User
 from services.audit_service import log_audit
 from services.excel_service import build_excel_report
-from services.notification_service import notify_user
+from services.notification_service import notify_board, notify_user
 from utils.decorators import role_required
 from utils.responses import fail, ok
 
@@ -63,6 +63,20 @@ def apply_program(program_type):
     db.session.add(application)
     db.session.commit()
     log_audit(User.query.get(profile.user_id), "Create", program_type, application.id)
+
+    notify_user(
+        profile.user_id, "program_status", f"{program_type.upper()} application received",
+        "Your application is under review by PESO staff.", link=f"/jobseeker/{program_type}",
+        socket_event="program:status_change",
+        socket_payload={"type": program_type, "application_id": str(application.id), "new_status": application.status},
+    )
+    notify_board(
+        [("staff", f"/staff/{program_type}"), ("admin", f"/admin/{program_type}")],
+        "program_board", f"New {program_type.upper()} application",
+        f"{profile.full_name} submitted a new {program_type.upper()} application.",
+        socket_event="program:board_update",
+        socket_payload={"type": program_type, "application_id": str(application.id)},
+    )
     return ok(application.to_dict(), f"{program_type.upper()} application submitted.", 201)
 
 
@@ -151,6 +165,13 @@ def approve_program(program_type, application_id):
         socket_event="program:status_change",
         socket_payload={"type": program_type, "application_id": str(application.id), "new_status": application.status},
     )
+    notify_board(
+        [("staff", f"/staff/{program_type}"), ("admin", f"/admin/{program_type}")],
+        "program_board", f"{program_type.upper()} application approved",
+        f"{application.jobseeker_profile.full_name}'s {program_type.upper()} application was approved.",
+        socket_event="program:board_update",
+        socket_payload={"type": program_type, "application_id": str(application.id)},
+    )
     log_audit(User.query.get(get_jwt_identity()), "Approve", program_type, application.id)
     return ok(application.to_dict(), "Application approved.")
 
@@ -178,6 +199,13 @@ def reject_program(program_type, application_id):
         socket_event="program:status_change",
         socket_payload={"type": program_type, "application_id": str(application.id), "new_status": "rejected"},
     )
+    notify_board(
+        [("staff", f"/staff/{program_type}"), ("admin", f"/admin/{program_type}")],
+        "program_board", f"{program_type.upper()} application rejected",
+        f"{application.jobseeker_profile.full_name}'s {program_type.upper()} application was rejected.",
+        socket_event="program:board_update",
+        socket_payload={"type": program_type, "application_id": str(application.id)},
+    )
     log_audit(User.query.get(get_jwt_identity()), "Reject", program_type, application.id)
     return ok(application.to_dict(), "Application rejected.")
 
@@ -197,6 +225,13 @@ def request_more_docs(program_type, application_id):
         application.remarks, link=f"/jobseeker/{program_type}",
         socket_event="program:status_change",
         socket_payload={"type": program_type, "application_id": str(application.id), "new_status": application.status},
+    )
+    notify_board(
+        [("staff", f"/staff/{program_type}"), ("admin", f"/admin/{program_type}")],
+        "program_board", f"{program_type.upper()} application needs documents",
+        f"{application.jobseeker_profile.full_name} was asked for additional documents on their {program_type.upper()} application.",
+        socket_event="program:board_update",
+        socket_payload={"type": program_type, "application_id": str(application.id)},
     )
     return ok(application.to_dict(), "Requested additional documents.")
 

@@ -52,14 +52,17 @@ def mark_read():
         return fail("Notification not found.", 404)
     notif.is_read = True
     db.session.commit()
+    emit_to_user(notif.user_id, "notification:read", {"id": str(notif.id)})
     return ok(notif.to_dict(), "Marked as read.")
 
 
 @notifications_bp.put("/mark-all-read")
 @jwt_required()
 def mark_all_read():
-    Notification.query.filter_by(user_id=get_jwt_identity(), is_read=False).update({"is_read": True})
+    user_id = get_jwt_identity()
+    Notification.query.filter_by(user_id=user_id, is_read=False).update({"is_read": True})
     db.session.commit()
+    emit_to_user(user_id, "notification:all_read", {})
     return ok(message="All notifications marked as read.")
 
 

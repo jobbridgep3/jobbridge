@@ -183,6 +183,15 @@ def verify_otp():
             link="/employer/company", socket_event="account:welcome",
         )
 
+    if payload["purpose"] == "register" and user.role == "jobseeker" and user.welcome_flow_sent_at is None:
+        user.welcome_flow_sent_at = now_manila()
+        db.session.commit()
+        notify_user(
+            user.id, "account_welcome", "Welcome to JobBridge",
+            "Complete your Jobseeker Profile to start applying for jobs and PESO programs.",
+            link="/jobseeker/profile", socket_event="account:welcome",
+        )
+
     if payload["purpose"] == "register":
         # Auto-issue a JWT so the frontend can immediately land the user on their
         # role's landing page (jobseeker: /jobseeker/profile, employer: /employer/company)

@@ -41,8 +41,12 @@ export function AppShell() {
     'notification:new': () => {
       incrementUnread()
     },
+    'notification:read': refreshUnreadCount,
+    'notification:all_read': refreshUnreadCount,
     'notification:bulk_updated': refreshUnreadCount,
     'notification:archived': refreshUnreadCount,
+    'notification:unarchived': refreshUnreadCount,
+    'notification:deleted': refreshUnreadCount,
     'notification:bulk_deleted': refreshUnreadCount,
     'announcement:published': (payload) => {
       incrementUnread()
