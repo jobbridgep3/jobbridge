@@ -27,7 +27,7 @@ class Vacancy(BaseModel):
     department = db.Column(db.String(150), nullable=True)
     vacancy_no = db.Column(db.String(50), nullable=True)
     num_slots = db.Column(db.Integer, default=1)
-    job_type = db.Column(db.String(30), nullable=True)  # "Employment Type" in the UI: full-time|part-time|contractual|seasonal|internship
+    job_type = db.Column(db.String(30), nullable=True)  # "Employment Type" in the UI: full_time|part_time|contractual|seasonal|internship
     work_arrangement = db.Column(db.String(20), nullable=True)
     schedule = db.Column(db.String(255), nullable=True)
     status = db.Column(db.String(20), default="draft", nullable=False)

@@ -56,8 +56,8 @@ export default function JobseekerJobs() {
           />
           <Select className="max-w-[180px]" value={filters.job_type} onChange={(e) => setFilters({ ...filters, job_type: e.target.value })}>
             <option value="">All Job Types</option>
-            <option value="full-time">Full-time</option>
-            <option value="part-time">Part-time</option>
+            <option value="full_time">Full-time</option>
+            <option value="part_time">Part-time</option>
             <option value="contractual">Contractual</option>
           </Select>
         </CardContent>
