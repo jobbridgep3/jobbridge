@@ -35,6 +35,7 @@ from services.notification_service import notify_role, notify_user
 from services.pdf_service import generate_owwa_report, to_bytesio
 from utils.decorators import role_required
 from utils.responses import fail, ok
+from utils.timezone import MANILA_TZ
 
 owwa_bp = Blueprint("owwa", __name__, url_prefix="/api")
 
@@ -345,7 +346,7 @@ def staff_complete_owwa_request(request_id):
         db.session.rollback()
         return fail("A PESO appointment date and time are required to mark this request completed.", 400)
     try:
-        appointment_at = datetime.fromisoformat(f"{appointment_date}T{appointment_time}")
+        appointment_at = MANILA_TZ.localize(datetime.fromisoformat(f"{appointment_date}T{appointment_time}"))
     except ValueError:
         db.session.rollback()
         return fail("Invalid appointment date/time.", 400)
