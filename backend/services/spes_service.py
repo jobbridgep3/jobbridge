@@ -51,11 +51,12 @@ def validate_registration_eligibility(profile, batch: SpesBatch, age: int, gwa, 
         return False, "The registration deadline for this batch has passed."
     if age < 15 or age > 30:
         return False, "You must be between 15 and 30 years old to register for SPES."
-    # GWA is on this program's percentage/point scale where a higher value is better
-    # (e.g. 80, 85) — min_gwa is the minimum passing threshold an applicant must meet
-    # or exceed, consistent with the "min_" field name.
-    if batch.min_gwa is not None and gwa < batch.min_gwa:
-        return False, f"Your GWA does not meet this batch's minimum passing threshold of {batch.min_gwa}."
+    # GWA is on the Philippine academic scale where 1.00 is the HIGHEST/best grade
+    # and higher numbers are worse — min_gwa is the passing threshold: an applicant
+    # qualifies at min_gwa or better (i.e. a GWA numerically <= min_gwa), so anything
+    # numerically ABOVE it fails to qualify.
+    if batch.min_gwa is not None and gwa > batch.min_gwa:
+        return False, f"Your GWA does not meet this batch's passing requirement. A GWA of {batch.min_gwa} or better (1.00 is highest) is required."
     if batch.max_family_income is not None and family_income > batch.max_family_income:
         return False, "Your declared family income exceeds this batch's eligibility threshold for this program."
     if SpesApplication.query.filter_by(batch_id=batch.id, jobseeker_profile_id=profile.id).first():

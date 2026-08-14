@@ -48,11 +48,11 @@ export function SPESDashboard({ batches, onNavigate }) {
         <ChartSkeleton />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <StatCard label="Total Applicants" value={stats.total_applications} icon={Users} tone="primary" />
+          <StatCard label="Total Applicants" value={stats.total_applicants} icon={Users} tone="primary" />
           <StatCard label="Pending Review" value={stats.pending_review} icon={ClipboardList} tone="warning" />
           <StatCard label="For Orientation" value={stats.approved_for_orientation} icon={CalendarClock} tone="primary" />
-          <StatCard label="For Exam" value={stats.attended_orientation} icon={GraduationCap} tone="primary" />
-          <StatCard label="Deployed" value={stats.deployed} icon={CheckCircle2} tone="success" />
+          <StatCard label="For Exam" value={stats.currently_orientation_passed} icon={GraduationCap} tone="primary" />
+          <StatCard label="Exam Passed" value={stats.exam_passed} icon={CheckCircle2} tone="success" />
         </div>
       )}
     </div>

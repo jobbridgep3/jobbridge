@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
-import { Briefcase, Calendar, Check, FileDown, GraduationCap, Upload } from 'lucide-react'
+import { Calendar, Check, FileDown, GraduationCap, MapPin, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -11,7 +11,6 @@ import { Button } from '../../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import { DocumentUploadSlot } from '../../components/ui/DocumentUploadSlot'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { Input, Label } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { ProgressBar } from '../../components/ui/ProgressBar'
 import { CardSkeleton } from '../../components/ui/Skeleton'
@@ -30,28 +29,26 @@ const STEPS = [
   { key: 'for_exam', label: 'For Exam' },
   { key: 'attended_exam', label: 'Attended Exam' },
   { key: 'result', label: 'Result' },
-  { key: 'deployed', label: 'Deployed' },
-  { key: 'completed', label: 'Completed' },
+  { key: 'peso_appointment', label: 'PESO Appointment' },
 ]
 
-const NEGATIVE_STATUSES = ['rejected', 'failed_orientation', 'failed', 'terminated']
+const NEGATIVE_STATUSES = ['rejected', 'failed_orientation', 'failed']
 
-// Reconciled against the backend's status enum (see models/spes.py): approved_for_exam
-// and a distinct "attended_exam" status don't exist — attended_orientation implies exam
-// eligibility, and exam attendance is derived from the attendance log below rather than
-// a status value.
+// Orientation and Exam are fully symmetric on the backend (see models/spes.py):
+// QR attendance automatically advances status to attended_orientation/attended_exam,
+// and Staff then records a separate Passed/Failed result — so every step below maps
+// directly to a real status value, no derivation from attendance logs needed.
 function stepIndexFor(app) {
-  const hasExamLog = (app.attendance_logs || []).some((l) => l.event_type === 'exam')
   switch (app.status) {
     case 'pending_review': return 1
     case 'rejected': return 1
     case 'approved_for_orientation': return 2
-    case 'attended_orientation': return hasExamLog ? 5 : 4
+    case 'attended_orientation': return 3
     case 'failed_orientation': return 3
-    case 'passed': case 'failed': case 'for_deployment': return 6
-    case 'deployed': return 7
-    case 'terminated': return 7
-    case 'completed': return 8
+    case 'orientation_passed': return 4
+    case 'attended_exam': return 5
+    case 'failed': return 6
+    case 'passed': return app.peso_appointment_at ? 7 : 6
     default: return 0
   }
 }
@@ -80,74 +77,6 @@ function SpesStepper({ application }) {
         )
       })}
     </ol>
-  )
-}
-
-function DtrSection({ onChanged }) {
-  const [form, setForm] = useState({ work_date: '', time_in: '', time_out: '' })
-  const today = dayjs().format('YYYY-MM-DD')
-
-  const { data: entries, isLoading } = useQuery({
-    queryKey: ['spes', 'my', 'dtr'],
-    queryFn: async () => (await api.get('/api/spes/my/dtr')).data.data,
-  })
-
-  const submit = useMutation({
-    mutationFn: () => api.post('/api/spes/my/dtr', form),
-    onSuccess: () => {
-      toast.success('DTR entry submitted.')
-      setForm({ work_date: '', time_in: '', time_out: '' })
-      onChanged()
-    },
-    onError: (err) => toast.error(err.response?.data?.message || 'Could not submit DTR entry.'),
-  })
-
-  const alreadyLogged = form.work_date && entries?.some((e) => e.work_date === form.work_date)
-
-  return (
-    <div className="mt-4 space-y-3 border-t border-border-subtle pt-4">
-      <p className="text-sm font-semibold text-text-primary">Daily Time Record</p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-        <div>
-          <Label>Date</Label>
-          <Input type="date" max={today} value={form.work_date} onChange={(e) => setForm({ ...form, work_date: e.target.value })} />
-        </div>
-        <div>
-          <Label>Time In</Label>
-          <Input type="time" value={form.time_in} onChange={(e) => setForm({ ...form, time_in: e.target.value })} />
-        </div>
-        <div>
-          <Label>Time Out</Label>
-          <Input type="time" value={form.time_out} onChange={(e) => setForm({ ...form, time_out: e.target.value })} />
-        </div>
-        <div className="flex items-end">
-          <Button
-            className="w-full"
-            onClick={() => submit.mutate()}
-            disabled={submit.isPending || !form.work_date || !form.time_in || !form.time_out || alreadyLogged}
-          >
-            {submit.isPending ? 'Submitting…' : 'Submit'}
-          </Button>
-        </div>
-      </div>
-      {alreadyLogged && <p className="text-xs text-red-600">You already submitted a DTR entry for this date.</p>}
-
-      {isLoading ? null : !entries?.length ? (
-        <p className="text-xs text-text-muted">No DTR entries submitted yet.</p>
-      ) : (
-        <div className="max-h-56 space-y-1.5 overflow-y-auto">
-          {entries.map((e) => (
-            <div key={e.id} className="flex items-center justify-between rounded-md border border-border-subtle px-3 py-2 text-sm">
-              <span>{dayjs(e.work_date).format('MMM D, YYYY')} · {e.time_in}–{e.time_out}</span>
-              <div className="flex items-center gap-2">
-                {e.staff_remarks && <span className="text-xs text-text-muted">{e.staff_remarks}</span>}
-                <StatusBadge status={e.status} />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
   )
 }
 
@@ -196,12 +125,9 @@ function ApplicationCard({ application, onChanged }) {
             You were not selected after the exam.{application.exam_result_remarks ? ` ${application.exam_result_remarks}` : ''} We encourage you to apply for the next batch.
           </p>
         )}
-        {application.status === 'terminated' && (
-          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">Deployment terminated.{application.deployment?.termination_reason ? ` ${application.deployment.termination_reason}` : ''}</p>
-        )}
-        {['passed', 'for_deployment', 'deployed', 'completed'].includes(application.status) && (
+        {application.status === 'passed' && (
           <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
-            Congratulations — you passed the SPES screening! {application.status === 'for_deployment' && 'Please wait for your office assignment.'}
+            Congratulations — you passed the SPES examination! {!application.peso_appointment_at && 'Please wait for your PESO Office appointment details.'}
           </p>
         )}
 
@@ -223,15 +149,16 @@ function ApplicationCard({ application, onChanged }) {
           } : undefined}
         />
 
-        {application.deployment && (
+        {application.status === 'passed' && (
           <div className="rounded-lg border border-border-subtle p-3">
-            <p className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-text-primary"><Briefcase className="h-4 w-4" /> Deployment</p>
-            <p className="text-sm text-text-secondary">{application.deployment.employer_name || application.deployment.office_name}</p>
-            <p className="text-xs text-text-muted">Supervisor: {application.deployment.supervisor_name} · Reporting {dayjs(application.deployment.start_date).format('MMM D, YYYY')}</p>
+            <p className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-text-primary"><MapPin className="h-4 w-4" /> PESO Office Appointment</p>
+            {application.peso_appointment_at ? (
+              <p className="text-sm text-text-secondary">{dayjs(application.peso_appointment_at).format('MMMM D, YYYY [at] h:mm A')} — PESO Pila Office</p>
+            ) : (
+              <p className="text-sm text-text-muted">Awaiting your PESO Office appointment — you'll be notified once it's scheduled.</p>
+            )}
           </div>
         )}
-
-        {application.status === 'deployed' && <DtrSection onChanged={onChanged} />}
       </CardContent>
     </Card>
   )
@@ -251,15 +178,12 @@ export default function JobseekerSPES() {
     queryFn: async () => (await api.get('/api/spes/my')).data.data,
   })
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['spes', 'my'] })
-    queryClient.invalidateQueries({ queryKey: ['spes', 'my', 'dtr'] })
-  }
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['spes', 'my'] })
   useSocket({ 'spes:status_change': invalidate })
 
   return (
     <motion.div {...fadeIn} className="space-y-4">
-      <PageHeader title="SPES" description="Special Program for Employment of Students — register for an open batch, track your application, and submit your DTR once deployed." />
+      <PageHeader title="SPES" description="Special Program for Employment of Students — register for an open batch and track your application through orientation, exam, and your PESO Office appointment." />
 
       <div className="flex w-fit rounded-lg border border-border bg-surface p-0.5">
         {[

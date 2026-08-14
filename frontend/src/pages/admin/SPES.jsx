@@ -30,7 +30,7 @@ export default function AdminSPES() {
     <motion.div {...fadeIn} className="space-y-4">
       <PageHeader
         title="SPES Management"
-        description="System-wide oversight of the SPES program — create and manage batches, and view reports across all batches. Day-to-day operations (review, scheduling, scanning, encoding, deployment, DTR) are handled by PESO Staff."
+        description="System-wide oversight of the SPES program — create and manage batches, and view reports across all batches. Day-to-day operations (review, scheduling, scanning, encoding results, PESO appointments) are handled by PESO Staff."
       />
 
       <div className="flex flex-wrap gap-1 rounded-lg border border-border bg-surface p-1">

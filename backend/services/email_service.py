@@ -879,18 +879,14 @@ def send_spes_result_failed_email(to: str, applicant_name: str, batch_name: str)
     return send_email(to, f"SPES Result — {batch_name}", html)
 
 
-def send_spes_deployment_email(to: str, applicant_name: str, batch_name: str, office_or_employer_name: str, supervisor_name: str, start_date_str: str):
+def send_spes_peso_appointment_email(to: str, applicant_name: str, batch_name: str, date_str: str, time_str: str):
     html = f"""
     <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
-      <h2 style="color:#1e3a8a">SPES Deployment</h2>
-      <p>Hi {applicant_name},</p>
-      <p>You will be deployed to:</p>
-      <p>🏢 <b>Office/Employer:</b> {office_or_employer_name}<br/>
-      👤 <b>Supervisor:</b> {supervisor_name}<br/>
-      📅 <b>Reporting Date:</b> {start_date_str}</p>
-      <p>Please submit your Daily Time Record (DTR) through the JobBridge system every week for your wage subsidy
-      processing.</p>
+      <h2 style="color:#1e3a8a">Congratulations, {applicant_name}!</h2>
+      <p>You passed the SPES examination for <b>{batch_name}</b>.</p>
+      <p>Please proceed to the PESO Office on the date and time below for your deployment details:</p>
+      <p>📅 <b>Date:</b> {date_str}<br/>🕒 <b>Time:</b> {time_str}<br/>📍 <b>Venue:</b> PESO Pila Office</p>
       <p>— PESO Pila SPES Team</p>
     </div>
     """
-    return send_email(to, f"SPES Deployment — {batch_name}", html)
+    return send_email(to, f"SPES — PESO Office Appointment ({batch_name})", html)

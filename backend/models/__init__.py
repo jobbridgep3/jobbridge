@@ -18,7 +18,7 @@ from models.owwa import OwwaRequest, OwwaRequestDocument, OwwaRequestRemark
 from models.program import ProgramApplication
 from models.referral import ReferralLetter
 from models.settings import SystemSetting
-from models.spes import SpesApplication, SpesAttendanceLog, SpesBatch, SpesDeployment, SpesDtrEntry
+from models.spes import SpesApplication, SpesAttendanceLog, SpesBatch
 from models.training import TrainingEnrollment, TrainingProgram
 from models.user import User
 from models.vacancy import Vacancy, VacancyCategory, VacancyScreeningQuestion
@@ -67,6 +67,4 @@ __all__ = [
     "SpesBatch",
     "SpesApplication",
     "SpesAttendanceLog",
-    "SpesDeployment",
-    "SpesDtrEntry",
 ]

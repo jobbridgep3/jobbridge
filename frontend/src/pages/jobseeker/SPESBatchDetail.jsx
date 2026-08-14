@@ -99,7 +99,9 @@ export default function JobseekerSPESBatchDetail() {
 
   const age = profile?.age
   const ageInvalid = age != null && (age < 15 || age > 30)
-  const gwaInvalid = form.gwa && batch.min_gwa != null && Number(form.gwa) < batch.min_gwa
+  // GWA scale: 1.00 is the HIGHEST/best grade — qualifying means a GWA numerically
+  // at or below the batch's threshold, so anything ABOVE it fails to qualify.
+  const gwaInvalid = form.gwa && batch.min_gwa != null && Number(form.gwa) > batch.min_gwa
   const incomeInvalid = form.family_income && batch.max_family_income != null && Number(form.family_income) > batch.max_family_income
 
   return (
@@ -139,7 +141,7 @@ export default function JobseekerSPESBatchDetail() {
           <CardContent>
             <p className="text-xs font-medium uppercase text-text-muted">Eligibility</p>
             <p className="text-sm text-text-secondary">
-              {batch.min_gwa != null ? `Min. GWA ${batch.min_gwa}` : 'No GWA minimum'} · {batch.max_family_income != null ? `Max. income ₱${batch.max_family_income.toLocaleString()}` : 'No income cap'}
+              {batch.min_gwa != null ? `GWA ${batch.min_gwa} or better (1.00 = highest)` : 'No GWA requirement'} · {batch.max_family_income != null ? `Max. income ₱${batch.max_family_income.toLocaleString()}` : 'No income cap'}
             </p>
           </CardContent>
         </Card>
@@ -186,9 +188,9 @@ export default function JobseekerSPESBatchDetail() {
               <Input value={form.year_level} onChange={(e) => setForm({ ...form, year_level: e.target.value })} placeholder="e.g. 3rd Year College" />
             </div>
             <div>
-              <Label>GWA</Label>
+              <Label>GWA (1.00 = highest)</Label>
               <Input type="number" step="0.01" value={form.gwa} onChange={(e) => setForm({ ...form, gwa: e.target.value })} />
-              {gwaInvalid && <p className="mt-1 text-xs text-red-600">Below this batch's minimum passing GWA of {batch.min_gwa}.</p>}
+              {gwaInvalid && <p className="mt-1 text-xs text-red-600">Does not meet this batch's passing requirement of {batch.min_gwa} or better.</p>}
             </div>
             <div>
               <Label>Family Income (monthly)</Label>

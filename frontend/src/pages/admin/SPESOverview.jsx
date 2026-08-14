@@ -48,10 +48,10 @@ export function SPESOverview() {
           <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
             {[
               ['Pending Review', data.funnel.pending_review], ['Approved for Orientation', data.funnel.approved_for_orientation],
-              ['Attended Orientation', data.funnel.attended_orientation], ['Failed Orientation', data.funnel.failed_orientation],
-              ['Passed', data.funnel.passed], ['Failed', data.funnel.failed],
-              ['Awaiting Deployment', data.funnel.for_deployment], ['Deployed', data.funnel.deployed],
-              ['Completed', data.funnel.completed], ['Terminated', data.funnel.terminated], ['Rejected', data.funnel.rejected],
+              ['Orientation Attended', data.funnel.orientation_attended], ['Orientation Absent', data.funnel.orientation_absent],
+              ['Orientation Passed', data.funnel.orientation_passed], ['Orientation Failed', data.funnel.orientation_failed],
+              ['Exam Attended', data.funnel.exam_attended], ['Exam Absent', data.funnel.exam_absent],
+              ['Exam Passed', data.funnel.exam_passed], ['Exam Failed', data.funnel.exam_failed], ['Rejected', data.funnel.rejected],
             ].map(([label, value]) => (
               <div key={label} className="rounded-lg border border-border-subtle p-3">
                 <p className="text-text-muted">{label}</p>

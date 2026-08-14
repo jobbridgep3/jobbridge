@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { Html5Qrcode } from 'html5-qrcode'
-import { CheckCircle2, KeyRound, Percent, UserCheck, Users } from 'lucide-react'
+import { CheckCircle2, Download, KeyRound, Percent, UserCheck, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 
@@ -12,6 +12,7 @@ import { Input, Label, Select } from '../../components/ui/Input'
 import { StatCard } from '../../components/ui/StatCard'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
+import { downloadFile, parseBlobError } from '../../lib/download'
 import { cn } from '../../lib/utils'
 
 const SCANNER_ELEMENT_ID = 'spes-qr-scanner'
@@ -35,6 +36,7 @@ export function SPESScanner({ batches }) {
   const [eventType, setEventType] = useState('orientation')
   const [manualToken, setManualToken] = useState('')
   const [lastMarked, setLastMarked] = useState(null)
+  const [exporting, setExporting] = useState(null)
   const scannerRef = useRef(null)
   const lastScanRef = useRef(null)
 
@@ -61,6 +63,20 @@ export function SPESScanner({ batches }) {
       refresh()
     } catch (err) {
       toast.error(err.response?.data?.message || 'Invalid or duplicate QR code.')
+    }
+  }
+
+  const handleExport = async (format) => {
+    setExporting(format)
+    try {
+      await downloadFile(`/api/staff/spes/reports/export/${format}`, {
+        params: { batch_id: batchId, attendance: `${eventType}_attended` },
+        filename: `spes_${eventType}_attendance.${format === 'excel' ? 'xlsx' : 'pdf'}`,
+      })
+    } catch (err) {
+      toast.error(await parseBlobError(err))
+    } finally {
+      setExporting(null)
     }
   }
 
@@ -186,7 +202,17 @@ export function SPESScanner({ batches }) {
 
           <Card>
             <CardContent>
-              <h2 className="mb-2 text-sm font-semibold text-text-primary">Attendance Log</h2>
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-text-primary">Attendance Log</h2>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => handleExport('excel')} disabled={exporting === 'excel'}>
+                    <Download className="h-3.5 w-3.5" /> Excel
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => handleExport('pdf')} disabled={exporting === 'pdf'}>
+                    <Download className="h-3.5 w-3.5" /> PDF
+                  </Button>
+                </div>
+              </div>
               {!dashboard?.logs?.length ? (
                 <p className="text-sm text-text-muted">No scans yet.</p>
               ) : (

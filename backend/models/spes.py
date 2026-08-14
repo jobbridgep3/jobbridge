@@ -7,16 +7,20 @@ from models.base import BaseModel
 
 SPES_BATCH_STATUSES = ("open", "closed", "archived")
 
-# Reconciled against the spec's 26-step flow and Staff UI (4.B.6): "approved_for_exam"
-# and "attended_exam" never appear as distinct staff actions anywhere, so they are not
-# persisted statuses. Exam attendance is tracked separately via SpesAttendanceLog
-# (event_type='exam'); status jumps straight from attended_orientation to passed/failed.
+# Orientation and Exam are fully symmetric: QR attendance scanning automatically
+# advances an applicant from "approved/eligible" to "attended" (no manual attendance
+# step), and Staff then records a separate pass/fail decision on the Outcomes screen.
+# There is no Deployment/DTR tracking — PESO coordinates placement in person once an
+# applicant passes; the system's involvement ends with a PESO-office appointment
+# (see SpesApplication.peso_appointment_at).
+#   approved_for_orientation -> [QR scan] -> attended_orientation -> [Staff result] -> orientation_passed | failed_orientation
+#   orientation_passed -> [QR scan] -> attended_exam -> [Staff result] -> passed | failed
+#   passed -> [Staff sets PESO appointment] -> passed (peso_appointment_at populated)
 SPES_APPLICATION_STATUSES = (
     "pending_review", "rejected", "approved_for_orientation", "attended_orientation",
-    "failed_orientation", "passed", "failed", "for_deployment", "deployed", "completed", "terminated",
+    "orientation_passed", "failed_orientation", "attended_exam", "passed", "failed",
 )
 SPES_ATTENDANCE_EVENT_TYPES = ("orientation", "exam")
-SPES_DTR_STATUSES = ("pending", "approved", "rejected")
 
 
 class SpesBatch(BaseModel):
@@ -124,19 +128,20 @@ class SpesApplication(BaseModel):
     exam_result_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=True)
     exam_result_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
+    peso_appointment_at = db.Column(db.DateTime(timezone=True), nullable=True)  # set by Staff once status='passed'
+
     submitted_at = db.Column(db.DateTime(timezone=True), nullable=False)
 
     batch = db.relationship("SpesBatch", back_populates="applications")
     jobseeker_profile = db.relationship("JobseekerProfile")
     attendance_logs = db.relationship("SpesAttendanceLog", back_populates="application", cascade="all, delete-orphan")
-    deployment = db.relationship("SpesDeployment", back_populates="application", uselist=False, cascade="all, delete-orphan")
 
     __table_args__ = (
         db.CheckConstraint(f"status IN {SPES_APPLICATION_STATUSES}", name="ck_spes_application_status"),
         db.UniqueConstraint("batch_id", "jobseeker_profile_id", name="uq_spes_batch_jobseeker"),
     )
 
-    def to_dict(self, include_attendance=False, include_deployment=False):
+    def to_dict(self, include_attendance=False):
         data = {
             "id": str(self.id),
             "batch_id": str(self.batch_id),
@@ -161,13 +166,12 @@ class SpesApplication(BaseModel):
             "orientation_outcome_at": self.orientation_outcome_at.isoformat() if self.orientation_outcome_at else None,
             "exam_result_remarks": self.exam_result_remarks,
             "exam_result_at": self.exam_result_at.isoformat() if self.exam_result_at else None,
+            "peso_appointment_at": self.peso_appointment_at.isoformat() if self.peso_appointment_at else None,
             "submitted_at": self.submitted_at.isoformat() if self.submitted_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
         if include_attendance:
             data["attendance_logs"] = [a.to_dict() for a in self.attendance_logs]
-        if include_deployment:
-            data["deployment"] = self.deployment.to_dict() if self.deployment else None
         return data
 
 
@@ -195,80 +199,4 @@ class SpesAttendanceLog(BaseModel):
             "application_id": str(self.application_id),
             "event_type": self.event_type,
             "scanned_at": self.scanned_at.isoformat() if self.scanned_at else None,
-        }
-
-
-class SpesDeployment(BaseModel):
-    """1:1 with SpesApplication. Deployment lifecycle (for_deployment/deployed/
-    completed/terminated) lives entirely on SpesApplication.status — this table has
-    no status column of its own, to avoid two sources of truth."""
-
-    __tablename__ = "spes_deployments"
-
-    application_id = db.Column(UUID(as_uuid=True), db.ForeignKey("spes_applications.id"), unique=True, nullable=False)
-    employer_company_id = db.Column(UUID(as_uuid=True), db.ForeignKey("employer_companies.id"), nullable=True)
-    office_name = db.Column(db.String(255), nullable=True)  # manual entry for internal/government assignments
-    supervisor_name = db.Column(db.String(255), nullable=False)
-    start_date = db.Column(db.Date, nullable=False)
-    completed_at = db.Column(db.DateTime(timezone=True), nullable=True)
-    terminated_at = db.Column(db.DateTime(timezone=True), nullable=True)
-    termination_reason = db.Column(db.Text, nullable=True)
-    created_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=True)
-
-    application = db.relationship("SpesApplication", back_populates="deployment")
-    employer_company = db.relationship("EmployerCompany")
-    dtr_entries = db.relationship("SpesDtrEntry", back_populates="deployment", cascade="all, delete-orphan", order_by="SpesDtrEntry.work_date.desc()")
-
-    __table_args__ = (
-        db.CheckConstraint("employer_company_id IS NOT NULL OR office_name IS NOT NULL", name="ck_spes_deployment_employer"),
-    )
-
-    def to_dict(self):
-        return {
-            "id": str(self.id),
-            "application_id": str(self.application_id),
-            "employer_company_id": str(self.employer_company_id) if self.employer_company_id else None,
-            "employer_name": self.employer_company.company_name if self.employer_company else None,
-            "office_name": self.office_name,
-            "supervisor_name": self.supervisor_name,
-            "start_date": self.start_date.isoformat() if self.start_date else None,
-            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
-            "terminated_at": self.terminated_at.isoformat() if self.terminated_at else None,
-            "termination_reason": self.termination_reason,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-        }
-
-
-class SpesDtrEntry(BaseModel):
-    __tablename__ = "spes_dtr_entries"
-
-    deployment_id = db.Column(UUID(as_uuid=True), db.ForeignKey("spes_deployments.id"), nullable=False)
-    work_date = db.Column(db.Date, nullable=False)
-    time_in = db.Column(db.Time, nullable=False)
-    time_out = db.Column(db.Time, nullable=False)
-    status = db.Column(db.String(20), default="pending", nullable=False)
-    staff_remarks = db.Column(db.Text, nullable=True)
-    reviewed_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=True)
-    reviewed_at = db.Column(db.DateTime(timezone=True), nullable=True)
-
-    deployment = db.relationship("SpesDeployment", back_populates="dtr_entries")
-
-    __table_args__ = (
-        db.CheckConstraint(f"status IN {SPES_DTR_STATUSES}", name="ck_spes_dtr_status"),
-        db.UniqueConstraint("deployment_id", "work_date", name="uq_spes_dtr_date"),
-    )
-
-    def to_dict(self):
-        application = self.deployment.application if self.deployment else None
-        return {
-            "id": str(self.id),
-            "deployment_id": str(self.deployment_id),
-            "jobseeker_name": application.full_name if application else None,
-            "work_date": self.work_date.isoformat() if self.work_date else None,
-            "time_in": self.time_in.isoformat() if self.time_in else None,
-            "time_out": self.time_out.isoformat() if self.time_out else None,
-            "status": self.status,
-            "staff_remarks": self.staff_remarks,
-            "reviewed_at": self.reviewed_at.isoformat() if self.reviewed_at else None,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
         }

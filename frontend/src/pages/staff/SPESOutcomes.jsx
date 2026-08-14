@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Download } from 'lucide-react'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 
@@ -9,11 +10,23 @@ import { Input, Label, Select } from '../../components/ui/Input'
 import { TableSkeleton } from '../../components/ui/Skeleton'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
+import { downloadFile, parseBlobError } from '../../lib/download'
 import { cn } from '../../lib/utils'
 
+// Attendance is recorded automatically by the QR scanner (see SPESScanner.jsx) — this
+// screen only manages the Staff-driven Passed/Failed judgment for applicants who
+// already attended, keeping attendance and result strictly separate per PESO's process.
 const MODES = {
-  orientation: { label: 'Orientation Outcome', sourceStatus: 'approved_for_orientation', valueKey: 'outcome', options: [['attended', 'Attended'], ['failed', 'Failed']], endpoint: '/api/staff/spes/orientation-outcomes/bulk' },
-  exam: { label: 'Exam Result', sourceStatus: 'attended_orientation', valueKey: 'result', options: [['passed', 'Passed'], ['failed', 'Failed']], endpoint: '/api/staff/spes/exam-results/bulk' },
+  orientation: {
+    label: 'Orientation Result', sourceStatus: 'attended_orientation', valueKey: 'result',
+    options: [['passed', 'Passed'], ['failed', 'Failed']], endpoint: '/api/staff/spes/orientation-outcomes/bulk',
+    passedStatus: 'orientation_passed', failedStatus: 'failed_orientation',
+  },
+  exam: {
+    label: 'Exam Result', sourceStatus: 'attended_exam', valueKey: 'result',
+    options: [['passed', 'Passed'], ['failed', 'Failed']], endpoint: '/api/staff/spes/exam-results/bulk',
+    passedStatus: 'passed', failedStatus: 'failed',
+  },
 }
 
 export function SPESOutcomes({ batches }) {
@@ -21,6 +34,7 @@ export function SPESOutcomes({ batches }) {
   const [batchId, setBatchId] = useState('')
   const [mode, setMode] = useState('orientation')
   const [rows, setRows] = useState({}) // application_id -> { value, remarks }
+  const [exporting, setExporting] = useState(null)
 
   const config = MODES[mode]
 
@@ -49,6 +63,21 @@ export function SPESOutcomes({ batches }) {
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Could not save outcomes.'),
   })
+
+  const handleExport = async (resultStatus, format) => {
+    const key = `${resultStatus}-${format}`
+    setExporting(key)
+    try {
+      await downloadFile(`/api/staff/spes/reports/export/${format}`, {
+        params: { batch_id: batchId || undefined, status: resultStatus },
+        filename: `spes_${resultStatus}.${format === 'excel' ? 'xlsx' : 'pdf'}`,
+      })
+    } catch (err) {
+      toast.error(await parseBlobError(err))
+    } finally {
+      setExporting(null)
+    }
+  }
 
   const readyCount = Object.values(rows).filter((v) => v?.value).length
 
@@ -83,12 +112,32 @@ export function SPESOutcomes({ batches }) {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-text-secondary">Export applicants who {mode === 'orientation' ? 'passed or failed Orientation/Interview' : 'passed or failed the Exam'}:</p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" onClick={() => handleExport(config.passedStatus, 'excel')} disabled={exporting === `${config.passedStatus}-excel`}>
+              <Download className="h-3.5 w-3.5" /> Passed (Excel)
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => handleExport(config.passedStatus, 'pdf')} disabled={exporting === `${config.passedStatus}-pdf`}>
+              <Download className="h-3.5 w-3.5" /> Passed (PDF)
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => handleExport(config.failedStatus, 'excel')} disabled={exporting === `${config.failedStatus}-excel`}>
+              <Download className="h-3.5 w-3.5" /> Failed (Excel)
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => handleExport(config.failedStatus, 'pdf')} disabled={exporting === `${config.failedStatus}-pdf`}>
+              <Download className="h-3.5 w-3.5" /> Failed (PDF)
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {!batchId ? (
-        <EmptyState title="Select a batch" description="Choose a batch to encode orientation outcomes or exam results." />
+        <EmptyState title="Select a batch" description="Choose a batch to encode orientation or exam results." />
       ) : isLoading ? (
         <TableSkeleton />
       ) : !applications?.length ? (
-        <EmptyState title="No applicants at this stage" description={`No applicants are currently eligible for ${config.label.toLowerCase()} in this batch.`} />
+        <EmptyState title="No applicants at this stage" description={`No applicants have attended ${mode === 'orientation' ? 'orientation' : 'the exam'} yet in this batch, awaiting a result.`} />
       ) : (
         <Card>
           <CardContent className="space-y-2">

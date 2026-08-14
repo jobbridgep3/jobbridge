@@ -8,8 +8,8 @@ import { Input, Label, Select } from '../ui/Input'
 import { StatusBadge } from '../ui/StatusBadge'
 
 export const SPES_STATUSES = [
-  'pending_review', 'approved_for_orientation', 'attended_orientation', 'failed_orientation',
-  'rejected', 'passed', 'failed', 'for_deployment', 'deployed', 'completed', 'terminated',
+  'pending_review', 'approved_for_orientation', 'attended_orientation', 'orientation_passed', 'failed_orientation',
+  'attended_exam', 'passed', 'failed', 'rejected',
 ]
 
 /** Shared applicant list + filter UI for Staff's Applicants tab and Admin's read-only

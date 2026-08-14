@@ -56,14 +56,14 @@ const STATUS_MAP = {
   forming: { label: 'Forming', variant: 'default' },
   submitted_to_owwa: { label: 'Submitted to OWWA', variant: 'info' },
   for_owwa_response: { label: 'Awaiting OWWA Response', variant: 'warning' },
-  // SPES (pending_review, rejected, completed, terminated already covered above)
+  // SPES (pending_review, rejected already covered above)
   approved_for_orientation: { label: 'Approved for Orientation', variant: 'info' },
   attended_orientation: { label: 'Attended Orientation', variant: 'info' },
+  orientation_passed: { label: 'Orientation Passed', variant: 'success' },
   failed_orientation: { label: 'Failed Orientation', variant: 'danger' },
+  attended_exam: { label: 'Attended Exam', variant: 'info' },
   passed: { label: 'Passed', variant: 'success' },
   failed: { label: 'Failed', variant: 'danger' },
-  for_deployment: { label: 'Awaiting Deployment', variant: 'warning' },
-  deployed: { label: 'Deployed', variant: 'success' },
 }
 
 export function StatusBadge({ status, label }) {

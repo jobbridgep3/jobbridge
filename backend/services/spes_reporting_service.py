@@ -10,21 +10,19 @@ from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 
 from extensions import db
-from models.spes import SPES_APPLICATION_STATUSES, SpesApplication, SpesAttendanceLog, SpesBatch, SpesDtrEntry
+from models.spes import SPES_APPLICATION_STATUSES, SpesApplication, SpesAttendanceLog, SpesBatch
 from services.dashboard_service import _month_buckets
 
 REPORT_ROW_LIMIT = 20000
 
 # Statuses reached only after Staff approved the applicant for orientation (i.e. they
-# were invited) — the denominator for orientation attendance rate.
+# were invited) — the denominator for "orientation invited"/orientation attendance rate.
 ORIENTATION_INVITED_STATUSES = tuple(s for s in SPES_APPLICATION_STATUSES if s not in ("pending_review", "rejected"))
-# Statuses reached only after the applicant attended orientation (i.e. they were
-# exam-eligible) — the denominator for exam attendance rate. failed_orientation
-# applicants never become exam-eligible.
-EXAM_ELIGIBLE_STATUSES = tuple(
-    s for s in SPES_APPLICATION_STATUSES if s not in ("pending_review", "rejected", "approved_for_orientation", "failed_orientation")
-)
-PASSED_OR_BEYOND_STATUSES = ("passed", "for_deployment", "deployed", "completed", "terminated")
+# Statuses reached only after the applicant PASSED orientation (i.e. they became
+# exam-eligible) — cumulative, since an applicant who has since attended/passed/failed
+# the exam no longer shows "orientation_passed" as their *current* status but did pass
+# through it. failed_orientation applicants never reach this set.
+ORIENTATION_PASSED_STATUSES = ("orientation_passed", "attended_exam", "passed", "failed")
 
 
 def build_spes_stats(batch_id=None) -> dict:
@@ -35,24 +33,24 @@ def build_spes_stats(batch_id=None) -> dict:
     status_counts = dict(query.with_entities(SpesApplication.status, func.count(SpesApplication.id)).group_by(SpesApplication.status).all())
     for s in SPES_APPLICATION_STATUSES:
         status_counts.setdefault(s, 0)
-    total_applications = sum(status_counts.values())
+    total_applicants = sum(status_counts.values())
 
-    invited_count = sum(status_counts[s] for s in ORIENTATION_INVITED_STATUSES)
-    exam_eligible_count = sum(status_counts[s] for s in EXAM_ELIGIBLE_STATUSES)
-    passed_count = sum(status_counts[s] for s in PASSED_OR_BEYOND_STATUSES)
-    resolved_exam_count = passed_count + status_counts["failed"]
+    orientation_invited = sum(status_counts[s] for s in ORIENTATION_INVITED_STATUSES)
+    orientation_passed_count = sum(status_counts[s] for s in ORIENTATION_PASSED_STATUSES)
+    orientation_failed_count = status_counts["failed_orientation"]
+    exam_eligible = orientation_passed_count
+    exam_passed_count = status_counts["passed"]
+    exam_failed_count = status_counts["failed"]
 
     attendance_query = SpesAttendanceLog.query.join(SpesApplication)
     if batch_id:
         attendance_query = attendance_query.filter(SpesApplication.batch_id == batch_id)
     orientation_attended = attendance_query.filter(SpesAttendanceLog.event_type == "orientation").count()
     exam_attended = attendance_query.filter(SpesAttendanceLog.event_type == "exam").count()
+    orientation_absent = max(orientation_invited - orientation_attended, 0)
+    exam_absent = max(exam_eligible - exam_attended, 0)
 
-    dtr_query = SpesDtrEntry.query.join(SpesDtrEntry.deployment).join(SpesApplication)
-    if batch_id:
-        dtr_query = dtr_query.filter(SpesApplication.batch_id == batch_id)
-    total_dtr = dtr_query.count()
-    approved_dtr = dtr_query.filter(SpesDtrEntry.status == "approved").count()
+    resolved_exam_count = exam_passed_count + exam_failed_count
 
     if batch_id:
         allocation = db.session.query(SpesBatch.budget_allocation).filter(SpesBatch.id == batch_id).scalar()
@@ -61,22 +59,28 @@ def build_spes_stats(batch_id=None) -> dict:
     allocation = float(allocation) if allocation is not None else None
 
     return {
-        "total_applications": total_applications,
+        "total_applicants": total_applicants,
         "pending_review": status_counts["pending_review"],
-        "approved_for_orientation": status_counts["approved_for_orientation"],
-        "attended_orientation": status_counts["attended_orientation"],
-        "failed_orientation": status_counts["failed_orientation"],
-        "passed": status_counts["passed"],
-        "failed": status_counts["failed"],
-        "for_deployment": status_counts["for_deployment"],
-        "deployed": status_counts["deployed"],
-        "completed": status_counts["completed"],
-        "terminated": status_counts["terminated"],
         "rejected": status_counts["rejected"],
-        "orientation_attendance_rate": round(orientation_attended / invited_count * 100, 1) if invited_count else None,
-        "exam_attendance_rate": round(exam_attended / exam_eligible_count * 100, 1) if exam_eligible_count else None,
-        "pass_rate": round(passed_count / resolved_exam_count * 100, 1) if resolved_exam_count else None,
-        "dtr_compliance_rate": round(approved_dtr / total_dtr * 100, 1) if total_dtr else None,
+        "approved_for_orientation": status_counts["approved_for_orientation"],
+        # currently_orientation_passed: LIVE count of applicants whose status is right
+        # now 'orientation_passed' (i.e. genuinely still waiting to take the exam) —
+        # for dashboard "needs action" tiles. orientation_passed below is the
+        # CUMULATIVE count (orientation_passed OR anyone who progressed further) used
+        # for report/funnel totals, matching how orientation_invited/exam_eligible are
+        # already cumulative elsewhere in this function.
+        "currently_orientation_passed": status_counts["orientation_passed"],
+        "orientation_attended": orientation_attended,
+        "orientation_absent": orientation_absent,
+        "orientation_passed": orientation_passed_count,
+        "orientation_failed": orientation_failed_count,
+        "exam_attended": exam_attended,
+        "exam_absent": exam_absent,
+        "exam_passed": exam_passed_count,
+        "exam_failed": exam_failed_count,
+        "orientation_attendance_rate": round(orientation_attended / orientation_invited * 100, 1) if orientation_invited else None,
+        "exam_attendance_rate": round(exam_attended / exam_eligible * 100, 1) if exam_eligible else None,
+        "pass_rate": round(exam_passed_count / resolved_exam_count * 100, 1) if resolved_exam_count else None,
         "budget_allocation": allocation,
         "wage_subsidy_employer_share": round(allocation * 0.6, 2) if allocation is not None else None,
         "wage_subsidy_dole_share": round(allocation * 0.4, 2) if allocation is not None else None,
@@ -104,8 +108,11 @@ def build_spes_analytics(months: int = 6) -> dict:
     return {"applications_per_month": applications_per_month, "status_distribution": status_distribution}
 
 
-def query_spes_applications_for_report(batch_id=None, status=None, date_from=None, date_to=None, search=None):
-    query = SpesApplication.query.options(selectinload(SpesApplication.batch))
+def query_spes_applications_for_report(batch_id=None, status=None, attendance=None, date_from=None, date_to=None, search=None):
+    """attendance: one of 'orientation_attended'/'orientation_absent'/'exam_attended'/
+    'exam_absent', filtering by presence/absence of a SpesAttendanceLog row for the
+    matching event_type (independent of the applicant's current status)."""
+    query = SpesApplication.query.options(selectinload(SpesApplication.batch), selectinload(SpesApplication.attendance_logs))
     if batch_id:
         query = query.filter(SpesApplication.batch_id == batch_id)
     if status:
@@ -116,10 +123,17 @@ def query_spes_applications_for_report(batch_id=None, status=None, date_from=Non
         query = query.filter(SpesApplication.submitted_at < date_to + timedelta(days=1))
     if search:
         query = query.filter(SpesApplication.full_name.ilike(f"%{search}%"))
+    if attendance in ("orientation_attended", "orientation_absent", "exam_attended", "exam_absent"):
+        event_type = "orientation" if attendance.startswith("orientation") else "exam"
+        log_exists = SpesAttendanceLog.query.filter(
+            SpesAttendanceLog.application_id == SpesApplication.id, SpesAttendanceLog.event_type == event_type,
+        ).exists()
+        query = query.filter(log_exists if attendance.endswith("attended") else ~log_exists)
     return query.order_by(SpesApplication.submitted_at.desc()).limit(REPORT_ROW_LIMIT).all()
 
 
 def spes_report_row(application: SpesApplication) -> dict:
+    logged_events = {log.event_type for log in application.attendance_logs}
     return {
         "application_ref_no": application.application_ref_no,
         "jobseeker_name": application.full_name,
@@ -129,6 +143,8 @@ def spes_report_row(application: SpesApplication) -> dict:
         "family_income": float(application.family_income) if application.family_income is not None else None,
         "submitted_at": application.submitted_at,
         "reviewed_at": application.reviewed_at,
+        "orientation_attended": "orientation" in logged_events,
         "orientation_outcome_at": application.orientation_outcome_at,
+        "exam_attended": "exam" in logged_events,
         "exam_result_at": application.exam_result_at,
     }

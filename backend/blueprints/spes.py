@@ -1,12 +1,17 @@
 """SPES (Special Program for Employment of Students) module — batch creation,
 registration + eligibility validation, application review, independent
-orientation/exam scheduling + QR attendance, orientation-outcome/exam-result
-encoding, deployment, and DTR. Standalone from blueprints/programs.py (the shared
-SPES/DILP generic system) — see models/spes.py's module docstring for why.
+orientation/exam scheduling + QR attendance, orientation-result/exam-result
+encoding, and a PESO-office appointment once an applicant passes. Standalone from
+blueprints/programs.py (the shared SPES/DILP generic system) — see models/spes.py's
+module docstring for why.
+
+There is no Deployment/DTR tracking in this module — PESO coordinates placement in
+person once an applicant passes the exam; the system's involvement ends with the
+PESO-office appointment (see staff_set_peso_appointment below).
 
 Admin is restricted to batch management + reports (system-wide); every day-to-day
 operational action (application review, scheduling, QR scanning, outcome/result
-encoding, deployment, DTR review) is Staff-only, enforced via role_required("staff")
+encoding, PESO appointment) is Staff-only, enforced via role_required("staff")
 rather than the role_required("staff", "admin") every other program-style module in
 this codebase uses — this is the first module where Admin and Staff routes genuinely
 diverge instead of sharing identical permissions.
@@ -20,21 +25,14 @@ from sqlalchemy.orm import selectinload
 
 from extensions import db
 from models.jobseeker import JobseekerProfile
-from models.spes import (
-    SPES_ATTENDANCE_EVENT_TYPES,
-    SpesApplication,
-    SpesAttendanceLog,
-    SpesBatch,
-    SpesDeployment,
-    SpesDtrEntry,
-)
+from models.spes import SPES_ATTENDANCE_EVENT_TYPES, SpesApplication, SpesAttendanceLog, SpesBatch
 from models.user import User
 from services import spes_reporting_service, spes_service
 from services.audit_service import log_audit
 from services.email_service import (
-    send_spes_deployment_email,
     send_spes_exam_notice_email,
     send_spes_orientation_notice_email,
+    send_spes_peso_appointment_email,
     send_spes_registration_confirmation_email,
     send_spes_result_failed_email,
     send_spes_result_passed_email,
@@ -174,7 +172,7 @@ def my_spes_applications():
     if not profile:
         return ok([])
     applications = SpesApplication.query.options(*_APP_EAGER).filter_by(jobseeker_profile_id=profile.id).order_by(SpesApplication.created_at.desc()).all()
-    return ok([a.to_dict(include_attendance=True, include_deployment=True) for a in applications])
+    return ok([a.to_dict(include_attendance=True) for a in applications])
 
 
 def _own_application_or_error(application_id, user_id):
@@ -232,60 +230,6 @@ def upload_spes_document(application_id):
     return ok(application.to_dict(), "Document uploaded.")
 
 
-def _active_deployment_for_user(user_id):
-    profile = JobseekerProfile.query.filter_by(user_id=user_id).first()
-    if not profile:
-        return None
-    return (
-        SpesDeployment.query.join(SpesApplication)
-        .filter(SpesApplication.jobseeker_profile_id == profile.id, SpesApplication.status == "deployed")
-        .order_by(SpesDeployment.created_at.desc()).first()
-    )
-
-
-@spes_bp.get("/spes/my/dtr")
-@jwt_required()
-@role_required("jobseeker")
-def my_spes_dtr():
-    profile = JobseekerProfile.query.filter_by(user_id=get_jwt_identity()).first()
-    if not profile:
-        return ok([])
-    entries = (
-        SpesDtrEntry.query.join(SpesDeployment).join(SpesApplication)
-        .filter(SpesApplication.jobseeker_profile_id == profile.id)
-        .order_by(SpesDtrEntry.work_date.desc()).all()
-    )
-    return ok([e.to_dict() for e in entries])
-
-
-@spes_bp.post("/spes/my/dtr")
-@jwt_required()
-@role_required("jobseeker")
-def submit_spes_dtr():
-    deployment = _active_deployment_for_user(get_jwt_identity())
-    if not deployment:
-        return fail("You must be an active SPES deployment to submit a DTR entry.", 400)
-
-    data = request.get_json(force=True) or {}
-    try:
-        work_date = date.fromisoformat(data.get("work_date"))
-        time_in = datetime.strptime(data.get("time_in"), "%H:%M").time()
-        time_out = datetime.strptime(data.get("time_out"), "%H:%M").time()
-    except (TypeError, ValueError):
-        return fail("Provide a valid date and time in/time out.", 400)
-
-    if work_date > now_manila().date():
-        return fail("DTR entries cannot be submitted for a future date.", 400)
-    if SpesDtrEntry.query.filter_by(deployment_id=deployment.id, work_date=work_date).first():
-        return fail("You have already submitted a DTR entry for this date.", 400)
-
-    entry = SpesDtrEntry(deployment_id=deployment.id, work_date=work_date, time_in=time_in, time_out=time_out, status="pending")
-    db.session.add(entry)
-    db.session.commit()
-    log_audit(User.query.get(get_jwt_identity()), "Create", "spes_dtr_entry", entry.id)
-    return ok(entry.to_dict(), "DTR entry submitted.", 201)
-
-
 # ==================== Staff ====================
 
 @spes_bp.get("/staff/spes/dashboard")
@@ -327,10 +271,10 @@ def staff_list_spes_applications():
 @jwt_required()
 @role_required("staff", "admin")
 def staff_spes_application_detail(application_id):
-    application = SpesApplication.query.options(*_APP_EAGER, selectinload(SpesApplication.attendance_logs), selectinload(SpesApplication.deployment)).get(application_id)
+    application = SpesApplication.query.options(*_APP_EAGER, selectinload(SpesApplication.attendance_logs)).get(application_id)
     if not application:
         return fail("Application not found.", 404)
-    return ok(application.to_dict(include_attendance=True, include_deployment=True))
+    return ok(application.to_dict(include_attendance=True))
 
 
 @spes_bp.put("/staff/spes/applications/<application_id>/approve")
@@ -444,7 +388,7 @@ def staff_set_spes_orientation_schedule(batch_id):
 @jwt_required()
 @role_required("staff", "admin")
 def spes_exam_recipient_count(batch_id):
-    count = SpesApplication.query.filter_by(batch_id=batch_id, status="attended_orientation").count()
+    count = SpesApplication.query.filter_by(batch_id=batch_id, status="orientation_passed").count()
     return ok({"count": count})
 
 
@@ -470,13 +414,23 @@ def staff_set_spes_exam_schedule(batch_id):
 
     date_str = scheduled_at.strftime("%B %d, %Y")
     time_str = scheduled_at.strftime("%I:%M %p")
-    applications = SpesApplication.query.options(*_APP_EAGER).filter_by(batch_id=batch.id, status="attended_orientation").all()
+    applications = SpesApplication.query.options(*_APP_EAGER).filter_by(batch_id=batch.id, status="orientation_passed").all()
     for application in applications:
         send_spes_exam_notice_email(
             application.jobseeker_profile.user.email, application.full_name, batch.batch_name, date_str, time_str, venue, dress_code,
         )
         _notify_jobseeker(application, "SPES exam scheduled", f"Your SPES exam for {batch.batch_name} is scheduled on {date_str} at {time_str}.")
     return ok(batch.to_dict(), f"Exam schedule saved — {len(applications)} applicant(s) notified.")
+
+
+# Maps an attendance scan's event_type to the (required-precondition-status, resulting-status)
+# pair — QR attendance automatically advances the applicant; Staff never manually assigns
+# "attended" separately (see staff_set_orientation_result/staff_set_exam_result for the
+# distinct, Staff-driven pass/fail decision that follows attendance).
+_SCAN_TRANSITIONS = {
+    "orientation": ("approved_for_orientation", "attended_orientation", "This applicant hasn't been approved for orientation yet."),
+    "exam": ("orientation_passed", "attended_exam", "This applicant hasn't passed orientation yet — exam attendance can't be recorded."),
+}
 
 
 @spes_bp.post("/staff/spes/scan-qr")
@@ -495,10 +449,19 @@ def staff_scan_spes_qr():
     if SpesAttendanceLog.query.filter_by(application_id=application.id, event_type=event_type).first():
         return fail(f"{application.full_name} is already marked present for this {event_type} session.", 409)
 
+    required_status, resulting_status, precondition_error = _SCAN_TRANSITIONS[event_type]
+    if application.status != required_status:
+        return fail(f"{application.full_name}: {precondition_error}", 409)
+
     log = SpesAttendanceLog(application_id=application.id, event_type=event_type, scanned_at=now_manila(), scanned_by=get_jwt_identity())
     db.session.add(log)
+    application.status = resulting_status
     db.session.commit()
 
+    _notify_jobseeker(
+        application, f"SPES {event_type} attendance recorded",
+        f"You've been marked present for {event_type}.",
+    )
     notify_board(
         [("staff", "/staff/spes/scanner")], "spes_attendance", "SPES attendance scanned",
         f"{application.full_name} marked present ({event_type}).",
@@ -526,7 +489,7 @@ def spes_attendance_dashboard(batch_id):
     )
     eligible_statuses = (
         spes_reporting_service.ORIENTATION_INVITED_STATUSES if event_type == "orientation"
-        else spes_reporting_service.EXAM_ELIGIBLE_STATUSES
+        else spes_reporting_service.ORIENTATION_PASSED_STATUSES
     )
     total_eligible = SpesApplication.query.filter(
         SpesApplication.batch_id == batch_id, SpesApplication.status.in_(eligible_statuses),
@@ -539,10 +502,12 @@ def spes_attendance_dashboard(batch_id):
     })
 
 
-def _set_orientation_outcome(application, outcome, remarks):
-    if application.status != "approved_for_orientation":
-        return fail(f"{application.full_name}: only applicants approved for orientation can have an outcome recorded.", 400)
-    application.status = "attended_orientation" if outcome == "attended" else "failed_orientation"
+def _set_orientation_result(application, result, remarks):
+    """Orientation attendance is already automatic (see staff_scan_spes_qr) — this
+    records Staff's separate Passed/Failed judgment for an applicant who attended."""
+    if application.status != "attended_orientation":
+        return fail(f"{application.full_name}: only applicants who attended orientation can have a result recorded.", 400)
+    application.status = "orientation_passed" if result == "passed" else "failed_orientation"
     application.orientation_outcome_remarks = remarks
     application.orientation_outcome_by = get_jwt_identity()
     application.orientation_outcome_at = now_manila()
@@ -557,17 +522,17 @@ def staff_set_orientation_outcome(application_id):
     if not application:
         return fail("Application not found.", 404)
     data = request.get_json(force=True) or {}
-    outcome = data.get("outcome")
-    if outcome not in ("attended", "failed"):
-        return fail("Outcome must be 'attended' or 'failed'.", 400)
+    result = data.get("result")
+    if result not in ("passed", "failed"):
+        return fail("Result must be 'passed' or 'failed'.", 400)
 
-    error = _set_orientation_outcome(application, outcome, data.get("remarks"))
+    error = _set_orientation_result(application, result, data.get("remarks"))
     if error:
         return error
     db.session.commit()
-    log_audit(User.query.get(get_jwt_identity()), "Update", "spes_application", application.id, details=f"Orientation outcome: {outcome}")
-    _notify_jobseeker(application, "SPES orientation outcome recorded", f"Your orientation outcome has been recorded: {application.status.replace('_', ' ').title()}.")
-    return ok(application.to_dict(), "Orientation outcome saved.")
+    log_audit(User.query.get(get_jwt_identity()), "Update", "spes_application", application.id, details=f"Orientation result: {result}")
+    _notify_jobseeker(application, "SPES orientation result recorded", f"Your orientation/interview result has been recorded: {application.status.replace('_', ' ').title()}.")
+    return ok(application.to_dict(), "Orientation result saved.")
 
 
 @spes_bp.post("/staff/spes/orientation-outcomes/bulk")
@@ -582,26 +547,26 @@ def staff_bulk_orientation_outcomes():
         if not application:
             errors.append({"application_id": item.get("application_id"), "error": "Application not found."})
             continue
-        outcome = item.get("outcome")
-        if outcome not in ("attended", "failed"):
-            errors.append({"application_id": item.get("application_id"), "error": "Invalid outcome."})
+        result = item.get("result")
+        if result not in ("passed", "failed"):
+            errors.append({"application_id": item.get("application_id"), "error": "Invalid result."})
             continue
-        error = _set_orientation_outcome(application, outcome, item.get("remarks"))
+        error = _set_orientation_result(application, result, item.get("remarks"))
         if error:
-            errors.append({"application_id": item.get("application_id"), "error": "Not eligible for orientation outcome."})
+            errors.append({"application_id": item.get("application_id"), "error": "Not eligible for an orientation result."})
             continue
         saved.append(application)
     db.session.commit()
     for application in saved:
-        log_audit(User.query.get(get_jwt_identity()), "Update", "spes_application", application.id, details="Orientation outcome (bulk)")
-        _notify_jobseeker(application, "SPES orientation outcome recorded", f"Your orientation outcome has been recorded: {application.status.replace('_', ' ').title()}.")
-    return ok({"saved": len(saved), "errors": errors}, f"{len(saved)} outcome(s) saved.")
+        log_audit(User.query.get(get_jwt_identity()), "Update", "spes_application", application.id, details="Orientation result (bulk)")
+        _notify_jobseeker(application, "SPES orientation result recorded", f"Your orientation/interview result has been recorded: {application.status.replace('_', ' ').title()}.")
+    return ok({"saved": len(saved), "errors": errors}, f"{len(saved)} result(s) saved.")
 
 
 def _set_exam_result(application, result, remarks):
-    if application.status != "attended_orientation":
-        return None, fail(f"{application.full_name}: only applicants who attended orientation can have an exam result recorded.", 400)
-    application.status = "for_deployment" if result == "passed" else "failed"
+    if application.status != "attended_exam":
+        return None, fail(f"{application.full_name}: only applicants who attended the exam can have a result recorded.", 400)
+    application.status = "passed" if result == "passed" else "failed"
     application.exam_result_remarks = remarks
     application.exam_result_by = get_jwt_identity()
     application.exam_result_at = now_manila()
@@ -666,142 +631,40 @@ def staff_bulk_exam_results():
     return ok({"saved": len(saved), "errors": errors}, f"{len(saved)} result(s) saved.")
 
 
-@spes_bp.post("/staff/spes/applications/<application_id>/deployment")
+@spes_bp.put("/staff/spes/applications/<application_id>/peso-appointment")
 @jwt_required()
 @role_required("staff")
-def staff_assign_spes_deployment(application_id):
+def staff_set_spes_peso_appointment(application_id):
+    """Only step after an exam pass — no Deployment/DTR tracking. Staff schedules a
+    PESO-office visit; the applicant is emailed and the SPES cycle's system
+    involvement ends here."""
     application = SpesApplication.query.options(*_APP_EAGER).get(application_id)
     if not application:
         return fail("Application not found.", 404)
-    if application.status != "for_deployment":
-        return fail("Only applicants awaiting deployment can be assigned.", 400)
+    if application.status != "passed":
+        return fail("Only applicants who passed the exam can have a PESO appointment set.", 400)
 
     data = request.get_json(force=True) or {}
-    employer_company_id = data.get("employer_company_id") or None
-    office_name = (data.get("office_name") or "").strip() or None
-    supervisor_name = (data.get("supervisor_name") or "").strip()
-    start_date_str = data.get("start_date")
-    if not employer_company_id and not office_name:
-        return fail("Select an employer or enter an office name.", 400)
-    if not supervisor_name:
-        return fail("Supervisor name is required.", 400)
+    date_str = (data.get("date") or "").strip()
+    time_str = (data.get("time") or "").strip()
+    if not date_str or not time_str:
+        return fail("Date and time are required.", 400)
     try:
-        start_date = date.fromisoformat(start_date_str)
-    except (TypeError, ValueError):
-        return fail("A valid reporting start date is required.", 400)
+        appointment_at = MANILA_TZ.localize(datetime.fromisoformat(f"{date_str}T{time_str}"))
+    except ValueError:
+        return fail("Invalid date/time.", 400)
 
-    deployment = SpesDeployment(
-        application_id=application.id, employer_company_id=employer_company_id, office_name=office_name,
-        supervisor_name=supervisor_name, start_date=start_date, created_by=get_jwt_identity(),
+    application.peso_appointment_at = appointment_at
+    db.session.commit()
+    log_audit(User.query.get(get_jwt_identity()), "Update", "spes_application", application.id, details="Set PESO appointment")
+
+    appt_date_str = appointment_at.strftime("%B %d, %Y")
+    appt_time_str = appointment_at.strftime("%I:%M %p")
+    send_spes_peso_appointment_email(
+        application.jobseeker_profile.user.email, application.full_name, application.batch.batch_name, appt_date_str, appt_time_str,
     )
-    application.status = "deployed"
-    db.session.add(deployment)
-    db.session.commit()
-    log_audit(User.query.get(get_jwt_identity()), "Create", "spes_deployment", deployment.id)
-
-    office_or_employer_name = deployment.employer_company.company_name if deployment.employer_company else office_name
-    send_spes_deployment_email(
-        application.jobseeker_profile.user.email, application.full_name, application.batch.batch_name,
-        office_or_employer_name, supervisor_name, start_date.strftime("%B %d, %Y"),
-    )
-    _notify_jobseeker(application, "SPES deployment assigned", f"You've been deployed to {office_or_employer_name}, reporting {start_date.strftime('%B %d, %Y')}.")
-    return ok(application.to_dict(include_deployment=True), "Deployment assigned.")
-
-
-@spes_bp.put("/staff/spes/deployments/<deployment_id>/complete")
-@jwt_required()
-@role_required("staff")
-def staff_complete_spes_deployment(deployment_id):
-    deployment = SpesDeployment.query.get(deployment_id)
-    if not deployment or not deployment.application:
-        return fail("Deployment not found.", 404)
-    if deployment.application.status != "deployed":
-        return fail("Only active deployments can be marked completed.", 400)
-
-    deployment.completed_at = now_manila()
-    deployment.application.status = "completed"
-    db.session.commit()
-    log_audit(User.query.get(get_jwt_identity()), "Update", "spes_deployment", deployment.id, details="Completed")
-    _notify_jobseeker(deployment.application, "SPES deployment completed", "Your SPES engagement has been marked completed. Thank you for your participation!")
-    return ok(deployment.application.to_dict(include_deployment=True), "Deployment marked completed.")
-
-
-@spes_bp.put("/staff/spes/deployments/<deployment_id>/terminate")
-@jwt_required()
-@role_required("staff")
-def staff_terminate_spes_deployment(deployment_id):
-    deployment = SpesDeployment.query.get(deployment_id)
-    if not deployment or not deployment.application:
-        return fail("Deployment not found.", 404)
-    if deployment.application.status != "deployed":
-        return fail("Only active deployments can be terminated.", 400)
-    data = request.get_json(force=True) or {}
-    reason = (data.get("reason") or "").strip()
-    if not reason:
-        return fail("A reason is required to terminate this deployment.", 400)
-
-    deployment.terminated_at = now_manila()
-    deployment.termination_reason = reason
-    deployment.application.status = "terminated"
-    db.session.commit()
-    log_audit(User.query.get(get_jwt_identity()), "Update", "spes_deployment", deployment.id, details=reason)
-    _notify_jobseeker(deployment.application, "SPES deployment terminated", reason)
-    return ok(deployment.application.to_dict(include_deployment=True), "Deployment marked terminated.")
-
-
-@spes_bp.get("/staff/spes/dtr")
-@jwt_required()
-@role_required("staff", "admin")
-def staff_list_spes_dtr():
-    query = SpesDtrEntry.query.join(SpesDeployment).join(SpesApplication)
-    if request.args.get("status"):
-        query = query.filter(SpesDtrEntry.status == request.args["status"])
-    if request.args.get("search"):
-        query = query.filter(SpesApplication.full_name.ilike(f"%{request.args['search']}%"))
-    if request.args.get("date_from"):
-        query = query.filter(SpesDtrEntry.work_date >= request.args["date_from"])
-    if request.args.get("date_to"):
-        query = query.filter(SpesDtrEntry.work_date <= request.args["date_to"])
-    entries = query.order_by(SpesDtrEntry.work_date.desc()).all()
-    return ok([e.to_dict() for e in entries])
-
-
-@spes_bp.put("/staff/spes/dtr/<entry_id>/approve")
-@jwt_required()
-@role_required("staff")
-def staff_approve_spes_dtr(entry_id):
-    entry = SpesDtrEntry.query.get(entry_id)
-    if not entry:
-        return fail("DTR entry not found.", 404)
-    if entry.status != "pending":
-        return fail("Only pending DTR entries can be approved.", 400)
-    data = request.get_json(silent=True) or {}
-    entry.status = "approved"
-    entry.staff_remarks = data.get("remarks")
-    entry.reviewed_by = get_jwt_identity()
-    entry.reviewed_at = now_manila()
-    db.session.commit()
-    log_audit(User.query.get(get_jwt_identity()), "Approve", "spes_dtr_entry", entry.id)
-    return ok(entry.to_dict(), "DTR entry approved.")
-
-
-@spes_bp.put("/staff/spes/dtr/<entry_id>/reject")
-@jwt_required()
-@role_required("staff")
-def staff_reject_spes_dtr(entry_id):
-    entry = SpesDtrEntry.query.get(entry_id)
-    if not entry:
-        return fail("DTR entry not found.", 404)
-    if entry.status != "pending":
-        return fail("Only pending DTR entries can be rejected.", 400)
-    data = request.get_json(silent=True) or {}
-    entry.status = "rejected"
-    entry.staff_remarks = data.get("remarks")
-    entry.reviewed_by = get_jwt_identity()
-    entry.reviewed_at = now_manila()
-    db.session.commit()
-    log_audit(User.query.get(get_jwt_identity()), "Reject", "spes_dtr_entry", entry.id)
-    return ok(entry.to_dict(), "DTR entry rejected.")
+    _notify_jobseeker(application, "SPES PESO appointment scheduled", f"Proceed to the PESO Office on {appt_date_str} at {appt_time_str}.")
+    return ok(application.to_dict(), "PESO appointment saved.")
 
 
 # ---------- Reporting (staff + admin, read-only) ----------
@@ -810,6 +673,7 @@ def _parse_spes_report_filters(args):
     return {
         "batch_id": args.get("batch_id") or None,
         "status": args.get("status") or None,
+        "attendance": args.get("attendance") or None,
         "date_from": date.fromisoformat(args["date_from"]) if args.get("date_from") else None,
         "date_to": date.fromisoformat(args["date_to"]) if args.get("date_to") else None,
         "search": args.get("search") or None,
@@ -822,6 +686,11 @@ def _parse_spes_report_filters(args):
 def staff_spes_report_stats():
     batch_id = request.args.get("batch_id") or None
     return ok(spes_reporting_service.build_spes_stats(batch_id))
+
+
+# Dashboard-only stat keys (live "needs action now" counts) that don't belong in a
+# formal exported report alongside their cumulative report-facing counterparts.
+_EXPORT_EXCLUDED_STAT_KEYS = {"currently_orientation_passed"}
 
 
 @spes_bp.get("/staff/spes/reports/export/excel")
@@ -839,20 +708,22 @@ def export_spes_excel():
         ["Generated By:", f"{user.email} ({user.role})"],
         ["", ""],
         ["Metric", "Value"],
-        *[[SPES_STAT_LABELS.get(k, k), v] for k, v in stats.items()],
+        *[[SPES_STAT_LABELS.get(k, k), v] for k, v in stats.items() if k not in _EXPORT_EXCLUDED_STAT_KEYS],
     ]
-    application_rows = [
-        [d["application_ref_no"], d["jobseeker_name"], d["batch_name"], d["status"], d["gwa"], d["family_income"], d["submitted_at"], d["reviewed_at"], d["orientation_outcome_at"], d["exam_result_at"]]
-        for d in (spes_reporting_service.spes_report_row(a) for a in applications)
+    rows = [spes_reporting_service.spes_report_row(a) for a in applications]
+    orientation_rows = [
+        [d["application_ref_no"], d["jobseeker_name"], d["batch_name"], "Attended" if d["orientation_attended"] else "Absent", d["status"]]
+        for d in rows
+    ]
+    exam_rows = [
+        [d["application_ref_no"], d["jobseeker_name"], d["batch_name"], "Attended" if d["exam_attended"] else "Absent", d["status"]]
+        for d in rows
     ]
 
     buf = build_multi_sheet_excel_report([
         ("Summary", ["PESO Pila, Laguna — SPES Program Report", ""], summary_rows),
-        (
-            "Applications",
-            ["Reference #", "Applicant", "Batch", "Status", "GWA", "Family Income", "Submitted", "Reviewed", "Orientation Outcome", "Exam Result"],
-            application_rows,
-        ),
+        ("Orientation Results", ["Reference #", "Applicant", "Batch", "Attendance", "Status"], orientation_rows),
+        ("Exam Results", ["Reference #", "Applicant", "Batch", "Attendance", "Status"], exam_rows),
     ])
     log_audit(user, "Export", "spes_report", details="excel")
     return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="spes_report.xlsx")
@@ -867,9 +738,11 @@ def export_spes_pdf():
     stats = spes_reporting_service.build_spes_stats(filters["batch_id"])
     user = User.query.get(get_jwt_identity())
     date_str = now_manila().strftime("%B %d, %Y %I:%M %p")
+    batch_name = SpesBatch.query.get(filters["batch_id"]).batch_name if filters["batch_id"] else None
 
+    display_stats = {k: v for k, v in stats.items() if k not in _EXPORT_EXCLUDED_STAT_KEYS}
     rows = [spes_reporting_service.spes_report_row(a) for a in applications]
-    pdf_bytes = generate_spes_report(stats, rows, date_str, user.email, user.role)
+    pdf_bytes = generate_spes_report(display_stats, rows, date_str, user.email, user.role, batch_name=batch_name)
     log_audit(user, "Export", "spes_report", details="pdf")
     return send_file(to_bytesio(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name="spes_report.pdf")
 

@@ -103,8 +103,9 @@ function BatchFormDialog({ open, onOpenChange, batch, onSaved }) {
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <Label>Minimum GWA (optional)</Label>
-              <Input type="number" step="0.01" value={form.min_gwa} onChange={(e) => setForm({ ...form, min_gwa: e.target.value })} placeholder="No minimum" />
+              <Label>Passing GWA Threshold (optional)</Label>
+              <Input type="number" step="0.01" value={form.min_gwa} onChange={(e) => setForm({ ...form, min_gwa: e.target.value })} placeholder="No requirement" />
+              <p className="mt-1 text-xs text-text-muted">1.00 = highest; e.g. 2.00 means a GWA of 1.00–2.00 qualifies.</p>
             </div>
             <div>
               <Label>Max Family Income (optional)</Label>
