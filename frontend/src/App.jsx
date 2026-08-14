@@ -40,6 +40,7 @@ import JobseekerInterviews from './pages/jobseeker/Interviews'
 import JobseekerJobFair from './pages/jobseeker/JobFair'
 import JobseekerJobFairDetail from './pages/jobseeker/JobFairDetail'
 import JobseekerSPES from './pages/jobseeker/SPES'
+import JobseekerSPESBatchDetail from './pages/jobseeker/SPESBatchDetail'
 import JobseekerTraining from './pages/jobseeker/Training'
 import JobseekerDILP from './pages/jobseeker/DILP'
 import JobseekerOWWA from './pages/jobseeker/OWWA'
@@ -86,6 +87,7 @@ import StaffTrainingReferralBatches from './pages/staff/TrainingReferralBatches'
 import StaffTrainingReferralBatchDetail from './pages/staff/TrainingReferralBatchDetail'
 import StaffTrainingReferralReports from './pages/staff/TrainingReferralReports'
 import StaffSPES from './pages/staff/SPES'
+import StaffSPESApplicationDetail from './pages/staff/SPESApplicationDetail'
 import StaffLMI from './pages/staff/LMI'
 import StaffAnnouncements from './pages/staff/Announcements'
 import StaffNotifications from './pages/staff/Notifications'
@@ -165,6 +167,7 @@ export default function App() {
             <Route path="jobfair" element={<JobseekerJobFair />} />
             <Route path="jobfair/:id" element={<JobseekerJobFairDetail />} />
             <Route path="spes" element={<JobseekerSPES />} />
+            <Route path="spes/:batchId" element={<JobseekerSPESBatchDetail />} />
             <Route path="training" element={<JobseekerTraining />} />
             <Route path="dilp" element={<JobseekerDILP />} />
             <Route path="owwa" element={<JobseekerOWWA />} />
@@ -220,6 +223,7 @@ export default function App() {
             <Route path="training-referral/batches/:id" element={<StaffTrainingReferralBatchDetail />} />
             <Route path="training-referral/reports" element={<StaffTrainingReferralReports />} />
             <Route path="spes" element={<StaffSPES />} />
+            <Route path="spes/applicants/:id" element={<StaffSPESApplicationDetail />} />
             <Route path="lmi" element={<StaffLMI />} />
             <Route path="announcements" element={<StaffAnnouncements />} />
             <Route path="notifications" element={<StaffNotifications />} />

@@ -37,6 +37,7 @@ export const TYPE_PRIORITY_MAP = {
   jobfair_cancelled: 'important',
   jobfair_booth_status: 'important',
   announcement_published: 'important',
+  spes_status: 'important',
 }
 
 export function resolvePriority(notification) {
@@ -82,6 +83,8 @@ export const TYPE_ICON_MAP = {
   application_status: FileText,
   announcement_published: Megaphone,
   graduation: GraduationCap,
+  spes_status: GraduationCap,
+  spes_board: GraduationCap,
 }
 
 export function resolveIcon(type) {

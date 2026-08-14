@@ -779,3 +779,118 @@ def send_owwa_request_declined_email(to: str, jobseeker_name: str, request_id: s
     </div>
     """
     return send_email(to, f"Update on Your OWWA Assistance Application — Reference #{request_id}", html)
+
+
+# ---------- SPES ----------
+# Sign-off and section copy follow the SPES module spec verbatim. Note: this codebase's
+# send_email()/Brevo integration doesn't support file attachments (no existing email
+# anywhere in JobBridge attaches a PDF) — so instead of a literal attachment, these
+# emails link back to the applicant's JobBridge account to download the Application
+# Form PDF, and embed the QR inline as a <img> the same way jobfair.py's registration
+# email already does.
+
+def _dress_code_section(dress_code: dict | None) -> str:
+    dress_code = dress_code or {}
+
+    def _list(label, key):
+        items = dress_code.get(key) or []
+        if not items:
+            return ""
+        lis = "".join(f"<li>{item}</li>" for item in items)
+        return f"<p style='margin-bottom:2px'><b>{label}</b></p><ul style='margin-top:0'>{lis}</ul>"
+
+    sections = _list("TOP", "top") + _list("BOTTOM", "bottom") + _list("FOOTWEAR", "footwear")
+    if not sections:
+        return ""
+    return f"<p><b>✅ DRESS CODE</b></p>{sections}"
+
+
+def send_spes_registration_confirmation_email(to: str, applicant_name: str, batch_name: str, application_ref_no: str, requirements: list[str]):
+    requirements_html = "".join(f"<li>{r}</li>" for r in (requirements or [])) or "<li>No additional requirements specified for this batch.</li>"
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">SPES Application Received</h2>
+      <p>Hi {applicant_name},</p>
+      <p>We've received your SPES application for <b>{batch_name}</b> (Reference #{application_ref_no}). Please print
+      the Application Form (with QR code, downloadable from your JobBridge account) and bring it to the PESO Office
+      along with the following requirements:</p>
+      <p><b>✅ Requirements to bring:</b></p>
+      <ul>{requirements_html}</ul>
+      <p>Please wait for a follow-up email regarding your orientation and interview schedule.</p>
+      <p>— PESO Pila SPES Team</p>
+    </div>
+    """
+    return send_email(to, f"SPES Application Received — {batch_name}", html)
+
+
+def send_spes_orientation_notice_email(to: str, applicant_name: str, batch_name: str, date_str: str, time_str: str, venue: str, dress_code: dict | None):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">SPES Orientation &amp; Interview Schedule</h2>
+      <p>Hi {applicant_name},</p>
+      <p>Your SPES orientation and interview for <b>{batch_name}</b> has been scheduled:</p>
+      <p>📅 <b>Date:</b> {date_str}<br/>🕒 <b>Time:</b> {time_str}<br/>📍 <b>Venue:</b> {venue}</p>
+      {_dress_code_section(dress_code)}
+      <p>Please bring your printed Application Form (with QR code) for attendance scanning. Your exam schedule will
+      be sent in a separate email once you've completed this step.</p>
+      <p>— PESO Pila SPES Team</p>
+    </div>
+    """
+    return send_email(to, f"SPES Orientation & Interview Schedule — {batch_name}", html)
+
+
+def send_spes_exam_notice_email(to: str, applicant_name: str, batch_name: str, date_str: str, time_str: str, venue: str, dress_code: dict | None):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">SPES Examination Schedule</h2>
+      <p>Hi {applicant_name},</p>
+      <p>Following your orientation/interview, your SPES examination for <b>{batch_name}</b> has been scheduled:</p>
+      <p>📅 <b>Date:</b> {date_str}<br/>🕒 <b>Time:</b> {time_str}<br/>📍 <b>Venue:</b> {venue}</p>
+      {_dress_code_section(dress_code)}
+      <p>Please bring your printed Application Form (with QR code) for attendance scanning.</p>
+      <p>— PESO Pila SPES Team</p>
+    </div>
+    """
+    return send_email(to, f"SPES Examination Schedule — {batch_name}", html)
+
+
+def send_spes_result_passed_email(to: str, applicant_name: str, batch_name: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Congratulations, {applicant_name}!</h2>
+      <p>We're happy to inform you that you have <b>PASSED</b> the SPES screening for <b>{batch_name}</b>.
+      Please wait for a follow-up email regarding your office assignment and reporting schedule.</p>
+      <p>— PESO Pila SPES Team</p>
+    </div>
+    """
+    return send_email(to, f"SPES Result — Congratulations, {applicant_name}!", html)
+
+
+def send_spes_result_failed_email(to: str, applicant_name: str, batch_name: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">SPES Result</h2>
+      <p>Hi {applicant_name},</p>
+      <p>Thank you for applying to SPES {batch_name}. At this time, you have not been selected for this program.
+      We encourage you to apply for the next batch.</p>
+      <p>— PESO Pila SPES Team</p>
+    </div>
+    """
+    return send_email(to, f"SPES Result — {batch_name}", html)
+
+
+def send_spes_deployment_email(to: str, applicant_name: str, batch_name: str, office_or_employer_name: str, supervisor_name: str, start_date_str: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">SPES Deployment</h2>
+      <p>Hi {applicant_name},</p>
+      <p>You will be deployed to:</p>
+      <p>🏢 <b>Office/Employer:</b> {office_or_employer_name}<br/>
+      👤 <b>Supervisor:</b> {supervisor_name}<br/>
+      📅 <b>Reporting Date:</b> {start_date_str}</p>
+      <p>Please submit your Daily Time Record (DTR) through the JobBridge system every week for your wage subsidy
+      processing.</p>
+      <p>— PESO Pila SPES Team</p>
+    </div>
+    """
+    return send_email(to, f"SPES Deployment — {batch_name}", html)
