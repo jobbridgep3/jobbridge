@@ -1,16 +1,26 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ClipboardList } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { Badge } from '../../../components/ui/Badge'
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
+import { useSocket } from '../../../hooks/useSocket'
 import api from '../../../lib/axios'
 
 export function PendingActionsPanel() {
+  const queryClient = useQueryClient()
+  const queryKey = ['admin', 'dashboard', 'pending-actions']
   const { data: pending } = useQuery({
-    queryKey: ['admin', 'dashboard', 'pending-actions'],
+    queryKey,
     queryFn: async () => (await api.get('/api/admin/dashboard/pending-actions')).data.data,
     refetchInterval: 60_000,
+  })
+
+  useSocket({
+    'public:homepage_update': (payload) => {
+      if (payload?.sections?.includes('jobs')) queryClient.invalidateQueries({ queryKey })
+    },
+    'vacancy:submitted': () => queryClient.invalidateQueries({ queryKey }),
   })
 
   return (

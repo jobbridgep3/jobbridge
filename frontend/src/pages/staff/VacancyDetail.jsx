@@ -12,6 +12,7 @@ import { Textarea } from '../../components/ui/Input'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { VacancyDisplay } from '../../components/vacancy/VacancyDisplay'
+import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { downloadFile, parseBlobError } from '../../lib/download'
 import { fadeIn } from '../../lib/motion'
@@ -35,6 +36,14 @@ export default function StaffVacancyDetail({ basePath = '/staff' }) {
   })
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['staff', 'vacancies', id] })
+
+  // Live refresh when an employer edits this vacancy, or another staff/admin
+  // user acts on it, so the detail view never goes stale.
+  useSocket({
+    'public:homepage_update': (payload) => {
+      if (payload?.sections?.includes('jobs')) invalidate()
+    },
+  })
 
   const approve = useMutation({
     mutationFn: () => api.put(`/api/staff/vacancies/${id}/approve`),

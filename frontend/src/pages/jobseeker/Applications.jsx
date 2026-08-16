@@ -496,6 +496,11 @@ export default function JobseekerApplications() {
     'application:document_request': () => queryClient.invalidateQueries({ queryKey: ['applications'] }),
     'offer:new': () => queryClient.invalidateQueries({ queryKey: ['applications'] }),
     'offer:response': () => queryClient.invalidateQueries({ queryKey: ['applications'] }),
+    // Vacancy fields (title, salary, etc.) shown here are read live from the
+    // vacancy on every fetch — just needs a refetch trigger when one changes.
+    'public:homepage_update': (payload) => {
+      if (payload?.sections?.includes('jobs')) queryClient.invalidateQueries({ queryKey: ['applications'] })
+    },
   })
 
   const companies = useMemo(

@@ -497,15 +497,6 @@ def submit_accreditation():
 
 # ---------- Vacancy Management ----------
 
-# Fields whose change on an approved/published vacancy is significant enough to
-# force a re-review — everything else (contact person, additional info, screening
-# questions) can be edited freely post-approval with no status change.
-CORE_VACANCY_FIELDS = (
-    "title", "summary", "responsibilities", "daily_tasks", "description", "requirements",
-    "required_skills", "education_level", "min_experience_years", "salary_min", "salary_max",
-)
-
-
 def _apply_vacancy_fields(vacancy, data):
     from utils.html_sanitizer import sanitize_html
 
@@ -626,30 +617,16 @@ def update_vacancy(vacancy_id):
         return fail("Invalid vacancy data.", 400, err.messages)
 
     before = {"status": vacancy.status}
-    core_field_changed = any(
-        field in data and str(getattr(vacancy, field)) != str(data[field]) for field in CORE_VACANCY_FIELDS
-    )
     _apply_vacancy_fields(vacancy, data)
-
-    reverted_to_pending = False
-    if core_field_changed and vacancy.status in ("approved", "published"):
-        vacancy.status = "pending"
-        reverted_to_pending = True
-
     db.session.commit()
-    if reverted_to_pending:
-        notify_board(
-            [("staff", f"/staff/vacancies/{vacancy.id}")],
-            "vacancy_board", "Vacancy Submitted for Review",
-            f"{vacancy.title} was submitted for PESO approval.",
-            socket_event="vacancy:submitted", socket_payload={"vacancy_id": str(vacancy.id), "title": vacancy.title},
-        )
     log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, before=before, after={"status": vacancy.status})
     # Openings (and other capacity-relevant fields) may have just changed —
     # refresh every live listener (Job Search, Homepage, Employer Vacancies).
+    # This endpoint never changes status itself — an already-approved/published
+    # vacancy stays that way after an edit; re-review only happens through the
+    # explicit Submit for Approval action.
     recalculate_vacancy_status(vacancy.id)
-    message = "Vacancy updated. Core changes require re-approval." if reverted_to_pending else "Vacancy updated."
-    return ok(vacancy.to_dict(), message)
+    return ok(vacancy.to_dict(), "Vacancy updated.")
 
 
 @vacancies_bp.post("/<vacancy_id>/submit")
@@ -672,12 +649,13 @@ def submit_vacancy(vacancy_id):
     vacancy.submitted_at = now_manila()
     db.session.commit()
     notify_board(
-        [("staff", f"/staff/vacancies/{vacancy.id}")],
+        [("staff", f"/staff/vacancies/{vacancy.id}"), ("admin", f"/admin/vacancies/{vacancy.id}")],
         "vacancy_board", "Vacancy Submitted for Review",
         f"{vacancy.title} was submitted for PESO approval.",
         socket_event="vacancy:submitted", socket_payload={"vacancy_id": str(vacancy.id), "title": vacancy.title},
     )
     log_audit(User.query.get(company.user_id), "Update", "vacancies", vacancy.id, "Submitted for approval", before=before, after={"status": vacancy.status})
+    emit_broadcast("public:homepage_update", {"sections": ["jobs"]})
     return ok(vacancy.to_dict(), "Vacancy submitted for PESO Staff approval.")
 
 
@@ -804,15 +782,24 @@ def delete_vacancy(vacancy_id):
     vacancy = Vacancy.query.get(vacancy_id)
     if not vacancy or not company or vacancy.employer_company_id != company.id or vacancy.deleted_at:
         return fail("Vacancy not found.", 404)
-    if vacancy.status != "draft":
-        return fail("Only draft vacancies can be deleted. Close a published vacancy instead.", 400)
-    if Application.query.filter_by(vacancy_id=vacancy.id).count() > 0:
-        return fail("This vacancy already has applicants and cannot be deleted.", 400)
 
-    db.session.delete(vacancy)
+    if vacancy.status == "draft":
+        if Application.query.filter_by(vacancy_id=vacancy.id).count() > 0:
+            return fail("This vacancy already has applicants and cannot be deleted.", 400)
+        db.session.delete(vacancy)
+        db.session.commit()
+        log_audit(User.query.get(company.user_id), "Delete", "vacancies", vacancy_id, "Draft deleted")
+        return ok(message="Draft vacancy deleted.")
+
+    # Any other status: soft-delete (mirrors the staff/admin soft-delete —
+    # same deleted_at field, restorable via the existing admin restore endpoint)
+    # rather than a hard delete, since a submitted/live vacancy may already
+    # have applicants and history worth preserving.
+    vacancy.deleted_at = now_manila()
     db.session.commit()
-    log_audit(User.query.get(company.user_id), "Delete", "vacancies", vacancy_id, "Draft deleted")
-    return ok(message="Draft vacancy deleted.")
+    log_audit(User.query.get(company.user_id), "Delete", "vacancies", vacancy_id, "Vacancy deleted (soft)")
+    emit_broadcast("public:homepage_update", {"sections": ["jobs", "stats"]})
+    return ok(message="Vacancy deleted. It can be restored by PESO Admin if needed.")
 
 
 @vacancies_bp.post("/<vacancy_id>/duplicate")

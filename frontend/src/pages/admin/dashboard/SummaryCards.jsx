@@ -1,16 +1,27 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { AlertCircle, Briefcase, CheckCircle2, FileText, Handshake, Percent, TrendingUp, UserPlus, Users } from 'lucide-react'
 
 import { StatCard } from '../../../components/ui/StatCard'
+import { useSocket } from '../../../hooks/useSocket'
 import api from '../../../lib/axios'
 import { staggerContainer, staggerItem } from '../../../lib/motion'
 
 export function SummaryCards({ apiBase = '/api/admin' }) {
+  const queryClient = useQueryClient()
+  const queryKey = [apiBase, 'dashboard', 'summary']
   const { data: stats } = useQuery({
-    queryKey: [apiBase, 'dashboard', 'summary'],
+    queryKey,
     queryFn: async () => (await api.get(`${apiBase}/dashboard/summary`)).data.data,
     refetchInterval: 60_000,
+  })
+
+  useSocket({
+    'public:homepage_update': (payload) => {
+      if (payload?.sections?.includes('jobs') || payload?.sections?.includes('stats')) {
+        queryClient.invalidateQueries({ queryKey })
+      }
+    },
   })
 
   const cards = [

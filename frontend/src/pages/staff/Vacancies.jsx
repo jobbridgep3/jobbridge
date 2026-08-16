@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
   BarChart3, Briefcase, CheckCircle2, Clock, Download, Eye, FileX, MoreHorizontal, ShieldCheck, XCircle,
@@ -18,6 +18,7 @@ import { Pagination } from '../../components/ui/Pagination'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { StatCard } from '../../components/ui/StatCard'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { downloadFile, parseBlobError } from '../../lib/download'
 import { fadeIn } from '../../lib/motion'
@@ -30,6 +31,7 @@ const LIMIT = 50
 
 export default function StaffVacancies({ basePath = '/staff' }) {
   const role = useAuthStore((s) => s.user?.role)
+  const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const [filters, setFilters] = useState({ ...EMPTY_FILTERS, ...Object.fromEntries(searchParams) })
   const [page, setPage] = useState(1)
@@ -67,6 +69,15 @@ export default function StaffVacancies({ basePath = '/staff' }) {
   const { data: categories } = useQuery({
     queryKey: ['vacancies', 'categories'],
     queryFn: async () => (await api.get('/api/vacancies/categories')).data.data,
+  })
+
+  // Live refresh when an employer submits/edits a vacancy or another
+  // staff/admin user acts on one, so the board never goes stale.
+  useSocket({
+    'public:homepage_update': (payload) => {
+      if (payload?.sections?.includes('jobs')) queryClient.invalidateQueries({ queryKey: ['staff', 'vacancies'] })
+    },
+    'vacancy:submitted': () => queryClient.invalidateQueries({ queryKey: ['staff', 'vacancies'] }),
   })
 
   const vacancies = data?.items || []

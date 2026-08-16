@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 
@@ -6,6 +6,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { PageHeader } from '../../components/ui/PageHeader'
+import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
 import { AnalyticsCharts } from '../admin/dashboard/AnalyticsCharts'
@@ -14,13 +15,22 @@ import { DashboardExportDialog } from '../admin/dashboard/DashboardExportDialog'
 import { SummaryCards } from '../admin/dashboard/SummaryCards'
 
 export default function StaffDashboard() {
+  const queryClient = useQueryClient()
+  const pendingKey = ['staff', 'pending-approvals']
   const { data: pending } = useQuery({
-    queryKey: ['staff', 'pending-approvals'],
+    queryKey: pendingKey,
     queryFn: async () => (await api.get('/api/staff/pending-approvals')).data.data,
   })
   const { data: activity } = useQuery({
     queryKey: ['staff', 'activity-feed'],
     queryFn: async () => (await api.get('/api/staff/activity-feed')).data.data,
+  })
+
+  useSocket({
+    'public:homepage_update': (payload) => {
+      if (payload?.sections?.includes('jobs')) queryClient.invalidateQueries({ queryKey: pendingKey })
+    },
+    'vacancy:submitted': () => queryClient.invalidateQueries({ queryKey: pendingKey }),
   })
 
   return (

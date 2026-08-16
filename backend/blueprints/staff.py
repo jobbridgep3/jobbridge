@@ -955,6 +955,7 @@ def approve_vacancy(vacancy_id):
         approver.email, now_manila().strftime("%B %d, %Y"),
     )
     log_audit(User.query.get(get_jwt_identity()), "Approve", "vacancies", vacancy.id, before=before, after=after)
+    emit_broadcast("public:homepage_update", {"sections": ["jobs"]})
     return ok(vacancy.to_dict(), "Vacancy approved.")
 
 
@@ -978,6 +979,7 @@ def reject_vacancy(vacancy_id):
                 vacancy.rejection_remarks, socket_event="vacancy:rejected",
                 socket_payload={"vacancy_id": str(vacancy.id), "remarks": vacancy.rejection_remarks})
     log_audit(User.query.get(get_jwt_identity()), "Reject", "vacancies", vacancy.id, before=before, after=after)
+    emit_broadcast("public:homepage_update", {"sections": ["jobs"]})
     return ok(vacancy.to_dict(), "Vacancy rejected.")
 
 

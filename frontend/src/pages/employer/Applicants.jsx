@@ -47,7 +47,14 @@ export default function EmployerApplicants() {
     placeholderData: keepPreviousData,
   })
 
-  useSocket({ 'application:new': () => queryClient.invalidateQueries({ queryKey: ['applicants'] }) })
+  useSocket({
+    'application:new': () => queryClient.invalidateQueries({ queryKey: ['applicants'] }),
+    // Vacancy fields (title, salary, etc.) shown here are read live from the
+    // vacancy on every fetch — just needs a refetch trigger when one changes.
+    'public:homepage_update': (payload) => {
+      if (payload?.sections?.includes('jobs')) queryClient.invalidateQueries({ queryKey: ['applicants'] })
+    },
+  })
 
   const columns = [
     { accessorKey: 'jobseeker_name', header: 'Applicant' },
