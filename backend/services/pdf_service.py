@@ -205,16 +205,21 @@ def generate_certificate(jobseeker_name: str, program_title: str, date_str: str)
     return _render(body)
 
 
-def generate_table_report(title: str, columns: list[str], rows: list[list], date_str: str) -> bytes:
-    header = "".join(f"<th>{c}</th>" for c in columns)
-    body_rows = "".join("<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>" for row in rows)
+def generate_table_report(
+    title: str, columns: list[str], rows: list[list], date_str: str,
+    landscape: bool = False, subtitle_lines: list[str] | None = None,
+) -> bytes:
+    header = "".join(f"<th>{_esc(c)}</th>" for c in columns)
+    body_rows = "".join("<tr>" + "".join(f"<td>{_val(cell)}</td>" for cell in row) + "</tr>" for row in rows)
+    subtitle_html = "".join(f"<p>{_esc(s)}</p>" for s in (subtitle_lines or []))
     body = f"""
-    <h2>{title}</h2>
-    <p>Generated: {date_str}</p>
+    <h2>{_esc(title)}</h2>
+    {subtitle_html}
+    <p>Generated: {_esc(date_str)}</p>
     <table><thead><tr>{header}</tr></thead><tbody>{body_rows}</tbody></table>
     <div class="footer">JobBridge — PESO Pila, Laguna official report</div>
     """
-    return _render(body)
+    return _render(body, landscape=landscape)
 
 
 def generate_profile_report(profile: dict, documents: list[dict]) -> bytes:

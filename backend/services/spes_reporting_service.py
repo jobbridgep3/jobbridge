@@ -25,10 +25,41 @@ ORIENTATION_INVITED_STATUSES = tuple(s for s in SPES_APPLICATION_STATUSES if s n
 ORIENTATION_PASSED_STATUSES = ("orientation_passed", "attended_exam", "passed", "failed")
 
 
-def build_spes_stats(batch_id=None) -> dict:
-    query = SpesApplication.query
+def _spes_application_filters(query, batch_id=None, status=None, date_from=None, date_to=None, search=None):
+    """Shared filter logic applied consistently to every SpesApplication-based query
+    across stats/report/export, so on-screen numbers, tables, and exports can never
+    diverge for the same set of active filters."""
     if batch_id:
         query = query.filter(SpesApplication.batch_id == batch_id)
+    if status:
+        query = query.filter(SpesApplication.status == status)
+    if date_from:
+        query = query.filter(SpesApplication.submitted_at >= date_from)
+    if date_to:
+        query = query.filter(SpesApplication.submitted_at < date_to + timedelta(days=1))
+    if search:
+        query = query.filter(SpesApplication.full_name.ilike(f"%{search}%"))
+    return query
+
+
+def _spes_attendance_filter(attendance, application_scope=SpesApplication):
+    """Returns a filter expression matching/excluding a SpesAttendanceLog row for the
+    event type implied by `attendance` ('orientation_attended'/'orientation_absent'/
+    'exam_attended'/'exam_absent'), or None if `attendance` isn't one of those."""
+    if attendance not in ("orientation_attended", "orientation_absent", "exam_attended", "exam_absent"):
+        return None
+    event_type = "orientation" if attendance.startswith("orientation") else "exam"
+    log_exists = SpesAttendanceLog.query.filter(
+        SpesAttendanceLog.application_id == application_scope.id, SpesAttendanceLog.event_type == event_type,
+    ).exists()
+    return log_exists if attendance.endswith("attended") else ~log_exists
+
+
+def build_spes_stats(batch_id=None, status=None, attendance=None, date_from=None, date_to=None, search=None) -> dict:
+    query = _spes_application_filters(SpesApplication.query, batch_id, status, date_from, date_to, search)
+    attendance_filter = _spes_attendance_filter(attendance)
+    if attendance_filter is not None:
+        query = query.filter(attendance_filter)
 
     status_counts = dict(query.with_entities(SpesApplication.status, func.count(SpesApplication.id)).group_by(SpesApplication.status).all())
     for s in SPES_APPLICATION_STATUSES:
@@ -42,9 +73,11 @@ def build_spes_stats(batch_id=None) -> dict:
     exam_passed_count = status_counts["passed"]
     exam_failed_count = status_counts["failed"]
 
-    attendance_query = SpesAttendanceLog.query.join(SpesApplication)
-    if batch_id:
-        attendance_query = attendance_query.filter(SpesApplication.batch_id == batch_id)
+    attendance_query = _spes_application_filters(
+        SpesAttendanceLog.query.join(SpesApplication), batch_id, status, date_from, date_to, search,
+    )
+    if attendance_filter is not None:
+        attendance_query = attendance_query.filter(attendance_filter)
     orientation_attended = attendance_query.filter(SpesAttendanceLog.event_type == "orientation").count()
     exam_attended = attendance_query.filter(SpesAttendanceLog.event_type == "exam").count()
     orientation_absent = max(orientation_invited - orientation_attended, 0)
@@ -112,28 +145,28 @@ def query_spes_applications_for_report(batch_id=None, status=None, attendance=No
     """attendance: one of 'orientation_attended'/'orientation_absent'/'exam_attended'/
     'exam_absent', filtering by presence/absence of a SpesAttendanceLog row for the
     matching event_type (independent of the applicant's current status)."""
-    query = SpesApplication.query.options(selectinload(SpesApplication.batch), selectinload(SpesApplication.attendance_logs))
-    if batch_id:
-        query = query.filter(SpesApplication.batch_id == batch_id)
-    if status:
-        query = query.filter(SpesApplication.status == status)
-    if date_from:
-        query = query.filter(SpesApplication.submitted_at >= date_from)
-    if date_to:
-        query = query.filter(SpesApplication.submitted_at < date_to + timedelta(days=1))
-    if search:
-        query = query.filter(SpesApplication.full_name.ilike(f"%{search}%"))
-    if attendance in ("orientation_attended", "orientation_absent", "exam_attended", "exam_absent"):
-        event_type = "orientation" if attendance.startswith("orientation") else "exam"
-        log_exists = SpesAttendanceLog.query.filter(
-            SpesAttendanceLog.application_id == SpesApplication.id, SpesAttendanceLog.event_type == event_type,
-        ).exists()
-        query = query.filter(log_exists if attendance.endswith("attended") else ~log_exists)
+    query = SpesApplication.query.options(
+        selectinload(SpesApplication.batch), selectinload(SpesApplication.attendance_logs),
+        selectinload(SpesApplication.jobseeker_profile),
+    )
+    query = _spes_application_filters(query, batch_id, status, date_from, date_to, search)
+    attendance_filter = _spes_attendance_filter(attendance)
+    if attendance_filter is not None:
+        query = query.filter(attendance_filter)
     return query.order_by(SpesApplication.submitted_at.desc()).limit(REPORT_ROW_LIMIT).all()
+
+
+def spes_applicant_address(jobseeker_profile) -> str | None:
+    """Same derivation JobseekerProfile.to_dict() uses (models/jobseeker.py) — prefer
+    the structured barangay/municipality/province, fall back to the raw address field."""
+    if not jobseeker_profile:
+        return None
+    return ", ".join(filter(None, [jobseeker_profile.barangay, jobseeker_profile.municipality, jobseeker_profile.province])) or jobseeker_profile.address
 
 
 def spes_report_row(application: SpesApplication) -> dict:
     logged_events = {log.event_type for log in application.attendance_logs}
+    profile = application.jobseeker_profile
     return {
         "application_ref_no": application.application_ref_no,
         "jobseeker_name": application.full_name,
@@ -141,6 +174,8 @@ def spes_report_row(application: SpesApplication) -> dict:
         "status": application.status,
         "gwa": float(application.gwa) if application.gwa is not None else None,
         "family_income": float(application.family_income) if application.family_income is not None else None,
+        "contact_number": profile.contact_number if profile else None,
+        "address": spes_applicant_address(profile),
         "submitted_at": application.submitted_at,
         "reviewed_at": application.reviewed_at,
         "orientation_attended": "orientation" in logged_events,

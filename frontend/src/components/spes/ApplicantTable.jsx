@@ -1,4 +1,7 @@
 import dayjs from 'dayjs'
+import { Download } from 'lucide-react'
+import { useState } from 'react'
+import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
 
 import { Button } from '../ui/Button'
@@ -6,6 +9,7 @@ import { Card, CardContent } from '../ui/Card'
 import { DataTable } from '../ui/DataTable'
 import { Input, Label, Select } from '../ui/Input'
 import { StatusBadge } from '../ui/StatusBadge'
+import { downloadFile, parseBlobError } from '../../lib/download'
 
 export const SPES_STATUSES = [
   'pending_review', 'approved_for_orientation', 'attended_orientation', 'orientation_passed', 'failed_orientation',
@@ -16,6 +20,22 @@ export const SPES_STATUSES = [
  * Applicant Oversight tab (getRowLink omitted there, so no action column renders and
  * no navigation into a detail screen is offered — matching Admin's view-only scope). */
 export function ApplicantTable({ applications, isLoading, batches, filters, onFilterChange, getRowLink }) {
+  const [exporting, setExporting] = useState(null)
+
+  const handleExport = async (format) => {
+    setExporting(format)
+    try {
+      await downloadFile(`/api/staff/spes/applicants/export/${format}`, {
+        params: { batch_id: filters.batchId || undefined, status: filters.status || undefined, search: filters.search || undefined },
+        filename: `spes_applicants.${format === 'excel' ? 'xlsx' : 'pdf'}`,
+      })
+    } catch (err) {
+      toast.error(await parseBlobError(err))
+    } finally {
+      setExporting(null)
+    }
+  }
+
   const columns = [
     { accessorKey: 'full_name', header: 'Applicant' },
     { accessorKey: 'batch_name', header: 'Batch' },
@@ -49,28 +69,38 @@ export function ApplicantTable({ applications, isLoading, batches, filters, onFi
   return (
     <div className="space-y-4">
       <Card>
-        <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <Label>Batch</Label>
-            <Select value={filters.batchId} onChange={(e) => onFilterChange({ ...filters, batchId: e.target.value })}>
-              <option value="">All Batches</option>
-              {(batches || []).map((b) => (
-                <option key={b.id} value={b.id}>{b.batch_name}</option>
-              ))}
-            </Select>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <Label>Batch</Label>
+              <Select value={filters.batchId} onChange={(e) => onFilterChange({ ...filters, batchId: e.target.value })}>
+                <option value="">All Batches</option>
+                {(batches || []).map((b) => (
+                  <option key={b.id} value={b.id}>{b.batch_name}</option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label>Status</Label>
+              <Select value={filters.status} onChange={(e) => onFilterChange({ ...filters, status: e.target.value })}>
+                <option value="">All Statuses</option>
+                {SPES_STATUSES.map((s) => (
+                  <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="sm:col-span-2">
+              <Label>Search Applicant</Label>
+              <Input placeholder="Search by name…" value={filters.search} onChange={(e) => onFilterChange({ ...filters, search: e.target.value })} />
+            </div>
           </div>
-          <div>
-            <Label>Status</Label>
-            <Select value={filters.status} onChange={(e) => onFilterChange({ ...filters, status: e.target.value })}>
-              <option value="">All Statuses</option>
-              {SPES_STATUSES.map((s) => (
-                <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
-              ))}
-            </Select>
-          </div>
-          <div className="sm:col-span-2">
-            <Label>Search Applicant</Label>
-            <Input placeholder="Search by name…" value={filters.search} onChange={(e) => onFilterChange({ ...filters, search: e.target.value })} />
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="secondary" onClick={() => handleExport('excel')} disabled={exporting === 'excel'}>
+              <Download className="h-3.5 w-3.5" /> {exporting === 'excel' ? 'Exporting…' : 'Export Excel'}
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => handleExport('pdf')} disabled={exporting === 'pdf'}>
+              <Download className="h-3.5 w-3.5" /> {exporting === 'pdf' ? 'Exporting…' : 'Export PDF'}
+            </Button>
           </div>
         </CardContent>
       </Card>

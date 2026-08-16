@@ -44,8 +44,8 @@ export function ReportsPanel({ batches }) {
   }
 
   const { data: stats, isLoading } = useQuery({
-    queryKey: ['staff', 'spes', 'reports', 'stats', batchId],
-    queryFn: async () => (await api.get('/api/staff/spes/reports/stats', { params: { batch_id: batchId || undefined } })).data.data,
+    queryKey: ['staff', 'spes', 'reports', 'stats', params],
+    queryFn: async () => (await api.get('/api/staff/spes/reports/stats', { params })).data.data,
   })
 
   const handleExport = async (format) => {

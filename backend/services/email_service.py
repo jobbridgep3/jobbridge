@@ -854,6 +854,32 @@ def send_spes_exam_notice_email(to: str, applicant_name: str, batch_name: str, d
     return send_email(to, f"SPES Examination Schedule — {batch_name}", html)
 
 
+def send_spes_orientation_result_passed_email(to: str, applicant_name: str, batch_name: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">SPES Orientation/Interview Result</h2>
+      <p>Hi {applicant_name},</p>
+      <p>Congratulations! You passed the SPES Orientation/Interview for <b>{batch_name}</b>. You may now proceed
+      to the next stage of the SPES application process.</p>
+      <p>— PESO Pila SPES Team</p>
+    </div>
+    """
+    return send_email(to, f"SPES Orientation/Interview Result — {batch_name}", html)
+
+
+def send_spes_orientation_result_failed_email(to: str, applicant_name: str, batch_name: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">SPES Orientation/Interview Result</h2>
+      <p>Hi {applicant_name},</p>
+      <p>Your SPES Orientation/Interview result for <b>{batch_name}</b> has been recorded as Failed. Please check
+      your SPES application for more details.</p>
+      <p>— PESO Pila SPES Team</p>
+    </div>
+    """
+    return send_email(to, f"SPES Orientation/Interview Result — {batch_name}", html)
+
+
 def send_spes_result_passed_email(to: str, applicant_name: str, batch_name: str):
     html = f"""
     <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">

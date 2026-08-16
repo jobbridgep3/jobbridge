@@ -22,7 +22,13 @@ def _cell_value(value):
     return value
 
 
-def _write_sheet(ws, columns: list[str], rows: list[list]) -> None:
+def _write_sheet(ws, columns: list[str], rows: list[list], landscape: bool = False) -> None:
+    if landscape:
+        ws.page_setup.orientation = "landscape"
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+
     for col_idx, col_name in enumerate(columns, start=1):
         cell = ws.cell(row=1, column=col_idx, value=col_name)
         cell.fill = HEADER_FILL
@@ -50,11 +56,11 @@ def _write_sheet(ws, columns: list[str], rows: list[list]) -> None:
         ws.auto_filter.ref = ws.dimensions
 
 
-def build_excel_report(title: str, columns: list[str], rows: list[list]) -> io.BytesIO:
+def build_excel_report(title: str, columns: list[str], rows: list[list], landscape: bool = False) -> io.BytesIO:
     wb = Workbook()
     ws = wb.active
     ws.title = title[:31] or "Report"
-    _write_sheet(ws, columns, rows)
+    _write_sheet(ws, columns, rows, landscape=landscape)
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -62,7 +68,7 @@ def build_excel_report(title: str, columns: list[str], rows: list[list]) -> io.B
     return buf
 
 
-def build_multi_sheet_excel_report(sheets: list[tuple[str, list[str], list[list]]]) -> io.BytesIO:
+def build_multi_sheet_excel_report(sheets: list[tuple[str, list[str], list[list]]], landscape: bool = False) -> io.BytesIO:
     """sheets: list of (sheet_title, columns, rows) tuples — one sheet per tuple.
     Used where multiple related tables need to land in a single workbook (e.g. a
     dashboard export with a summary sheet plus one sheet per analytics series)."""
@@ -70,7 +76,7 @@ def build_multi_sheet_excel_report(sheets: list[tuple[str, list[str], list[list]
     wb.remove(wb.active)
     for title, columns, rows in sheets:
         ws = wb.create_sheet(title=(title[:31] or "Sheet"))
-        _write_sheet(ws, columns, rows)
+        _write_sheet(ws, columns, rows, landscape=landscape)
 
     buf = io.BytesIO()
     wb.save(buf)

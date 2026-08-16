@@ -69,8 +69,8 @@ export function SPESScanner({ batches }) {
   const handleExport = async (format) => {
     setExporting(format)
     try {
-      await downloadFile(`/api/staff/spes/reports/export/${format}`, {
-        params: { batch_id: batchId, attendance: `${eventType}_attended` },
+      await downloadFile(`/api/staff/spes/attendance/export/${format}`, {
+        params: { batch_id: batchId, event_type: eventType },
         filename: `spes_${eventType}_attendance.${format === 'excel' ? 'xlsx' : 'pdf'}`,
       })
     } catch (err) {

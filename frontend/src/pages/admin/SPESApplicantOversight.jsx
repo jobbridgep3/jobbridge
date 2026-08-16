@@ -1,8 +1,9 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { ApplicantTable } from '../../components/spes/ApplicantTable'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
+import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 
 /** Read-only mirror of Staff's Applicants tab — no getRowLink is passed to
@@ -10,6 +11,7 @@ import api from '../../lib/axios'
  * Admin's view-only scope for day-to-day SPES operations (approve/reject etc. are
  * Staff-only, enforced server-side regardless of what this page renders). */
 export function SPESApplicantOversight({ batches }) {
+  const queryClient = useQueryClient()
   const [filters, setFilters] = useState({ batchId: '', status: '', search: '' })
   const debouncedSearch = useDebouncedValue(filters.search)
   const params = { batch_id: filters.batchId || undefined, status: filters.status || undefined, search: debouncedSearch || undefined }
@@ -19,6 +21,8 @@ export function SPESApplicantOversight({ batches }) {
     queryFn: async () => (await api.get('/api/admin/spes/applications', { params })).data.data,
     placeholderData: keepPreviousData,
   })
+
+  useSocket({ 'spes:board_update': () => queryClient.invalidateQueries({ queryKey: ['admin', 'spes', 'applications'] }) })
 
   return (
     <ApplicantTable

@@ -32,14 +32,22 @@ from services.audit_service import log_audit
 from services.email_service import (
     send_spes_exam_notice_email,
     send_spes_orientation_notice_email,
+    send_spes_orientation_result_failed_email,
+    send_spes_orientation_result_passed_email,
     send_spes_peso_appointment_email,
     send_spes_registration_confirmation_email,
     send_spes_result_failed_email,
     send_spes_result_passed_email,
 )
-from services.excel_service import build_multi_sheet_excel_report
+from services.excel_service import build_excel_report, build_multi_sheet_excel_report
 from services.notification_service import notify_board, notify_user
-from services.pdf_service import SPES_STAT_LABELS, generate_spes_application_form, generate_spes_report, to_bytesio
+from services.pdf_service import (
+    SPES_STAT_LABELS,
+    generate_spes_application_form,
+    generate_spes_report,
+    generate_table_report,
+    to_bytesio,
+)
 from services.qr_service import generate_qr_data_url
 from utils.decorators import role_required
 from utils.responses import fail, ok
@@ -65,6 +73,41 @@ def _notify_board(application: SpesApplication, title: str, message: str):
         [("staff", f"/staff/spes/applicants/{application.id}"), ("admin", "/admin/spes")],
         "spes_board", title, message,
         socket_event="spes:board_update", socket_payload=payload,
+    )
+
+
+def _notify_spes_orientation_result(application: SpesApplication, result: str):
+    """Email + in-app (jobseeker) + board broadcast (staff/admin) for an
+    Orientation/Interview result — single source of truth so single and bulk
+    call sites can never drift, and every affected applicant always gets their
+    own individual notification (bulk callers invoke this once per applicant)."""
+    label = "Passed" if result == "passed" else "Failed"
+    if result == "passed":
+        send_spes_orientation_result_passed_email(application.jobseeker_profile.user.email, application.full_name, application.batch.batch_name)
+    else:
+        send_spes_orientation_result_failed_email(application.jobseeker_profile.user.email, application.full_name, application.batch.batch_name)
+    _notify_jobseeker(
+        application, "SPES Orientation/Interview Result",
+        f"Your SPES Orientation/Interview result for {application.batch.batch_name} has been recorded as {label}.",
+    )
+    _notify_board(
+        application, "SPES Orientation/Interview Result",
+        f"{application.full_name} — Orientation/Interview {label} ({application.batch.batch_name}).",
+    )
+
+
+def _notify_spes_exam_result(application: SpesApplication, result: str):
+    """Email + in-app (jobseeker) + board broadcast (staff/admin) for an Exam
+    result — same shared-helper shape as _notify_spes_orientation_result above."""
+    label = "Passed" if result == "passed" else "Failed"
+    if result == "passed":
+        send_spes_result_passed_email(application.jobseeker_profile.user.email, application.full_name, application.batch.batch_name)
+    else:
+        send_spes_result_failed_email(application.jobseeker_profile.user.email, application.full_name, application.batch.batch_name)
+    _notify_jobseeker(application, "SPES exam result available", f"Your SPES exam result is available: {application.status.replace('_', ' ').title()}.")
+    _notify_board(
+        application, "SPES Exam Result",
+        f"{application.full_name} — Exam {label} ({application.batch.batch_name}).",
     )
 
 
@@ -518,7 +561,7 @@ def _set_orientation_result(application, result, remarks):
 @jwt_required()
 @role_required("staff")
 def staff_set_orientation_outcome(application_id):
-    application = SpesApplication.query.get(application_id)
+    application = SpesApplication.query.options(*_APP_EAGER).get(application_id)
     if not application:
         return fail("Application not found.", 404)
     data = request.get_json(force=True) or {}
@@ -531,7 +574,7 @@ def staff_set_orientation_outcome(application_id):
         return error
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Update", "spes_application", application.id, details=f"Orientation result: {result}")
-    _notify_jobseeker(application, "SPES orientation result recorded", f"Your orientation/interview result has been recorded: {application.status.replace('_', ' ').title()}.")
+    _notify_spes_orientation_result(application, result)
     return ok(application.to_dict(), "Orientation result saved.")
 
 
@@ -543,7 +586,7 @@ def staff_bulk_orientation_outcomes():
     items = data.get("items") or []
     saved, errors = [], []
     for item in items:
-        application = SpesApplication.query.get(item.get("application_id"))
+        application = SpesApplication.query.options(*_APP_EAGER).get(item.get("application_id"))
         if not application:
             errors.append({"application_id": item.get("application_id"), "error": "Application not found."})
             continue
@@ -555,11 +598,11 @@ def staff_bulk_orientation_outcomes():
         if error:
             errors.append({"application_id": item.get("application_id"), "error": "Not eligible for an orientation result."})
             continue
-        saved.append(application)
+        saved.append((application, result))
     db.session.commit()
-    for application in saved:
+    for application, result in saved:
         log_audit(User.query.get(get_jwt_identity()), "Update", "spes_application", application.id, details="Orientation result (bulk)")
-        _notify_jobseeker(application, "SPES orientation result recorded", f"Your orientation/interview result has been recorded: {application.status.replace('_', ' ').title()}.")
+        _notify_spes_orientation_result(application, result)
     return ok({"saved": len(saved), "errors": errors}, f"{len(saved)} result(s) saved.")
 
 
@@ -590,12 +633,7 @@ def staff_set_exam_result(application_id):
         return error
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Update", "spes_application", application.id, details=f"Exam result: {result}")
-
-    if result == "passed":
-        send_spes_result_passed_email(application.jobseeker_profile.user.email, application.full_name, application.batch.batch_name)
-    else:
-        send_spes_result_failed_email(application.jobseeker_profile.user.email, application.full_name, application.batch.batch_name)
-    _notify_jobseeker(application, "SPES exam result available", f"Your SPES exam result is available: {application.status.replace('_', ' ').title()}.")
+    _notify_spes_exam_result(application, result)
     return ok(application.to_dict(), "Exam result saved.")
 
 
@@ -623,11 +661,7 @@ def staff_bulk_exam_results():
     db.session.commit()
     for application, result in saved:
         log_audit(User.query.get(get_jwt_identity()), "Update", "spes_application", application.id, details=f"Exam result (bulk): {result}")
-        if result == "passed":
-            send_spes_result_passed_email(application.jobseeker_profile.user.email, application.full_name, application.batch.batch_name)
-        else:
-            send_spes_result_failed_email(application.jobseeker_profile.user.email, application.full_name, application.batch.batch_name)
-        _notify_jobseeker(application, "SPES exam result available", f"Your SPES exam result is available: {application.status.replace('_', ' ').title()}.")
+        _notify_spes_exam_result(application, result)
     return ok({"saved": len(saved), "errors": errors}, f"{len(saved)} result(s) saved.")
 
 
@@ -684,8 +718,8 @@ def _parse_spes_report_filters(args):
 @jwt_required()
 @role_required("staff", "admin")
 def staff_spes_report_stats():
-    batch_id = request.args.get("batch_id") or None
-    return ok(spes_reporting_service.build_spes_stats(batch_id))
+    filters = _parse_spes_report_filters(request.args)
+    return ok(spes_reporting_service.build_spes_stats(**filters))
 
 
 # Dashboard-only stat keys (live "needs action now" counts) that don't belong in a
@@ -699,7 +733,7 @@ _EXPORT_EXCLUDED_STAT_KEYS = {"currently_orientation_passed"}
 def export_spes_excel():
     filters = _parse_spes_report_filters(request.args)
     applications = spes_reporting_service.query_spes_applications_for_report(**filters)
-    stats = spes_reporting_service.build_spes_stats(filters["batch_id"])
+    stats = spes_reporting_service.build_spes_stats(**filters)
     user = User.query.get(get_jwt_identity())
     date_str = now_manila().strftime("%B %d, %Y %I:%M %p")
 
@@ -724,7 +758,7 @@ def export_spes_excel():
         ("Summary", ["PESO Pila, Laguna — SPES Program Report", ""], summary_rows),
         ("Orientation Results", ["Reference #", "Applicant", "Batch", "Attendance", "Status"], orientation_rows),
         ("Exam Results", ["Reference #", "Applicant", "Batch", "Attendance", "Status"], exam_rows),
-    ])
+    ], landscape=True)
     log_audit(user, "Export", "spes_report", details="excel")
     return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="spes_report.xlsx")
 
@@ -735,7 +769,7 @@ def export_spes_excel():
 def export_spes_pdf():
     filters = _parse_spes_report_filters(request.args)
     applications = spes_reporting_service.query_spes_applications_for_report(**filters)
-    stats = spes_reporting_service.build_spes_stats(filters["batch_id"])
+    stats = spes_reporting_service.build_spes_stats(**filters)
     user = User.query.get(get_jwt_identity())
     date_str = now_manila().strftime("%B %d, %Y %I:%M %p")
     batch_name = SpesBatch.query.get(filters["batch_id"]).batch_name if filters["batch_id"] else None
@@ -745,6 +779,187 @@ def export_spes_pdf():
     pdf_bytes = generate_spes_report(display_stats, rows, date_str, user.email, user.role, batch_name=batch_name)
     log_audit(user, "Export", "spes_report", details="pdf")
     return send_file(to_bytesio(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name="spes_report.pdf")
+
+
+# ---------- Single-purpose exports (Applicants / Attendance / Outcomes) ----------
+# Unlike the full SPES Program Report above (always Summary + Orientation + Exam
+# sheets), these mirror exactly what the calling screen shows — e.g. filtering the
+# Scanner to Orientation must never surface an Exam sheet for the same cohort.
+
+def _spes_applicants_export_data(args):
+    batch_id = args.get("batch_id") or None
+    status = args.get("status") or None
+    search = args.get("search") or None
+    applications = spes_reporting_service.query_spes_applications_for_report(batch_id=batch_id, status=status, search=search)
+    rows = [spes_reporting_service.spes_report_row(a) for a in applications]
+    columns = ["Applicant Name", "Batch", "Address", "Contact Number", "Date Submitted", "GWA", "Family Income", "Status"]
+    table_rows = [
+        [
+            r["jobseeker_name"], r["batch_name"], r["address"] or "Not provided", r["contact_number"] or "Not provided",
+            r["submitted_at"].strftime("%b %d, %Y") if r["submitted_at"] else "",
+            r["gwa"] if r["gwa"] is not None else "",
+            f"₱{r['family_income']:,.2f}" if r["family_income"] is not None else "",
+            r["status"].replace("_", " ").title(),
+        ]
+        for r in rows
+    ]
+    batch_name = SpesBatch.query.get(batch_id).batch_name if batch_id else None
+    return columns, table_rows, [f"Batch: {batch_name or 'All Batches'}"]
+
+
+@spes_bp.get("/staff/spes/applicants/export/excel")
+@jwt_required()
+@role_required("staff", "admin")
+def export_spes_applicants_excel():
+    columns, table_rows, _subtitle = _spes_applicants_export_data(request.args)
+    buf = build_excel_report("SPES Applicants", columns, table_rows, landscape=True)
+    log_audit(User.query.get(get_jwt_identity()), "Export", "spes_applicants", details="excel")
+    return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="spes_applicants.xlsx")
+
+
+@spes_bp.get("/staff/spes/applicants/export/pdf")
+@jwt_required()
+@role_required("staff", "admin")
+def export_spes_applicants_pdf():
+    columns, table_rows, subtitle = _spes_applicants_export_data(request.args)
+    user = User.query.get(get_jwt_identity())
+    date_str = now_manila().strftime("%B %d, %Y %I:%M %p")
+    pdf_bytes = generate_table_report(
+        "SPES Applicants", columns, table_rows, date_str, landscape=True,
+        subtitle_lines=[*subtitle, f"Generated By: {user.email} ({user.role})"],
+    )
+    log_audit(user, "Export", "spes_applicants", details="pdf")
+    return send_file(to_bytesio(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name="spes_applicants.pdf")
+
+
+def _spes_attendance_export_data(args):
+    """Returns (error_response, columns, table_rows, subtitle_lines, title, filename_stub)."""
+    batch_id = args.get("batch_id")
+    event_type = args.get("event_type")
+    if not batch_id or event_type not in SPES_ATTENDANCE_EVENT_TYPES:
+        return fail("Select a batch and event type (Orientation or Exam).", 400), None, None, None, None, None
+    batch = SpesBatch.query.get(batch_id)
+    if not batch:
+        return fail("Batch not found.", 404), None, None, None, None, None
+
+    logs = (
+        SpesAttendanceLog.query.join(SpesApplication).options(selectinload(SpesAttendanceLog.application))
+        .filter(SpesApplication.batch_id == batch_id, SpesAttendanceLog.event_type == event_type)
+        .order_by(SpesAttendanceLog.scanned_at.asc()).all()
+    )
+    columns = ["Applicant Name", "Batch", "Event", "Date", "Time", "Attendance Status", "Reference/Application Number"]
+    table_rows = [
+        [
+            log.application.full_name, batch.batch_name, event_type.title(),
+            log.scanned_at.strftime("%b %d, %Y") if log.scanned_at else "",
+            log.scanned_at.strftime("%I:%M %p") if log.scanned_at else "",
+            "Present", log.application.application_ref_no,
+        ]
+        for log in logs
+    ]
+    title = f"SPES {event_type.title()} Attendance"
+    subtitle = [f"Batch: {batch.batch_name}", f"Event: {event_type.title()}"]
+    return None, columns, table_rows, subtitle, title, f"spes_{event_type}_attendance"
+
+
+@spes_bp.get("/staff/spes/attendance/export/excel")
+@jwt_required()
+@role_required("staff", "admin")
+def export_spes_attendance_excel():
+    error, columns, table_rows, _subtitle, title, filename_stub = _spes_attendance_export_data(request.args)
+    if error:
+        return error
+    buf = build_excel_report(title, columns, table_rows, landscape=True)
+    log_audit(User.query.get(get_jwt_identity()), "Export", "spes_attendance", details="excel")
+    return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name=f"{filename_stub}.xlsx")
+
+
+@spes_bp.get("/staff/spes/attendance/export/pdf")
+@jwt_required()
+@role_required("staff", "admin")
+def export_spes_attendance_pdf():
+    error, columns, table_rows, subtitle, title, filename_stub = _spes_attendance_export_data(request.args)
+    if error:
+        return error
+    user = User.query.get(get_jwt_identity())
+    date_str = now_manila().strftime("%B %d, %Y %I:%M %p")
+    pdf_bytes = generate_table_report(
+        title, columns, table_rows, date_str, landscape=True,
+        subtitle_lines=[*subtitle, f"Generated By: {user.email} ({user.role})"],
+    )
+    log_audit(user, "Export", "spes_attendance", details="pdf")
+    return send_file(to_bytesio(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name=f"{filename_stub}.pdf")
+
+
+_OUTCOME_EXPORT_STATUS = {
+    ("orientation", "passed"): "orientation_passed",
+    ("orientation", "failed"): "failed_orientation",
+    ("exam", "passed"): "passed",
+    ("exam", "failed"): "failed",
+}
+
+
+def _spes_outcomes_export_data(args):
+    """Returns (error_response, columns, table_rows, subtitle_lines, title, filename_stub)."""
+    mode = args.get("mode")
+    result = args.get("result")
+    status = _OUTCOME_EXPORT_STATUS.get((mode, result))
+    if not status:
+        return fail("Select a valid mode (orientation/exam) and result (passed/failed).", 400), None, None, None, None, None
+    batch_id = args.get("batch_id") or None
+
+    applications = spes_reporting_service.query_spes_applications_for_report(batch_id=batch_id, status=status)
+    rows = [spes_reporting_service.spes_report_row(a) for a in applications]
+    columns = [
+        "Applicant Name", "Batch", "Address", "Contact Number", "GWA", "Family Income",
+        "Date Submitted", "Result", "Result Date", "Remarks",
+    ]
+    table_rows = []
+    for app, row in zip(applications, rows):
+        result_at = app.orientation_outcome_at if mode == "orientation" else app.exam_result_at
+        remarks = app.orientation_outcome_remarks if mode == "orientation" else app.exam_result_remarks
+        table_rows.append([
+            row["jobseeker_name"], row["batch_name"], row["address"] or "Not provided", row["contact_number"] or "Not provided",
+            row["gwa"] if row["gwa"] is not None else "",
+            f"₱{row['family_income']:,.2f}" if row["family_income"] is not None else "",
+            row["submitted_at"].strftime("%b %d, %Y") if row["submitted_at"] else "",
+            result.title(),
+            result_at.strftime("%b %d, %Y %I:%M %p") if result_at else "",
+            remarks or "",
+        ])
+    batch_name = SpesBatch.query.get(batch_id).batch_name if batch_id else None
+    title = f"SPES {mode.title()} Results — {result.title()}"
+    subtitle = [f"Batch: {batch_name or 'All Batches'}", f"{mode.title()} Result: {result.title()}"]
+    return None, columns, table_rows, subtitle, title, f"spes_{mode}_{result}"
+
+
+@spes_bp.get("/staff/spes/outcomes/export/excel")
+@jwt_required()
+@role_required("staff", "admin")
+def export_spes_outcomes_excel():
+    error, columns, table_rows, _subtitle, title, filename_stub = _spes_outcomes_export_data(request.args)
+    if error:
+        return error
+    buf = build_excel_report(title, columns, table_rows, landscape=True)
+    log_audit(User.query.get(get_jwt_identity()), "Export", "spes_outcomes", details="excel")
+    return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name=f"{filename_stub}.xlsx")
+
+
+@spes_bp.get("/staff/spes/outcomes/export/pdf")
+@jwt_required()
+@role_required("staff", "admin")
+def export_spes_outcomes_pdf():
+    error, columns, table_rows, subtitle, title, filename_stub = _spes_outcomes_export_data(request.args)
+    if error:
+        return error
+    user = User.query.get(get_jwt_identity())
+    date_str = now_manila().strftime("%B %d, %Y %I:%M %p")
+    pdf_bytes = generate_table_report(
+        title, columns, table_rows, date_str, landscape=True,
+        subtitle_lines=[*subtitle, f"Generated By: {user.email} ({user.role})"],
+    )
+    log_audit(user, "Export", "spes_outcomes", details="pdf")
+    return send_file(to_bytesio(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name=f"{filename_stub}.pdf")
 
 
 # ==================== Admin ====================
