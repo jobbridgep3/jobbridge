@@ -49,12 +49,15 @@ def is_currently_employed_at_company(jobseeker_profile_id, employer_company_id, 
     return query.first() is not None
 
 
-def reopen_stale_application(application, actor_user, score=None):
-    """Reopens a 'hired' Application whose employment has since ended into a
-    fresh cycle, for either the direct-apply or referral-accept reapplication
-    path. Reuses the same row (required by the unique (vacancy_id,
-    jobseeker_profile_id) constraint) so the full prior status-history
-    timeline survives instead of being lost to a second row."""
+def reopen_stale_application(
+    application, actor_user, score=None, note="Reapplied — prior employment with this company has ended.",
+):
+    """Reopens a terminal Application (a 'hired' row whose employment has
+    since ended, or a 'cancelled'/withdrawn row) into a fresh cycle, for the
+    direct-apply, referral-accept, or reapply-after-withdrawal path. Reuses
+    the same row (required by the unique (vacancy_id, jobseeker_profile_id)
+    constraint) so the full prior status-history timeline survives instead of
+    being lost to a second row."""
     old_status = application.status
     application.status = "applied"
     if score is not None:
@@ -71,7 +74,7 @@ def reopen_stale_application(application, actor_user, score=None):
         from_status=old_status,
         to_status="applied",
         changed_by=actor_user.id if actor_user else None,
-        note="Reapplied — prior employment with this company has ended.",
+        note=note,
     ))
     db.session.commit()
     return application

@@ -111,8 +111,11 @@ def apply_to_job():
     # to has since ended (contract_ended/resigned/terminated), it's stale —
     # the jobseeker should be able to apply again for this same vacancy.
     stale_hire = existing_application is not None and existing_application.status == "hired" and not currently_employed
+    # A withdrawn application shouldn't permanently block reapplying either —
+    # reopen the same row rather than blocking or inserting a duplicate.
+    is_withdrawn = existing_application is not None and existing_application.status == "cancelled"
 
-    if existing_application and not stale_hire:
+    if existing_application and not stale_hire and not is_withdrawn:
         db.session.rollback()
         return fail("You have already applied to this job.", 409)
 
@@ -125,6 +128,10 @@ def apply_to_job():
 
     if stale_hire:
         application = reopen_stale_application(existing_application, jobseeker_user, score=score)
+    elif is_withdrawn:
+        application = reopen_stale_application(
+            existing_application, jobseeker_user, score=score, note="Reapplied to this position.",
+        )
     else:
         application = Application(vacancy_id=vacancy.id, jobseeker_profile_id=profile.id, status="applied", match_score=score)
         db.session.add(application)

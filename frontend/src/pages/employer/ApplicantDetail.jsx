@@ -146,6 +146,8 @@ export default function EmployerApplicantDetail() {
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['applicants', id] })
   useSocket({
+    'application:new': refresh,
+    'application:status_update': refresh,
     'application:document_request': refresh,
     'offer:response': refresh,
   })
