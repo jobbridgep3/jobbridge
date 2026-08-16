@@ -181,15 +181,27 @@ export default function EmployerVacancyForm() {
   const status = form.status || 'draft'
   const isDraftOrRejected = status === 'draft' || status === 'rejected'
   const isDraft = status === 'draft'
+  const isPending = status === 'pending'
   const isApproved = status === 'approved'
   const isPublished = status === 'published'
   const isClosed = status === 'closed'
   const isFilled = status === 'filled'
 
+  const confirmCancel = () =>
+    confirm({
+      title: 'Cancel this vacancy?',
+      description: 'Are you sure you want to cancel this vacancy? Any unsaved changes will be lost.',
+      confirmLabel: 'Yes, Cancel',
+      danger: true,
+      onConfirm: () => navigate('/employer/vacancies'),
+    })
+
   const confirmSaveChanges = () =>
     confirm({
       title: 'Save these changes?',
-      description: 'Are you sure you want to save these changes? The published vacancy will be updated immediately for everyone viewing it.',
+      description: isPending
+        ? 'Are you sure you want to save these changes? The vacancy will remain in Pending Approval — PESO Staff/Admin still need to review it.'
+        : 'Are you sure you want to save these changes? The published vacancy will be updated immediately for everyone viewing it.',
       confirmLabel: 'Save Changes',
       onConfirm: saveChanges,
     })
@@ -242,7 +254,9 @@ export default function EmployerVacancyForm() {
 
       <Card>
         <CardContent className="flex flex-wrap justify-end gap-2">
-          <Button type="button" variant="secondary" onClick={() => navigate('/employer/vacancies')}>Cancel</Button>
+          {isDraftOrRejected && (
+            <Button type="button" variant="secondary" onClick={confirmCancel}>Cancel</Button>
+          )}
           <Button type="button" variant="secondary" onClick={() => setShowPreview(true)}>
             <Eye className="h-4 w-4" /> Preview
           </Button>
@@ -258,6 +272,12 @@ export default function EmployerVacancyForm() {
                 </Button>
               )}
             </>
+          )}
+
+          {isPending && (
+            <Button type="button" onClick={confirmSaveChanges} disabled={actionLoading === 'save'}>
+              <Save className="h-4 w-4" /> {actionLoading === 'save' ? 'Saving…' : 'Save Changes'}
+            </Button>
           )}
 
           {isApproved && (

@@ -791,10 +791,16 @@ def delete_vacancy(vacancy_id):
         log_audit(User.query.get(company.user_id), "Delete", "vacancies", vacancy_id, "Draft deleted")
         return ok(message="Draft vacancy deleted.")
 
-    # Any other status: soft-delete (mirrors the staff/admin soft-delete —
-    # same deleted_at field, restorable via the existing admin restore endpoint)
-    # rather than a hard delete, since a submitted/live vacancy may already
-    # have applicants and history worth preserving.
+    if vacancy.status not in ("published", "closed", "filled"):
+        # Pending/approved/suspended/rejected vacancies never expose a Delete
+        # action in the UI — enforce that server-side too, not just by
+        # omitting the button.
+        return fail(f"A vacancy cannot be deleted from status '{vacancy.status}'.", 400)
+
+    # Soft-delete (mirrors the staff/admin soft-delete — same deleted_at
+    # field, restorable via the existing admin restore endpoint) rather than
+    # a hard delete, since a live vacancy may already have applicants and
+    # history worth preserving.
     vacancy.deleted_at = now_manila()
     db.session.commit()
     log_audit(User.query.get(company.user_id), "Delete", "vacancies", vacancy_id, "Vacancy deleted (soft)")
