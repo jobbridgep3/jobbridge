@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from flask import Blueprint, request, send_file
 from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 
@@ -24,7 +22,7 @@ from services.notification_service import notify_user
 from services.pdf_service import generate_interview_invitation, to_bytesio
 from utils.decorators import role_required
 from utils.responses import fail, ok
-from utils.timezone import now_manila
+from utils.timezone import now_manila, parse_manila, to_manila
 
 interviews_bp = Blueprint("interviews", __name__, url_prefix="/api/interviews")
 
@@ -57,7 +55,7 @@ def _jobseeker_interview(interview_id):
 
 
 def _when_str(dt):
-    return dt.strftime("%B %d, %Y %I:%M %p") if dt else ""
+    return to_manila(dt).strftime("%B %d, %Y %I:%M %p") if dt else ""
 
 
 @interviews_bp.get("/my")
@@ -90,7 +88,7 @@ def my_interviews():
 @jwt_required()
 def upcoming_interviews():
     role = get_jwt().get("role")
-    now = datetime.utcnow()
+    now = now_manila()
     if role == "jobseeker":
         profile = _jobseeker()
         if not profile:
@@ -120,8 +118,8 @@ def calendar_interviews():
     """Role-scoped interviews within a [from, to] range, for the calendar views."""
     role = get_jwt().get("role")
     try:
-        date_from = datetime.fromisoformat(request.args["from"])
-        date_to = datetime.fromisoformat(request.args["to"])
+        date_from = parse_manila(request.args["from"])
+        date_to = parse_manila(request.args["to"])
     except (KeyError, ValueError):
         return fail("Provide 'from' and 'to' ISO dates.", 400)
 
@@ -160,7 +158,7 @@ def create_interview():
         return fail("Applicant not found.", 404)
 
     try:
-        scheduled_date = datetime.fromisoformat(data["scheduled_date"])
+        scheduled_date = parse_manila(data["scheduled_date"])
     except (KeyError, ValueError):
         return fail("A valid interview date is required.", 400)
 
@@ -215,7 +213,7 @@ def update_interview(interview_id):
     date_changed = False
     if data.get("scheduled_date"):
         try:
-            new_date = datetime.fromisoformat(data["scheduled_date"])
+            new_date = parse_manila(data["scheduled_date"])
         except ValueError:
             return fail("Invalid date.", 400)
         date_changed = new_date != interview.scheduled_date
@@ -429,7 +427,7 @@ def request_reschedule(interview_id):
 
     data = request.get_json(force=True) or {}
     try:
-        preferred_date = datetime.fromisoformat(data["preferred_date"])
+        preferred_date = parse_manila(data["preferred_date"])
     except (KeyError, ValueError):
         return fail("A valid preferred date is required.", 400)
 
@@ -511,7 +509,7 @@ def respond_reschedule_request(request_id):
         new_when = _when_str(req.preferred_date)
     elif action == "suggest":
         try:
-            suggested = datetime.fromisoformat(data["suggested_date"])
+            suggested = parse_manila(data["suggested_date"])
         except (KeyError, ValueError):
             return fail("A valid suggested date is required.", 400)
         req.status = "suggested"

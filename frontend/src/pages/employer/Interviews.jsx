@@ -18,6 +18,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { TimePicker } from '../../components/ui/TimePicker'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
+import { manila } from '../../lib/manilaTime'
 import { fadeIn } from '../../lib/motion'
 import { cn } from '../../lib/utils'
 
@@ -33,7 +34,7 @@ const RESULT_OPTIONS = [
 
 function splitDT(iso) {
   if (!iso) return { date: '', time: '' }
-  const d = dayjs(iso)
+  const d = manila(iso)
   return { date: d.format('YYYY-MM-DD'), time: d.format('HH:mm') }
 }
 
@@ -160,7 +161,7 @@ export default function EmployerInterviews() {
     {
       accessorKey: 'scheduled_date',
       header: 'Date',
-      cell: ({ row }) => dayjs(row.original.scheduled_date).format('MMM D, YYYY h:mm A'),
+      cell: ({ row }) => manila(row.original.scheduled_date).format('MMM D, YYYY h:mm A'),
     },
     { accessorKey: 'mode', header: 'Mode' },
     { accessorKey: 'result', header: 'Result', cell: ({ row }) => <span className="capitalize">{row.original.result}</span> },
@@ -218,8 +219,8 @@ export default function EmployerInterviews() {
                     {req.interview?.jobseeker_name} — {req.interview?.job_title}
                   </p>
                   <p className="text-xs text-slate-600">
-                    Current: {dayjs(req.interview?.scheduled_date).format('MMM D, h:mm A')} → Requested:{' '}
-                    <b>{dayjs(req.preferred_date).format('MMM D, h:mm A')}</b>
+                    Current: {manila(req.interview?.scheduled_date).format('MMM D, h:mm A')} → Requested:{' '}
+                    <b>{manila(req.preferred_date).format('MMM D, h:mm A')}</b>
                   </p>
                   {req.reason && <p className="text-xs italic text-slate-500">"{req.reason}"</p>}
                 </div>
@@ -297,7 +298,7 @@ export default function EmployerInterviews() {
                   <p className="font-semibold text-slate-900">{selected.jobseeker_name}</p>
                   <p className="text-sm text-slate-500">{selected.job_title}</p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {dayjs(selected.scheduled_date).format('MMM D, YYYY h:mm A')} · <span className="capitalize">{selected.mode}</span>
+                    {manila(selected.scheduled_date).format('MMM D, YYYY h:mm A')} · <span className="capitalize">{selected.mode}</span>
                     {selected.interviewer_name ? ` · ${selected.interviewer_name}` : ''}
                   </p>
                 </div>

@@ -80,7 +80,7 @@ def _send_interview_reminders(app):
         from extensions import db
         from models.interview import Interview
         from services.notification_service import notify_user
-        from utils.timezone import now_manila
+        from utils.timezone import now_manila, to_manila
 
         now = now_manila()
         due = Interview.query.filter(
@@ -89,7 +89,7 @@ def _send_interview_reminders(app):
         ).all()
         for interview in due:
             application = interview.application
-            when = interview.scheduled_date.strftime("%B %d, %Y %I:%M %p")
+            when = to_manila(interview.scheduled_date).strftime("%B %d, %Y %I:%M %p")
             notify_user(
                 application.jobseeker_profile.user_id, "interview_reminder", "Interview Reminder",
                 f"Your interview for {application.vacancy.title} is on {when}.",

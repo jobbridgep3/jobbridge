@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query'
-import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
 import { CalendarCheck } from 'lucide-react'
 import { useState } from 'react'
@@ -12,6 +11,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { Label } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import api from '../../lib/axios'
+import { manila } from '../../lib/manilaTime'
 import { fadeIn } from '../../lib/motion'
 import { DashboardExportDialog } from '../admin/dashboard/DashboardExportDialog'
 import { AnalyticsCharts } from './dashboard/AnalyticsCharts'
@@ -88,7 +88,7 @@ export default function EmployerDashboard() {
                 <div key={iv.id} className="rounded-lg border border-slate-100 p-3">
                   <p className="text-sm font-medium text-slate-900">{iv.jobseeker_name}</p>
                   <p className="text-xs text-slate-500">{iv.job_title}</p>
-                  <p className="mt-1 text-xs text-primary-700">{dayjs(iv.scheduled_date).format('MMM D, YYYY h:mm A')}</p>
+                  <p className="mt-1 text-xs text-primary-700">{manila(iv.scheduled_date).format('MMM D, YYYY h:mm A')}</p>
                 </div>
               ))
             )}

@@ -19,6 +19,7 @@ import { TimePicker } from '../../components/ui/TimePicker'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { downloadFile, parseBlobError } from '../../lib/download'
+import { manila } from '../../lib/manilaTime'
 import { fadeIn } from '../../lib/motion'
 
 dayjs.extend(customParseFormat)
@@ -162,7 +163,7 @@ export default function JobseekerInterviews() {
 
               <div className="grid grid-cols-1 gap-3 rounded-lg bg-slate-50 p-4 sm:grid-cols-2">
                 <DetailRow icon={Clock} label="Date & Time">
-                  {dayjs(selected.scheduled_date).format('MMM D, YYYY h:mm A')}
+                  {manila(selected.scheduled_date).format('MMM D, YYYY h:mm A')}
                 </DetailRow>
                 <DetailRow icon={Building2} label="Interview Type">
                   <span className="capitalize">{selected.mode}</span>
@@ -191,7 +192,7 @@ export default function JobseekerInterviews() {
               )}
               {selected.pending_reschedule_request && (
                 <p className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-900">
-                  <b>Reschedule requested:</b> {dayjs(selected.pending_reschedule_request.preferred_date).format('MMM D, YYYY h:mm A')} — waiting
+                  <b>Reschedule requested:</b> {manila(selected.pending_reschedule_request.preferred_date).format('MMM D, YYYY h:mm A')} — waiting
                   for the employer's response.
                 </p>
               )}

@@ -23,3 +23,13 @@ def iso_manila(dt: datetime) -> str | None:
     """ISO-8601 string in Manila time, for JSON API responses."""
     converted = to_manila(dt)
     return converted.isoformat() if converted else None
+
+
+def parse_manila(value: str) -> datetime:
+    """Parse a naive 'YYYY-MM-DDTHH:MM' wall-clock string (as sent by the
+    frontend date/time pickers) as Asia/Manila local time. Use for all
+    interview-scheduling input."""
+    dt = datetime.fromisoformat(value)
+    if dt.tzinfo is None:
+        return MANILA_TZ.localize(dt)
+    return dt.astimezone(MANILA_TZ)

@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query'
-import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
 import { Briefcase, CalendarCheck, ClipboardList, Search, Sparkles, UserCheck } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -12,6 +11,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { StatCard } from '../../components/ui/StatCard'
 import { CATEGORY_LABELS } from '../../config/announcementMeta'
 import api from '../../lib/axios'
+import { manila } from '../../lib/manilaTime'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
 import { useAuthStore } from '../../store/authStore'
 
@@ -118,7 +118,7 @@ export default function JobseekerDashboard() {
                 <div key={iv.id} className="rounded-lg border border-slate-100 p-3">
                   <p className="text-sm font-medium text-slate-900">{iv.company_name}</p>
                   <p className="text-xs text-slate-500">{iv.job_title}</p>
-                  <p className="mt-1 text-xs text-primary-700">{dayjs(iv.scheduled_date).format('MMM D, YYYY h:mm A')}</p>
+                  <p className="mt-1 text-xs text-primary-700">{manila(iv.scheduled_date).format('MMM D, YYYY h:mm A')}</p>
                 </div>
               ))
             )}

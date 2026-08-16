@@ -2,6 +2,7 @@ import dayjs from 'dayjs'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
+import { manila } from '../../lib/manilaTime'
 import { cn } from '../../lib/utils'
 import { Button } from './Button'
 
@@ -25,7 +26,7 @@ function EventChip({ event, onClick, showTime = true }) {
       className={cn('block w-full truncate rounded border px-1.5 py-0.5 text-left text-[11px] font-medium leading-4 hover:opacity-80', color)}
       title={`${event.title}${event.subtitle ? ` — ${event.subtitle}` : ''}`}
     >
-      {showTime && <span className="mr-1 opacity-70">{dayjs(event.date).format('h:mma')}</span>}
+      {showTime && <span className="mr-1 opacity-70">{manila(event.date).format('h:mma')}</span>}
       {event.title}
     </button>
   )
@@ -37,7 +38,7 @@ function MonthGrid({ cursor, events, onEventClick, onDayClick }) {
   const byDay = useMemo(() => {
     const map = {}
     for (const e of events) {
-      const key = dayjs(e.date).format('YYYY-MM-DD')
+      const key = manila(e.date).format('YYYY-MM-DD')
       ;(map[key] ||= []).push(e)
     }
     return map
@@ -97,11 +98,11 @@ function WeekGrid({ cursor, events, onEventClick, onDayClick }) {
   const byDay = useMemo(() => {
     const map = {}
     for (const e of events) {
-      const key = dayjs(e.date).format('YYYY-MM-DD')
+      const key = manila(e.date).format('YYYY-MM-DD')
       ;(map[key] ||= []).push(e)
     }
     for (const key of Object.keys(map)) {
-      map[key].sort((a, b) => dayjs(a.date).valueOf() - dayjs(b.date).valueOf())
+      map[key].sort((a, b) => manila(a.date).valueOf() - manila(b.date).valueOf())
     }
     return map
   }, [events])
@@ -139,8 +140,8 @@ function DayList({ cursor, events, onEventClick }) {
   const dayEvents = useMemo(
     () =>
       events
-        .filter((e) => dayjs(e.date).isSame(cursor, 'day'))
-        .sort((a, b) => dayjs(a.date).valueOf() - dayjs(b.date).valueOf()),
+        .filter((e) => manila(e.date).format('YYYY-MM-DD') === cursor.format('YYYY-MM-DD'))
+        .sort((a, b) => manila(a.date).valueOf() - manila(b.date).valueOf()),
     [events, cursor],
   )
   if (!dayEvents.length) {
@@ -157,7 +158,7 @@ function DayList({ cursor, events, onEventClick }) {
             onClick={() => onEventClick?.(e)}
             className="flex w-full items-center gap-4 px-3 py-3 text-left hover:bg-surface-hover"
           >
-            <div className="w-20 shrink-0 text-sm font-semibold text-text-secondary">{dayjs(e.date).format('h:mm A')}</div>
+            <div className="w-20 shrink-0 text-sm font-semibold text-text-secondary">{manila(e.date).format('h:mm A')}</div>
             <span className={cn('h-8 w-1 shrink-0 rounded-full border', color)} />
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-text-primary">{e.title}</p>

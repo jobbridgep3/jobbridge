@@ -1,5 +1,4 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
 import { Download, FileDown } from 'lucide-react'
 import { useState } from 'react'
@@ -14,6 +13,7 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import api from '../../lib/axios'
 import { downloadFile, parseBlobError } from '../../lib/download'
+import { manila } from '../../lib/manilaTime'
 import { fadeIn } from '../../lib/motion'
 
 const STATUS_OPTIONS = ['pending', 'accepted', 'declined', 'completed', 'cancelled', 'rescheduled']
@@ -34,7 +34,7 @@ export default function StaffInterviews() {
     { accessorKey: 'jobseeker_name', header: 'Jobseeker' },
     { accessorKey: 'company_name', header: 'Employer' },
     { accessorKey: 'job_title', header: 'Position' },
-    { accessorKey: 'scheduled_date', header: 'Date', cell: ({ row }) => dayjs(row.original.scheduled_date).format('MMM D, YYYY h:mm A') },
+    { accessorKey: 'scheduled_date', header: 'Date', cell: ({ row }) => manila(row.original.scheduled_date).format('MMM D, YYYY h:mm A') },
     { accessorKey: 'mode', header: 'Mode' },
     {
       id: 'venue',

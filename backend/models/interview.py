@@ -2,6 +2,7 @@ from sqlalchemy.dialects.postgresql import UUID
 
 from extensions import db
 from models.base import BaseModel
+from utils.timezone import iso_manila
 
 INTERVIEW_STATUSES = ("pending", "accepted", "declined", "completed", "cancelled", "rescheduled")
 INTERVIEW_RESULTS = ("pending", "passed", "failed", "shortlisted", "hired")
@@ -46,7 +47,7 @@ class Interview(BaseModel):
             "job_title": vacancy.title if vacancy else None,
             "company_name": vacancy.employer_company.company_name if vacancy and vacancy.employer_company else None,
             "jobseeker_name": app.jobseeker_profile.full_name if app and app.jobseeker_profile else None,
-            "scheduled_date": self.scheduled_date.isoformat() if self.scheduled_date else None,
+            "scheduled_date": iso_manila(self.scheduled_date),
             "mode": self.mode,
             "location": self.location,
             "meeting_link": self.meeting_link,
@@ -85,10 +86,10 @@ class InterviewRescheduleRequest(BaseModel):
         return {
             "id": str(self.id),
             "interview_id": str(self.interview_id),
-            "preferred_date": self.preferred_date.isoformat() if self.preferred_date else None,
+            "preferred_date": iso_manila(self.preferred_date),
             "reason": self.reason,
             "status": self.status,
             "response_note": self.response_note,
-            "suggested_date": self.suggested_date.isoformat() if self.suggested_date else None,
+            "suggested_date": iso_manila(self.suggested_date),
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

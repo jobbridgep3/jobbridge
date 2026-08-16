@@ -20,6 +20,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { downloadFile, parseBlobError } from '../../lib/download'
+import { manila } from '../../lib/manilaTime'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
 import { cn } from '../../lib/utils'
 
@@ -403,7 +404,7 @@ function ApplicationDetailDialog({ applicationId, onClose, onWithdraw }) {
                       <div>
                         <p className="font-medium text-slate-800">
                           <Calendar className="mr-1 inline h-3.5 w-3.5 text-slate-400" />
-                          {dayjs(iv.scheduled_date).format('MMM D, YYYY h:mm A')}
+                          {manila(iv.scheduled_date).format('MMM D, YYYY h:mm A')}
                         </p>
                         <p className="text-xs capitalize text-slate-500">
                           {iv.mode}

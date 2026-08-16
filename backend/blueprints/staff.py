@@ -52,7 +52,7 @@ from sockets.events import emit_broadcast, emit_to_role
 from utils.decorators import role_required
 from utils.pagination import paginate
 from utils.responses import fail, ok
-from utils.timezone import now_manila
+from utils.timezone import MANILA_TZ, now_manila, to_manila
 
 staff_bp = Blueprint("staff", __name__, url_prefix="/api/staff")
 
@@ -1205,9 +1205,11 @@ def _filtered_interviews_query():
     if request.args.get("municipality"):
         query = query.filter(Vacancy.city_municipality_name.ilike(f"%{request.args['municipality']}%"))
     if request.args.get("date_from"):
-        query = query.filter(Interview.scheduled_date >= request.args["date_from"])
+        start = MANILA_TZ.localize(datetime.fromisoformat(request.args["date_from"]))
+        query = query.filter(Interview.scheduled_date >= start)
     if request.args.get("date_to"):
-        query = query.filter(Interview.scheduled_date <= request.args["date_to"] + "T23:59:59")
+        end = MANILA_TZ.localize(datetime.fromisoformat(request.args["date_to"] + "T23:59:59"))
+        query = query.filter(Interview.scheduled_date <= end)
     return query
 
 
@@ -1230,7 +1232,7 @@ def interview_report():
             i.application.jobseeker_profile.full_name,
             i.application.vacancy.employer_company.company_name,
             i.application.vacancy.title,
-            i.scheduled_date.strftime("%b %d, %Y %I:%M %p") if i.scheduled_date else "",
+            to_manila(i.scheduled_date).strftime("%b %d, %Y %I:%M %p") if i.scheduled_date else "",
             i.mode,
             i.meeting_link or i.location or "",
             i.status,
