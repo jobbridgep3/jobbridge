@@ -132,6 +132,20 @@ def apply_to_job():
         application = reopen_stale_application(
             existing_application, jobseeker_user, score=score, note="Reapplied to this position.",
         )
+        # reopen_stale_application() doesn't notify (mirrors the stale-hire
+        # path), but the jobseeker's own Applications page needs a live
+        # update too, not just the employer's — e.g. if they reapplied from
+        # another tab/device.
+        notify_user(
+            profile.user_id, "application_status", "Application resubmitted",
+            f"You reapplied to {vacancy.title}.",
+            link="/jobseeker/applications",
+            socket_event="application:status_update",
+            socket_payload={
+                "application_id": str(application.id), "new_status": "applied",
+                "status_label": APPLICATION_STATUS_LABELS["applied"],
+            },
+        )
     else:
         application = Application(vacancy_id=vacancy.id, jobseeker_profile_id=profile.id, status="applied", match_score=score)
         db.session.add(application)
