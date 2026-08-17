@@ -80,6 +80,7 @@ import StaffJobFair from './pages/staff/JobFair'
 import StaffJobFairScanner from './pages/staff/JobFairScanner'
 import StaffTraining from './pages/staff/Training'
 import StaffDILP from './pages/staff/DILP'
+import StaffDILPDetail from './pages/staff/DILPDetail'
 import StaffOWWA from './pages/staff/OWWA'
 import StaffOWWARequestDetail from './pages/staff/OWWARequestDetail'
 import StaffTrainingReferralQueue from './pages/staff/TrainingReferralQueue'
@@ -216,6 +217,7 @@ export default function App() {
             <Route path="jobfair/:id/scanner" element={<StaffJobFairScanner />} />
             <Route path="training" element={<StaffTraining />} />
             <Route path="dilp" element={<StaffDILP />} />
+            <Route path="dilp/:id" element={<StaffDILPDetail />} />
             <Route path="owwa" element={<StaffOWWA />} />
             <Route path="owwa/:id" element={<StaffOWWARequestDetail />} />
             <Route path="training-referral/queue" element={<StaffTrainingReferralQueue />} />

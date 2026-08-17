@@ -781,6 +781,99 @@ def send_owwa_request_declined_email(to: str, jobseeker_name: str, request_id: s
     return send_email(to, f"Update on Your OWWA Assistance Application — Reference #{request_id}", html)
 
 
+# ---------- DILP ----------
+# Subject lines and body copy follow the DILP module spec verbatim.
+
+def send_dilp_interview_scheduled_email(to: str, full_name: str, date_str: str, time_str: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Your DILP Interview Has Been Scheduled</h2>
+      <p>Hi {full_name},</p>
+      <p>Your interview for the DOLE Integrated Livelihood Program (DILP) application has been
+      scheduled on <b>{date_str}</b> at <b>{time_str}</b>.</p>
+      <p>Please proceed to the PESO Office, Municipality of Pila, on the scheduled date and time.</p>
+      <p>For questions, you may contact PESO Pila directly.</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila / JobBridge System</p>
+    </div>
+    """
+    return send_email(to, "Your DILP Interview Has Been Scheduled", html)
+
+
+def send_dilp_interview_completed_email(to: str, full_name: str, interview_date_str: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">DILP Interview Completed — Next Steps for Your Application</h2>
+      <p>Hi {full_name},</p>
+      <p>Thank you for attending your interview for the DOLE Integrated Livelihood Program (DILP)
+      application on {interview_date_str}.</p>
+      <p>Your interview has been marked as completed. Please proceed to the PESO Office, Municipality
+      of Pila, for the finalization and Mayor's signature of your proposal.</p>
+      <p>You will receive another notification once your document is ready for claiming.</p>
+      <p>For questions, you may contact PESO Pila directly.</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila / JobBridge System</p>
+    </div>
+    """
+    return send_email(to, "DILP Interview Completed — Next Steps for Your Application", html)
+
+
+def send_dilp_ready_for_claiming_email(to: str, full_name: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Your DILP Proposal is Ready for Claiming</h2>
+      <p>Hi {full_name},</p>
+      <p>Good news! Your DOLE Integrated Livelihood Program (DILP) proposal has been signed and is
+      now ready for claiming.</p>
+      <p>Please visit the PESO Office, Municipality of Pila, at your earliest convenience to claim
+      your document.</p>
+      <p>For questions, you may contact PESO Pila directly.</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila / JobBridge System</p>
+    </div>
+    """
+    return send_email(to, "Your DILP Proposal is Ready for Claiming", html)
+
+
+def send_dilp_approved_email(to: str, full_name: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Your DILP Proposal Has Been Approved</h2>
+      <p>Hi {full_name},</p>
+      <p>Your DOLE Integrated Livelihood Program (DILP) proposal has been officially approved.</p>
+      <p>Your application is now being processed for the next stage of the program.</p>
+      <p>For questions, you may contact PESO Pila directly.</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila / JobBridge System</p>
+    </div>
+    """
+    return send_email(to, "Your DILP Proposal Has Been Approved", html)
+
+
+def send_dilp_submitted_to_esfo_email(to: str, full_name: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Your DILP Application Has Been Submitted for Funding</h2>
+      <p>Hi {full_name},</p>
+      <p>Your DOLE Integrated Livelihood Program (DILP) application has been submitted to the
+      Employment Services Field Office (ESFO) for funding processing.</p>
+      <p>This concludes the tracked stages of your application within our system. For updates on
+      funding release, please coordinate directly with the PESO Office.</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila / JobBridge System</p>
+    </div>
+    """
+    return send_email(to, "Your DILP Application Has Been Submitted for Funding", html)
+
+
+def send_dilp_no_show_email(to: str, full_name: str, interview_date_str: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">DILP Interview — Missed Appointment</h2>
+      <p>Hi {full_name},</p>
+      <p>You were marked absent for your scheduled DILP interview on {interview_date_str}.</p>
+      <p>Please contact the PESO Office, Municipality of Pila, to reschedule your interview.</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila / JobBridge System</p>
+    </div>
+    """
+    return send_email(to, "DILP Interview — Missed Appointment", html)
+
+
 # ---------- SPES ----------
 # Sign-off and section copy follow the SPES module spec verbatim. Note: this codebase's
 # send_email()/Brevo integration doesn't support file attachments (no existing email

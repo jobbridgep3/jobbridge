@@ -56,6 +56,11 @@ const STATUS_MAP = {
   forming: { label: 'Forming', variant: 'default' },
   submitted_to_owwa: { label: 'Submitted to OWWA', variant: 'info' },
   for_owwa_response: { label: 'Awaiting OWWA Response', variant: 'warning' },
+  // DILP (pending, completed, approved already covered above)
+  scheduled: { label: 'Scheduled', variant: 'warning' },
+  no_show: { label: 'No-Show', variant: 'danger' },
+  ready_for_claiming: { label: 'Ready for Claiming', variant: 'info' },
+  submitted_to_esfo: { label: 'Submitted to ESFO', variant: 'success' },
   // SPES (pending_review, rejected already covered above)
   approved_for_orientation: { label: 'Approved for Orientation', variant: 'info' },
   attended_orientation: { label: 'Attended Orientation', variant: 'info' },

@@ -19,13 +19,15 @@ from utils.responses import fail, ok
 
 programs_bp = Blueprint("programs", __name__, url_prefix="/api")
 
-VALID_PROGRAMS = ("dilp", "owwa")
-# "spes" is deliberately excluded: SPES was upgraded off this generic shared system
-# into its own standalone module (see blueprints/spes.py, models/spes.py) with a
-# batch/orientation/exam/deployment/DTR lifecycle that doesn't fit PROGRAM_STATUSES.
-# Excluding it here prevents these generic /api/<program_type>/... routes from ever
-# answering a literal /api/spes/... URL that spes_bp also defines. Old
-# program_applications rows with program_type='spes' are left in place, untouched.
+VALID_PROGRAMS = ("owwa",)
+# "spes" and "dilp" are deliberately excluded: both were upgraded off this generic shared
+# system into their own standalone modules (see blueprints/spes.py/models/spes.py and
+# blueprints/dilp.py/models/dilp.py) with real status lifecycles that don't fit
+# PROGRAM_STATUSES — SPES's batch/orientation/exam/deployment/DTR flow, and DILP's
+# pending/scheduled/completed/no_show/ready_for_claiming/approved/submitted_to_esfo flow.
+# Excluding them here prevents these generic /api/<program_type>/... routes from ever
+# answering a literal /api/spes/... or /api/dilp/... URL that spes_bp/dilp_bp also define.
+# Old program_applications rows with program_type='spes'/'dilp' are left in place, untouched.
 
 
 def _check_program(program_type):
