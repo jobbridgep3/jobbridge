@@ -39,12 +39,10 @@ from services.email_service import (
     send_spes_result_failed_email,
     send_spes_result_passed_email,
 )
-from services.excel_service import build_excel_report, build_multi_sheet_excel_report
+from services.excel_service import build_excel_report
 from services.notification_service import notify_board, notify_role, notify_user
 from services.pdf_service import (
-    SPES_STAT_LABELS,
     generate_spes_application_form,
-    generate_spes_report,
     generate_table_report,
     to_bytesio,
 )
@@ -128,7 +126,16 @@ def _notify_spes_exam_result(application: SpesApplication, result: str):
 @jwt_required()
 @role_required("jobseeker")
 def list_spes_batches():
-    batches = SpesBatch.query.filter_by(status="open").order_by(SpesBatch.registration_deadline.asc()).all()
+    # registration_deadline >= today is a belt-and-suspenders check on top of status ==
+    # "open": the auto-close scheduler job only reconciles the status column every 15
+    # minutes, so without this an expired-but-not-yet-flipped batch could still appear
+    # as available in the interim. This filter makes visibility instant regardless of
+    # scheduler timing — registering for such a batch is already independently blocked
+    # server-side by spes_service.validate_registration_eligibility's own deadline check.
+    today = now_manila().date()
+    batches = SpesBatch.query.filter(
+        SpesBatch.status == "open", SpesBatch.registration_deadline >= today,
+    ).order_by(SpesBatch.registration_deadline.asc()).all()
     return ok([b.to_dict() for b in batches])
 
 
@@ -716,141 +723,10 @@ def staff_set_spes_peso_appointment(application_id):
     return ok(application.to_dict(), "PESO appointment saved.")
 
 
-# ---------- Reporting (staff + admin, read-only) ----------
-
-def _parse_spes_report_filters(args):
-    return {
-        "batch_id": args.get("batch_id") or None,
-        "status": args.get("status") or None,
-        "attendance": args.get("attendance") or None,
-        "date_from": date.fromisoformat(args["date_from"]) if args.get("date_from") else None,
-        "date_to": date.fromisoformat(args["date_to"]) if args.get("date_to") else None,
-        "search": args.get("search") or None,
-    }
-
-
-# Mirrors frontend/src/components/spes/ReportsPanel.jsx's STATUS_OPTIONS/ATTENDANCE_OPTIONS
-# exactly, so the exported report's filter summary reads with the same labels the staff/admin
-# user picked on screen.
-_STATUS_FILTER_LABELS = {
-    "pending_review": "Pending Review", "rejected": "Rejected", "approved_for_orientation": "Approved for Orientation",
-    "attended_orientation": "Attended Orientation (result pending)", "orientation_passed": "Orientation Passed",
-    "failed_orientation": "Orientation Failed", "attended_exam": "Attended Exam (result pending)",
-    "passed": "Exam Passed", "failed": "Exam Failed",
-}
-_ATTENDANCE_FILTER_LABELS = {
-    "orientation_attended": "Orientation — Attended", "orientation_absent": "Orientation — Absent",
-    "exam_attended": "Exam — Attended", "exam_absent": "Exam — Absent",
-}
-
-# Comprehensive applicant-detail columns shared by both the Excel "Applications" sheet and
-# the PDF "Applications" table — (spes_report_row() dict key, header label) pairs, so both
-# exports show identical content for identical filtered data.
-_SPES_APPLICATION_COLUMNS = [
-    ("application_ref_no", "Reference #"), ("jobseeker_name", "Applicant"), ("email", "Email"),
-    ("contact_number", "Contact Number"), ("date_of_birth", "Date of Birth"), ("address", "Address"),
-    ("batch_name", "Batch"), ("submitted_at", "Application Date"), ("orientation_at", "Orientation Date"),
-    ("orientation_attendance_label", "Orientation Attendance"), ("orientation_result_label", "Orientation Result"),
-    ("exam_at", "Exam Date"), ("exam_attendance_label", "Exam Attendance"), ("exam_result_label", "Exam Result"),
-    ("status_label", "Current Status"), ("peso_appointment_at", "PESO Appointment"),
-]
-
-
-def _spes_filters_summary(filters, batch_name):
-    """Human-readable (label, value) pairs describing the active filters — so the
-    exported file is self-describing about exactly which subset of applicants it
-    contains. Used as key/value rows in the Excel summary sheet and as 'Filters:' lines
-    in the PDF header."""
-    pairs = [("Batch", batch_name or "All Batches")]
-    if filters.get("status"):
-        pairs.append(("Orientation/Exam Result", _STATUS_FILTER_LABELS.get(filters["status"], filters["status"])))
-    if filters.get("attendance"):
-        pairs.append(("Attendance", _ATTENDANCE_FILTER_LABELS.get(filters["attendance"], filters["attendance"])))
-    if filters.get("search"):
-        pairs.append(("Search", filters["search"]))
-    if filters.get("date_from") or filters.get("date_to"):
-        pairs.append(("Date Range", f"{filters.get('date_from') or 'Any'} – {filters.get('date_to') or 'Any'}"))
-    return pairs
-
-
-def _spes_application_excel_row(d):
-    return [d.get(key) for key, _label in _SPES_APPLICATION_COLUMNS]
-
-
-@spes_bp.get("/staff/spes/reports/stats")
-@jwt_required()
-@role_required("staff", "admin")
-def staff_spes_report_stats():
-    filters = _parse_spes_report_filters(request.args)
-    return ok(spes_reporting_service.build_spes_stats(**filters))
-
-
-# Dashboard-only stat keys (live "needs action now" counts) that don't belong in a
-# formal exported report alongside their cumulative report-facing counterparts.
-_EXPORT_EXCLUDED_STAT_KEYS = {"currently_orientation_passed"}
-
-
-@spes_bp.get("/staff/spes/reports/export/excel")
-@jwt_required()
-@role_required("staff", "admin")
-def export_spes_excel():
-    filters = _parse_spes_report_filters(request.args)
-    applications = spes_reporting_service.query_spes_applications_for_report(**filters)
-    stats = spes_reporting_service.build_spes_stats(**filters)
-    user = User.query.get(get_jwt_identity())
-    date_str = now_manila().strftime("%B %d, %Y %I:%M %p")
-    batch_name = SpesBatch.query.get(filters["batch_id"]).batch_name if filters["batch_id"] else None
-
-    summary_rows = [
-        ["Generated:", date_str],
-        ["Generated By:", f"{user.email} ({user.role})"],
-        ["", ""],
-        ["Applied Filters", ""],
-        *[[label, value] for label, value in _spes_filters_summary(filters, batch_name)],
-        ["", ""],
-        ["Metric", "Value"],
-        *[[SPES_STAT_LABELS.get(k, k), v] for k, v in stats.items() if k not in _EXPORT_EXCLUDED_STAT_KEYS],
-    ]
-    # Comprehensive per-applicant detail — one row per applicant matching every active
-    # filter, replacing the old two-sheet Orientation/Exam split that duplicated the same
-    # 5 sparse columns into both sheets.
-    rows = [spes_reporting_service.spes_report_row(a) for a in applications]
-    application_rows = [_spes_application_excel_row(d) for d in rows]
-
-    buf = build_multi_sheet_excel_report([
-        ("Summary", ["PESO Pila, Laguna — SPES Program Report", ""], summary_rows),
-        ("Applications", [label for _key, label in _SPES_APPLICATION_COLUMNS], application_rows),
-    ], landscape=True)
-    log_audit(user, "Export", "spes_report", details="excel")
-    return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="spes_report.xlsx")
-
-
-@spes_bp.get("/staff/spes/reports/export/pdf")
-@jwt_required()
-@role_required("staff", "admin")
-def export_spes_pdf():
-    filters = _parse_spes_report_filters(request.args)
-    applications = spes_reporting_service.query_spes_applications_for_report(**filters)
-    stats = spes_reporting_service.build_spes_stats(**filters)
-    user = User.query.get(get_jwt_identity())
-    date_str = now_manila().strftime("%B %d, %Y %I:%M %p")
-    batch_name = SpesBatch.query.get(filters["batch_id"]).batch_name if filters["batch_id"] else None
-
-    display_stats = {k: v for k, v in stats.items() if k not in _EXPORT_EXCLUDED_STAT_KEYS}
-    rows = [spes_reporting_service.spes_report_row(a) for a in applications]
-    filters_summary = [f"{label}: {value}" for label, value in _spes_filters_summary(filters, batch_name)]
-    pdf_bytes = generate_spes_report(
-        display_stats, rows, date_str, user.email, user.role,
-        batch_name=batch_name, filters_summary=filters_summary, columns=_SPES_APPLICATION_COLUMNS,
-    )
-    log_audit(user, "Export", "spes_report", details="pdf")
-    return send_file(to_bytesio(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name="spes_report.pdf")
-
-
 # ---------- Single-purpose exports (Applicants / Attendance / Outcomes) ----------
-# Unlike the full SPES Program Report above (always Summary + Orientation + Exam
-# sheets), these mirror exactly what the calling screen shows — e.g. filtering the
-# Scanner to Orientation must never surface an Exam sheet for the same cohort.
+# The full "SPES Program Report" (Reports & Analytics tab) was removed — these are the
+# remaining exports, each mirroring exactly what its calling screen shows — e.g. filtering
+# the Scanner to Orientation must never surface an Exam sheet for the same cohort.
 
 def _spes_applicants_export_data(args):
     batch_id = args.get("batch_id") or None

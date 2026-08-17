@@ -95,27 +95,42 @@ def _to_manila_or_none(dt):
     return to_manila(dt) if dt is not None else None
 
 
+# Mirrors the jobseeker-facing stepper labels in frontend/src/components/dilp/DilpStepper.jsx,
+# so the export's "Current Application Stage" column uses the exact same vocabulary the
+# jobseeker already sees on their own DILP status tracker — no invented wording.
+_DILP_STAGE_LABELS = {
+    "pending": "Submitted",
+    "scheduled": "Scheduled",
+    "completed": "Interview Completed",
+    "no_show": "No-Show (Awaiting Reschedule)",
+    "ready_for_claiming": "Ready for Claiming",
+    "approved": "Approved",
+    "submitted_to_esfo": "Submitted to ESFO",
+}
+
+
 def dilp_report_row(dilp_app: DilpApplication) -> dict:
-    """Every datetime field is converted via to_manila() before being returned — the row's
-    consumers (Excel's tzinfo-stripping cell writer, the PDF report) both format/strip
-    directly from these values with no further conversion, so they must already be
-    Manila-correct here rather than relying on whatever tzinfo Postgres happened to attach
-    to a freshly-queried row (see blueprints/dilp.py's _interview_date_time_strings for the
-    same class of bug this prevents)."""
-    remarks_summary = " | ".join(r.remark for r in dilp_app.remarks) if dilp_app.remarks else None
+    """Applicant-detail row for the DILP export — demographic/profile fields, not
+    DILP-process fields (no proposed livelihood, capital needed, interview/claiming/
+    approval dates, remarks, etc. — the export is scoped to applicant identity/contact
+    details plus DILP status only, per the export content requirement). created_at goes
+    through to_manila() for the same reason every other datetime export field in this
+    codebase does — see blueprints/dilp.py's _interview_date_time_strings docstring."""
+    profile = dilp_app.jobseeker_profile
     return {
-        "reference_number": str(dilp_app.id),
-        "jobseeker_name": dilp_app.jobseeker_profile.full_name if dilp_app.jobseeker_profile else None,
-        "email": dilp_app.jobseeker_profile.user.email if dilp_app.jobseeker_profile and dilp_app.jobseeker_profile.user else None,
-        "proposed_livelihood": dilp_app.proposed_livelihood,
-        "capital_needed": float(dilp_app.capital_needed) if dilp_app.capital_needed is not None else None,
-        "status": dilp_app.status,
-        "created_at": _to_manila_or_none(dilp_app.created_at),
-        "interview_at": _to_manila_or_none(dilp_app.interview_at),
-        "completed_at": _to_manila_or_none(dilp_app.completed_at),
-        "ready_for_claiming_at": _to_manila_or_none(dilp_app.ready_for_claiming_at),
-        "approved_at": _to_manila_or_none(dilp_app.approved_at),
-        "submitted_to_esfo_at": _to_manila_or_none(dilp_app.submitted_to_esfo_at),
-        "no_show_count": dilp_app.no_show_count,
-        "remarks": remarks_summary,
+        "full_name": profile.full_name if profile else None,
+        "email": profile.user.email if profile and profile.user else None,
+        "contact_number": profile.contact_number if profile else None,
+        "date_of_birth": profile.date_of_birth if profile else None,
+        "age": profile.age() if profile else None,
+        "gender": profile.gender if profile else None,
+        "civil_status": profile.civil_status if profile else None,
+        "nationality": profile.nationality if profile else None,
+        "address": profile.address if profile else None,
+        "barangay": profile.barangay if profile else None,
+        "municipality": profile.municipality if profile else None,
+        "province": profile.province if profile else None,
+        "application_date": _to_manila_or_none(dilp_app.created_at),
+        "status_label": dilp_app.status.replace("_", " ").title(),
+        "stage_label": _DILP_STAGE_LABELS.get(dilp_app.status, dilp_app.status),
     }

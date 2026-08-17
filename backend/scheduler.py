@@ -236,7 +236,7 @@ def init_scheduler(app):
     )
     scheduler.add_job(
         lambda: _auto_close_spes_batches(app),
-        trigger="cron", minute=15, id="auto_close_spes_batches", replace_existing=True,
+        trigger="cron", minute="*/15", id="auto_close_spes_batches", replace_existing=True,
     )
     scheduler.add_job(
         lambda: _send_interview_reminders(app),

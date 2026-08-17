@@ -9,13 +9,11 @@ import { cn } from '../../lib/utils'
 import { SPESApplicantOversight } from './SPESApplicantOversight'
 import { SPESBatchManagement } from './SPESBatchManagement'
 import { SPESOverview } from './SPESOverview'
-import { SPESReports } from './SPESReports'
 
 const TABS = [
   { key: 'overview', label: 'Program Overview' },
   { key: 'batches', label: 'Batch Management' },
   { key: 'applicants', label: 'Applicant Oversight' },
-  { key: 'reports', label: 'Reports & Analytics' },
 ]
 
 export default function AdminSPES() {
@@ -52,7 +50,6 @@ export default function AdminSPES() {
       {tab === 'overview' && <SPESOverview />}
       {tab === 'batches' && <SPESBatchManagement />}
       {tab === 'applicants' && <SPESApplicantOversight batches={batches} />}
-      {tab === 'reports' && <SPESReports batches={batches} />}
     </motion.div>
   )
 }

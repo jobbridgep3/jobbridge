@@ -10,7 +10,6 @@ import { SPESAppointments } from './SPESAppointments'
 import { SPESBatchSchedule } from './SPESBatchSchedule'
 import { SPESDashboard } from './SPESDashboard'
 import { SPESOutcomes } from './SPESOutcomes'
-import { SPESReports } from './SPESReports'
 import { SPESScanner } from './SPESScanner'
 
 const TABS = [
@@ -19,7 +18,6 @@ const TABS = [
   { key: 'scanner', label: 'Attendance Scanner' },
   { key: 'outcomes', label: 'Outcomes & Results' },
   { key: 'appointments', label: 'PESO Appointments' },
-  { key: 'reports', label: 'Reports' },
 ]
 
 export default function StaffSPES() {
@@ -58,7 +56,6 @@ export default function StaffSPES() {
       {tab === 'scanner' && <SPESScanner batches={batches} />}
       {tab === 'outcomes' && <SPESOutcomes batches={batches} />}
       {tab === 'appointments' && <SPESAppointments />}
-      {tab === 'reports' && <SPESReports batches={batches} />}
     </motion.div>
   )
 }

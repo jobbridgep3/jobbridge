@@ -193,9 +193,8 @@ def _to_manila_or_none(dt):
 def _orientation_result_label(status: str) -> str:
     """"Passed" is cumulative (ORIENTATION_PASSED_STATUSES), not exact-match, mirroring
     the filter fix above — an applicant who has since progressed to the exam stage
-    still passed orientation. Both the Excel export (which uses this dict directly) and
-    the PDF export (via pdf_service.generate_spes_report, fed this same row dict) show
-    the identical label."""
+    still passed orientation. Used by spes_report_row()'s consumers (e.g. the Outcomes
+    export) so the label stays consistent wherever this row dict is used."""
     if status == "failed_orientation":
         return "Failed"
     if status in ORIENTATION_PASSED_STATUSES:
