@@ -1,13 +1,13 @@
 import { Building2 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
+import { CollapsibleCard } from '../../../components/ui/CollapsibleCard'
 import { Input, Label, Select, Textarea } from '../../../components/ui/Input'
 import { RequiredLabel } from '../../../components/ui/RequiredLabel'
 import { cn, sanitizeDigits } from '../../../lib/utils'
 import { BUSINESS_TYPES, COMPANY_SIZES } from './options'
 
-export function BasicInfoSection({ form, setForm, onUploadLogo, uploadingLogo, missingKeys = new Set() }) {
+export function BasicInfoSection({ form, setForm, onUploadLogo, uploadingLogo, missingKeys = new Set(), open, onToggle }) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: { 'image/*': [] },
     maxFiles: 1,
@@ -21,11 +21,7 @@ export function BasicInfoSection({ form, setForm, onUploadLogo, uploadingLogo, m
   const err = (key) => cn(missingKeys.has(key) && 'border-red-300 focus:border-red-400')
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Basic Information</CardTitle>
-      </CardHeader>
-      <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <CollapsibleCard title="Basic Information" open={open} onToggle={onToggle} contentClassName="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2 flex items-center gap-4">
           <div
             {...getRootProps()}
@@ -116,7 +112,6 @@ export function BasicInfoSection({ form, setForm, onUploadLogo, uploadingLogo, m
             onChange={(e) => setForm((f) => ({ ...f, alt_contact_number: sanitizeDigits(e.target.value) }))}
           />
         </div>
-      </CardContent>
-    </Card>
+    </CollapsibleCard>
   )
 }

@@ -3,6 +3,7 @@ from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from extensions import db
 from models.application import APPLICATION_STATUS_LABELS, Application
+from models.employer import EmployerCompany
 from models.employer_hr import EmployerHRProfile
 from models.jobseeker import JobseekerProfile
 from models.user import User
@@ -29,8 +30,27 @@ def list_jobs():
 
     keyword = request.args.get("q")
     if keyword:
-        like = f"%{keyword}%"
-        query = query.filter(db.or_(Vacancy.title.ilike(like), Vacancy.skills_required.ilike(like)))
+        # Per-word AND, per-field OR: each word in the query must appear *somewhere*
+        # across this field set (not necessarily the same field, not necessarily
+        # adjacent) — this is what lets "senior engineer" match a title like "Senior
+        # Software Engineer" while still narrowing correctly for multi-word queries,
+        # and lets a bare "engineer"/"engineering" match via simple substring ILIKE
+        # without needing full-text search infrastructure this codebase doesn't have.
+        # Joined to EmployerCompany so a company name/trade name is also searchable —
+        # both search bars' placeholder copy already promises this.
+        query = query.outerjoin(EmployerCompany, Vacancy.employer_company_id == EmployerCompany.id)
+        for word in keyword.split():
+            like = f"%{word}%"
+            query = query.filter(db.or_(
+                Vacancy.title.ilike(like),
+                Vacancy.description.ilike(like),
+                Vacancy.skills_required.ilike(like),
+                Vacancy.industry.ilike(like),
+                Vacancy.work_location.ilike(like),
+                Vacancy.job_type.ilike(like),
+                EmployerCompany.company_name.ilike(like),
+                EmployerCompany.trade_name.ilike(like),
+            ))
     if request.args.get("location"):
         query = query.filter(Vacancy.work_location.ilike(f"%{request.args['location']}%"))
     if request.args.get("job_type"):

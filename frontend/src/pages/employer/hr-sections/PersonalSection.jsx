@@ -1,14 +1,14 @@
 import { UserRound } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
+import { CollapsibleCard } from '../../../components/ui/CollapsibleCard'
 import { DatePicker } from '../../../components/ui/DatePicker'
 import { Input, Label, Select } from '../../../components/ui/Input'
 import { RequiredLabel } from '../../../components/ui/RequiredLabel'
 import { cn } from '../../../lib/utils'
 import { CIVIL_STATUSES, GENDERS } from './options'
 
-export function PersonalSection({ form, setForm, onUploadPicture, uploadingPicture, missingKeys = new Set() }) {
+export function PersonalSection({ form, setForm, onUploadPicture, uploadingPicture, missingKeys = new Set(), open, onToggle }) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: { 'image/*': [] },
     maxFiles: 1,
@@ -22,11 +22,7 @@ export function PersonalSection({ form, setForm, onUploadPicture, uploadingPictu
   const err = (key) => cn(missingKeys.has(key) && 'border-red-300 focus:border-red-400')
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Personal</CardTitle>
-      </CardHeader>
-      <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <CollapsibleCard title="Personal" open={open} onToggle={onToggle} contentClassName="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2 flex items-center gap-4">
           <div
             {...getRootProps()}
@@ -77,7 +73,6 @@ export function PersonalSection({ form, setForm, onUploadPicture, uploadingPictu
           <Label><RequiredLabel label="Nationality" missing={missingKeys.has('nationality')} /></Label>
           <Input value={form.nationality || ''} onChange={set('nationality')} className={err('nationality')} />
         </div>
-      </CardContent>
-    </Card>
+    </CollapsibleCard>
   )
 }

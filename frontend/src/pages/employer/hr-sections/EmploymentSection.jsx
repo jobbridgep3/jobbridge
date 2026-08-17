@@ -1,19 +1,15 @@
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
+import { CollapsibleCard } from '../../../components/ui/CollapsibleCard'
 import { Input, Label, Select } from '../../../components/ui/Input'
 import { RequiredLabel } from '../../../components/ui/RequiredLabel'
 import { cn } from '../../../lib/utils'
 import { EMPLOYMENT_STATUSES, HR_ROLES } from './options'
 
-export function EmploymentSection({ form, setForm, missingKeys = new Set() }) {
+export function EmploymentSection({ form, setForm, missingKeys = new Set(), open, onToggle }) {
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
   const err = (key) => cn(missingKeys.has(key) && 'border-red-300 focus:border-red-400')
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Employment</CardTitle>
-      </CardHeader>
-      <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <CollapsibleCard title="Employment" open={open} onToggle={onToggle} contentClassName="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <Label>Company Name</Label>
           <Input value={form.company_name || ''} disabled />
@@ -48,7 +44,6 @@ export function EmploymentSection({ form, setForm, missingKeys = new Set() }) {
             ))}
           </Select>
         </div>
-      </CardContent>
-    </Card>
+    </CollapsibleCard>
   )
 }

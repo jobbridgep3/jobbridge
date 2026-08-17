@@ -1,11 +1,11 @@
 import { useDropzone } from 'react-dropzone'
 
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
+import { CollapsibleCard } from '../../../components/ui/CollapsibleCard'
 import { Input, Label } from '../../../components/ui/Input'
 import { RequiredLabel } from '../../../components/ui/RequiredLabel'
 import { cn } from '../../../lib/utils'
 
-export function RepresentativeSection({ form, setForm, onUploadSignature, uploadingSignature, missingKeys = new Set() }) {
+export function RepresentativeSection({ form, setForm, onUploadSignature, uploadingSignature, missingKeys = new Set(), open, onToggle }) {
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
   const err = (key) => cn(missingKeys.has(key) && 'border-red-300 focus:border-red-400')
 
@@ -19,11 +19,7 @@ export function RepresentativeSection({ form, setForm, onUploadSignature, upload
   })
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Company Representative</CardTitle>
-      </CardHeader>
-      <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <CollapsibleCard title="Company Representative" open={open} onToggle={onToggle} contentClassName="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <Label><RequiredLabel label="Name" missing={missingKeys.has('rep_name')} /></Label>
           <Input value={form.rep_name || ''} onChange={set('rep_name')} className={err('rep_name')} />
@@ -57,7 +53,6 @@ export function RepresentativeSection({ form, setForm, onUploadSignature, upload
             <p className="text-xs text-slate-500">{uploadingSignature ? 'Uploading…' : 'Upload signature image'}</p>
           </div>
         </div>
-      </CardContent>
-    </Card>
+    </CollapsibleCard>
   )
 }

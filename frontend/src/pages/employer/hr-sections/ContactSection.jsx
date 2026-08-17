@@ -1,17 +1,13 @@
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
+import { CollapsibleCard } from '../../../components/ui/CollapsibleCard'
 import { Input, Label } from '../../../components/ui/Input'
 import { RequiredLabel } from '../../../components/ui/RequiredLabel'
 import { cn, sanitizeDigits } from '../../../lib/utils'
 
-export function ContactSection({ form, setForm, companyEmail, missingKeys = new Set() }) {
+export function ContactSection({ form, setForm, companyEmail, missingKeys = new Set(), open, onToggle }) {
   const err = (key) => cn(missingKeys.has(key) && 'border-red-300 focus:border-red-400')
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Contact</CardTitle>
-      </CardHeader>
-      <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <CollapsibleCard title="Contact" open={open} onToggle={onToggle} contentClassName="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <Label>Company Email</Label>
           <Input value={companyEmail || ''} disabled />
@@ -39,7 +35,6 @@ export function ContactSection({ form, setForm, companyEmail, missingKeys = new 
             onChange={(e) => setForm((f) => ({ ...f, telephone_number: sanitizeDigits(e.target.value) }))}
           />
         </div>
-      </CardContent>
-    </Card>
+    </CollapsibleCard>
   )
 }

@@ -1,7 +1,8 @@
 import { CheckCircle2, Circle } from 'lucide-react'
+import { useState } from 'react'
 
 import { SECTION_LABELS as JOBSEEKER_SECTION_LABELS } from '../../pages/jobseeker/profile-sections/requiredFields'
-import { Card, CardContent, CardHeader, CardTitle } from './Card'
+import { CollapsibleCard } from './CollapsibleCard'
 import { cn } from '../../lib/utils'
 
 /** Groups every required-field check by section, checked or not, and scrolls to the
@@ -17,6 +18,12 @@ import { cn } from '../../lib/utils'
  * rendered in its own section at the top of the page) before scrolling to it. Omit
  * it to keep the plain default behavior. */
 export function CompletionChecklist({ completion, sectionLabels = JOBSEEKER_SECTION_LABELS, onNavigate }) {
+  // Self-contained open/closed state — this one component is reused as-is by all
+  // three profile pages (jobseeker/HR/Company), so making it collapsible here
+  // converts "Remaining Requirements" into an accordion everywhere at once with no
+  // changes needed at any of its call sites. Defaults open so nothing is hidden
+  // by default, matching every other collapsible section's convention.
+  const [open, setOpen] = useState(true)
   const { results, completedCount, totalCount } = completion
 
   const bySection = results.reduce((acc, item) => {
@@ -31,14 +38,13 @@ export function CompletionChecklist({ completion, sectionLabels = JOBSEEKER_SECT
   const handleClick = (item) => (onNavigate ? onNavigate(item) : scrollToSection(item.section))
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Remaining Requirements</CardTitle>
-        <span className="text-xs font-medium text-slate-500">
-          {completedCount} of {totalCount} complete
-        </span>
-      </CardHeader>
-      <CardContent className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+    <CollapsibleCard
+      title="Remaining Requirements"
+      open={open}
+      onToggle={() => setOpen((o) => !o)}
+      actions={<span className="text-xs font-medium text-slate-500">{completedCount} of {totalCount} complete</span>}
+      contentClassName="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2"
+    >
         {Object.entries(bySection).map(([section, items]) => (
           <div key={section}>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -68,7 +74,6 @@ export function CompletionChecklist({ completion, sectionLabels = JOBSEEKER_SECT
             </ul>
           </div>
         ))}
-      </CardContent>
-    </Card>
+    </CollapsibleCard>
   )
 }

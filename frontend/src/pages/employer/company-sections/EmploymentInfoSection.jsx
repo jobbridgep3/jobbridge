@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
+import { CollapsibleCard } from '../../../components/ui/CollapsibleCard'
 import { Input, Label, Select } from '../../../components/ui/Input'
 import { RequiredLabel } from '../../../components/ui/RequiredLabel'
 import { cn } from '../../../lib/utils'
@@ -19,7 +19,7 @@ function CheckboxGroup({ options, values, onToggle }) {
   )
 }
 
-export function EmploymentInfoSection({ form, setForm, missingKeys = new Set() }) {
+export function EmploymentInfoSection({ form, setForm, missingKeys = new Set(), open, onToggle }) {
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
   const err = (key) => cn(missingKeys.has(key) && 'border-red-300 focus:border-red-400')
 
@@ -38,11 +38,7 @@ export function EmploymentInfoSection({ form, setForm, missingKeys = new Set() }
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Employment Information</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <CollapsibleCard title="Employment Information" open={open} onToggle={onToggle} contentClassName="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <Label><RequiredLabel label="Hiring Status" missing={missingKeys.has('hiring_status')} /></Label>
@@ -94,7 +90,6 @@ export function EmploymentInfoSection({ form, setForm, missingKeys = new Set() }
           <Label><RequiredLabel label="Employment Types Offered" missing={missingKeys.has('employment_types_offered')} /></Label>
           <CheckboxGroup options={EMPLOYMENT_TYPES_OFFERED} values={form.employment_types_offered || []} onToggle={toggle('employment_types_offered')} />
         </div>
-      </CardContent>
-    </Card>
+    </CollapsibleCard>
   )
 }

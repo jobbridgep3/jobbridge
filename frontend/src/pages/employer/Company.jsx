@@ -22,6 +22,8 @@ import { RepresentativeSection } from './company-sections/RepresentativeSection'
 import { computeCompletion, SECTION_LABELS } from './company-sections/requiredFields'
 import { SocialMediaSection } from './company-sections/SocialMediaSection'
 
+const COLLAPSIBLE_SECTIONS = ['basic', 'business_registration', 'address', 'representative', 'employment', 'social', 'documents']
+
 export default function EmployerCompany() {
   const queryClient = useQueryClient()
   const { data: company, isLoading } = useQuery({
@@ -36,6 +38,11 @@ export default function EmployerCompany() {
   const [uploadingDocType, setUploadingDocType] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [confirmSubmit, setConfirmSubmit] = useState(false)
+  // Session-only (not persisted), resets to all-expanded on every page load — same
+  // convention as jobseeker/Profile.jsx's openSections.
+  const [openSections, setOpenSections] = useState({
+    basic: true, business_registration: true, address: true, representative: true, employment: true, social: true, documents: true,
+  })
 
   // Seed `form` from the server response exactly once (the initial load) — see
   // Profile.jsx for why re-running this on every cache write (which used to
@@ -154,6 +161,15 @@ export default function EmployerCompany() {
   const completion = useMemo(() => (form ? computeCompletion(form) : null), [form])
   const missingKeys = useMemo(() => new Set((completion?.missingFields || []).map((f) => f.key)), [completion])
 
+  const toggleSection = (key) => setOpenSections((s) => ({ ...s, [key]: !s[key] }))
+
+  const navigateToSection = (item) => {
+    if (COLLAPSIBLE_SECTIONS.includes(item.section)) {
+      setOpenSections((s) => ({ ...s, [item.section]: true }))
+    }
+    document.getElementById(`section-${item.section}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   if (isLoading || !form) return <CardSkeleton />
 
   const canSubmitAccreditation = ['not_submitted', 'rejected'].includes(form.accreditation_status)
@@ -191,26 +207,40 @@ export default function EmployerCompany() {
       )}
 
       <ProgressBar percent={completion.profileCompletion} />
-      <CompletionChecklist completion={completion} sectionLabels={SECTION_LABELS} />
+      <CompletionChecklist completion={completion} sectionLabels={SECTION_LABELS} onNavigate={navigateToSection} />
 
       <div id="section-basic">
-        <BasicInfoSection form={form} setForm={setForm} onUploadLogo={uploadLogo} uploadingLogo={uploadingLogo} missingKeys={missingKeys} />
+        <BasicInfoSection
+          form={form} setForm={setForm} onUploadLogo={uploadLogo} uploadingLogo={uploadingLogo} missingKeys={missingKeys}
+          open={openSections.basic} onToggle={() => toggleSection('basic')}
+        />
       </div>
       <div id="section-business_registration">
-        <BusinessRegistrationSection form={form} setForm={setForm} missingKeys={missingKeys} />
+        <BusinessRegistrationSection
+          form={form} setForm={setForm} missingKeys={missingKeys}
+          open={openSections.business_registration} onToggle={() => toggleSection('business_registration')}
+        />
       </div>
       <div id="section-address">
-        <AddressCard title="Company Address" form={form} setForm={setForm} missingKeys={missingKeys} />
+        <AddressCard title="Company Address" form={form} setForm={setForm} missingKeys={missingKeys} open={openSections.address} onToggle={() => toggleSection('address')} />
       </div>
       <div id="section-representative">
-        <RepresentativeSection form={form} setForm={setForm} onUploadSignature={uploadSignature} uploadingSignature={uploadingSignature} missingKeys={missingKeys} />
+        <RepresentativeSection
+          form={form} setForm={setForm} onUploadSignature={uploadSignature} uploadingSignature={uploadingSignature} missingKeys={missingKeys}
+          open={openSections.representative} onToggle={() => toggleSection('representative')}
+        />
       </div>
       <div id="section-employment">
-        <EmploymentInfoSection form={form} setForm={setForm} missingKeys={missingKeys} />
+        <EmploymentInfoSection form={form} setForm={setForm} missingKeys={missingKeys} open={openSections.employment} onToggle={() => toggleSection('employment')} />
       </div>
-      <SocialMediaSection form={form} setForm={setForm} />
+      <div id="section-social">
+        <SocialMediaSection form={form} setForm={setForm} open={openSections.social} onToggle={() => toggleSection('social')} />
+      </div>
       <div id="section-documents">
-        <DocumentsSection form={form} onUploadDocument={uploadDocument} onDeleteDocument={deleteDocument} uploadingDocType={uploadingDocType} />
+        <DocumentsSection
+          form={form} onUploadDocument={uploadDocument} onDeleteDocument={deleteDocument} uploadingDocType={uploadingDocType}
+          open={openSections.documents} onToggle={() => toggleSection('documents')}
+        />
       </div>
 
       <ConfirmDialog

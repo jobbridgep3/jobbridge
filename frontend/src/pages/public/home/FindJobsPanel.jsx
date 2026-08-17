@@ -21,7 +21,7 @@ export function FindJobsPanel() {
     queryFn: async () => (await api.get('/api/jobs')).data.data,
   })
 
-  const topThree = (jobs || []).slice(0, 3)
+  const topFive = (jobs || []).slice(0, 5)
 
   const applyNow = (job) => {
     const action = resolveJobseekerCta({ token, role, targetPath: `/jobseeker/jobs/${job.id}` })
@@ -49,11 +49,11 @@ export function FindJobsPanel() {
           </div>
         )}
 
-        {!isLoading && topThree.length === 0 && (
+        {!isLoading && topFive.length === 0 && (
           <p className="p-5 text-sm text-text-muted">No job openings right now — check back soon.</p>
         )}
 
-        {topThree.map((job) => (
+        {topFive.map((job) => (
           <div key={job.id} className="px-5 py-4 first:pt-4">
             <div className="flex items-start justify-between gap-2">
               <Link to={`/jobs/${job.id}`} className="min-w-0">

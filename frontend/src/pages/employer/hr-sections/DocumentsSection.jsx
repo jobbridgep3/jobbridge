@@ -1,14 +1,10 @@
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/Card'
+import { CollapsibleCard } from '../../../components/ui/CollapsibleCard'
 import { DocumentUploadSlot } from '../../../components/ui/DocumentUploadSlot'
 import { HR_DOCUMENT_TYPES } from './options'
 
-export function DocumentsSection({ form, onUploadDocument, onDeleteDocument, uploadingDocType }) {
+export function DocumentsSection({ form, onUploadDocument, onDeleteDocument, uploadingDocType, open, onToggle }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Documents</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <CollapsibleCard title="Documents" open={open} onToggle={onToggle} contentClassName="space-y-4">
         <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
           Government ID, Company ID, and Authorization Letter are mandatory.
         </p>
@@ -31,7 +27,6 @@ export function DocumentsSection({ form, onUploadDocument, onDeleteDocument, upl
             )
           })}
         </div>
-      </CardContent>
-    </Card>
+    </CollapsibleCard>
   )
 }

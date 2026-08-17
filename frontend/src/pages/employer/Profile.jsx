@@ -20,6 +20,8 @@ import { EmploymentSection } from './hr-sections/EmploymentSection'
 import { PersonalSection } from './hr-sections/PersonalSection'
 import { computeCompletion, SECTION_LABELS } from './hr-sections/requiredFields'
 
+const COLLAPSIBLE_SECTIONS = ['personal', 'contact', 'employment', 'address', 'emergency', 'documents']
+
 export default function EmployerProfile() {
   const queryClient = useQueryClient()
   const { data: profile, isLoading } = useQuery({
@@ -31,6 +33,9 @@ export default function EmployerProfile() {
   const [saving, setSaving] = useState(false)
   const [uploadingPicture, setUploadingPicture] = useState(false)
   const [uploadingDocType, setUploadingDocType] = useState(null)
+  // Session-only (not persisted), resets to all-expanded on every page load — same
+  // convention as jobseeker/Profile.jsx's openSections.
+  const [openSections, setOpenSections] = useState({ personal: true, contact: true, employment: true, address: true, emergency: true, documents: true })
 
   // Seed `form` from the server response exactly once (the initial load). Every
   // later write to the `['employer-profile']` cache (patchFrom/refreshFrom) is
@@ -123,6 +128,15 @@ export default function EmployerProfile() {
   const completion = useMemo(() => (form ? computeCompletion(form) : null), [form])
   const missingKeys = useMemo(() => new Set((completion?.missingFields || []).map((f) => f.key)), [completion])
 
+  const toggleSection = (key) => setOpenSections((s) => ({ ...s, [key]: !s[key] }))
+
+  const navigateToSection = (item) => {
+    if (COLLAPSIBLE_SECTIONS.includes(item.section)) {
+      setOpenSections((s) => ({ ...s, [item.section]: true }))
+    }
+    document.getElementById(`section-${item.section}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   if (isLoading || !form) return <CardSkeleton />
 
   return (
@@ -138,23 +152,34 @@ export default function EmployerProfile() {
       />
 
       <ProgressBar percent={completion.profileCompletion} />
-      <CompletionChecklist completion={completion} sectionLabels={SECTION_LABELS} />
+      <CompletionChecklist completion={completion} sectionLabels={SECTION_LABELS} onNavigate={navigateToSection} />
 
       <div id="section-personal">
-        <PersonalSection form={form} setForm={setForm} onUploadPicture={uploadPicture} uploadingPicture={uploadingPicture} missingKeys={missingKeys} />
+        <PersonalSection
+          form={form} setForm={setForm} onUploadPicture={uploadPicture} uploadingPicture={uploadingPicture} missingKeys={missingKeys}
+          open={openSections.personal} onToggle={() => toggleSection('personal')}
+        />
       </div>
       <div id="section-contact">
-        <ContactSection form={form} setForm={setForm} companyEmail={form.email} missingKeys={missingKeys} />
+        <ContactSection
+          form={form} setForm={setForm} companyEmail={form.email} missingKeys={missingKeys}
+          open={openSections.contact} onToggle={() => toggleSection('contact')}
+        />
       </div>
       <div id="section-employment">
-        <EmploymentSection form={form} setForm={setForm} missingKeys={missingKeys} />
+        <EmploymentSection form={form} setForm={setForm} missingKeys={missingKeys} open={openSections.employment} onToggle={() => toggleSection('employment')} />
       </div>
       <div id="section-address">
-        <AddressCard title="Address" form={form} setForm={setForm} missingKeys={missingKeys} />
+        <AddressCard title="Address" form={form} setForm={setForm} missingKeys={missingKeys} open={openSections.address} onToggle={() => toggleSection('address')} />
       </div>
-      <EmergencyContactSection form={form} setForm={setForm} />
+      <div id="section-emergency">
+        <EmergencyContactSection form={form} setForm={setForm} open={openSections.emergency} onToggle={() => toggleSection('emergency')} />
+      </div>
       <div id="section-documents">
-        <DocumentsSection form={form} onUploadDocument={uploadDocument} onDeleteDocument={deleteDocument} uploadingDocType={uploadingDocType} />
+        <DocumentsSection
+          form={form} onUploadDocument={uploadDocument} onDeleteDocument={deleteDocument} uploadingDocType={uploadingDocType}
+          open={openSections.documents} onToggle={() => toggleSection('documents')}
+        />
       </div>
     </motion.div>
   )

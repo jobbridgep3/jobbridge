@@ -14,7 +14,7 @@ export function JobFairPanel() {
     queryFn: async () => (await api.get('/api/jobfair', { params: { upcoming: 1 } })).data.data,
   })
 
-  const topThree = (fairs || []).slice(0, 3)
+  const topFive = (fairs || []).slice(0, 5)
 
   return (
     <Card className="flex h-full flex-col">
@@ -37,11 +37,11 @@ export function JobFairPanel() {
           </div>
         )}
 
-        {!isLoading && topThree.length === 0 && (
+        {!isLoading && topFive.length === 0 && (
           <p className="p-5 text-sm text-text-muted">No upcoming job fairs scheduled yet.</p>
         )}
 
-        {topThree.map((fair) => {
+        {topFive.map((fair) => {
           const date = dayjs(fair.event_date)
           return (
             <div key={fair.id} className="flex gap-3 px-5 py-4 first:pt-4">
