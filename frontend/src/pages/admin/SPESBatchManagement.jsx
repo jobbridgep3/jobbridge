@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { Layers, Plus, X } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 
 import { Badge } from '../../components/ui/Badge'
@@ -14,7 +14,15 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Label } from '../../components/ui/Input'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
+import { cn } from '../../lib/utils'
+
+const VIEWS = [
+  { key: 'active', label: 'Batch Management', status: 'open' },
+  { key: 'archived', label: 'Archived Batches', status: 'archived' },
+  { key: 'closed', label: 'Closed Batches', status: 'closed' },
+]
 
 const EMPTY_FORM = {
   batch_name: '', description: '', open_date: '', registration_deadline: '', total_slots: '',
@@ -153,6 +161,7 @@ export function SPESBatchManagement() {
   const { confirm, ConfirmDialogElement } = useConfirmDialog()
   const [formOpen, setFormOpen] = useState(false)
   const [editingBatch, setEditingBatch] = useState(null)
+  const [view, setView] = useState('active')
 
   const { data: batches, isLoading } = useQuery({
     queryKey: ['admin', 'spes', 'batches'],
@@ -160,6 +169,10 @@ export function SPESBatchManagement() {
   })
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['admin', 'spes', 'batches'] })
+  useSocket({ 'spes:batch_update': invalidate })
+
+  const activeStatus = VIEWS.find((v) => v.key === view).status
+  const visibleBatches = useMemo(() => (batches || []).filter((b) => b.status === activeStatus), [batches, activeStatus])
 
   const close = useMutation({
     mutationFn: (id) => api.put(`/api/admin/spes/batches/${id}/close`),
@@ -174,19 +187,40 @@ export function SPESBatchManagement() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button size="sm" onClick={() => { setEditingBatch(null); setFormOpen(true) }}>
-          <Plus className="h-4 w-4" /> Create New Batch
-        </Button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex rounded-lg border border-border bg-surface p-0.5">
+          {VIEWS.map((v) => (
+            <button
+              key={v.key}
+              type="button"
+              onClick={() => setView(v.key)}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-xs font-medium sm:text-sm',
+                view === v.key ? 'bg-primary-800 text-white' : 'text-text-secondary hover:bg-surface-hover',
+              )}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+        {view === 'active' && (
+          <Button size="sm" onClick={() => { setEditingBatch(null); setFormOpen(true) }}>
+            <Plus className="h-4 w-4" /> Create New Batch
+          </Button>
+        )}
       </div>
 
       {isLoading ? (
         <CardSkeleton />
-      ) : !batches?.length ? (
-        <EmptyState icon={Layers} title="No SPES batches yet" description="Create a batch to open SPES registration to jobseekers." />
+      ) : !visibleBatches.length ? (
+        <EmptyState
+          icon={Layers}
+          title={view === 'active' ? 'No active SPES batches' : `No ${view} batches`}
+          description={view === 'active' ? 'Create a batch to open SPES registration to jobseekers.' : undefined}
+        />
       ) : (
         <div className="space-y-2">
-          {batches.map((batch) => (
+          {visibleBatches.map((batch) => (
             <Card key={batch.id}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">

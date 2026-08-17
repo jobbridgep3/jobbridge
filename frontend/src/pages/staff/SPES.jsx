@@ -6,7 +6,6 @@ import { PageHeader } from '../../components/ui/PageHeader'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
 import { cn } from '../../lib/utils'
-import { SPESApplicants } from './SPESApplicants'
 import { SPESAppointments } from './SPESAppointments'
 import { SPESBatchSchedule } from './SPESBatchSchedule'
 import { SPESDashboard } from './SPESDashboard'
@@ -16,7 +15,6 @@ import { SPESScanner } from './SPESScanner'
 
 const TABS = [
   { key: 'dashboard', label: 'Dashboard' },
-  { key: 'applicants', label: 'Applicants' },
   { key: 'schedules', label: 'Schedules' },
   { key: 'scanner', label: 'Attendance Scanner' },
   { key: 'outcomes', label: 'Outcomes & Results' },
@@ -56,7 +54,6 @@ export default function StaffSPES() {
       </div>
 
       {tab === 'dashboard' && <SPESDashboard batches={batches} onNavigate={setTab} />}
-      {tab === 'applicants' && <SPESApplicants batches={batches} />}
       {tab === 'schedules' && <SPESBatchSchedule batches={batches} />}
       {tab === 'scanner' && <SPESScanner batches={batches} />}
       {tab === 'outcomes' && <SPESOutcomes batches={batches} />}

@@ -1,5 +1,4 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import dayjs from 'dayjs'
 import { Html5Qrcode } from 'html5-qrcode'
 import { CheckCircle2, Download, KeyRound, Percent, UserCheck, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -13,6 +12,7 @@ import { StatCard } from '../../components/ui/StatCard'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { downloadFile, parseBlobError } from '../../lib/download'
+import { manila } from '../../lib/manilaTime'
 import { cn } from '../../lib/utils'
 
 const SCANNER_ELEMENT_ID = 'spes-qr-scanner'
@@ -222,7 +222,7 @@ export function SPESScanner({ batches }) {
                       <span className="flex items-center gap-2">
                         <CheckCircle2 className="h-4 w-4 text-green-600" /> {log.jobseeker_name}
                       </span>
-                      <span className="text-xs text-text-muted">{log.scanned_at ? dayjs(log.scanned_at).format('h:mm:ss A') : ''}</span>
+                      <span className="text-xs text-text-muted">{log.scanned_at ? manila(log.scanned_at).format('h:mm:ss A') : ''}</span>
                     </li>
                   ))}
                 </ul>

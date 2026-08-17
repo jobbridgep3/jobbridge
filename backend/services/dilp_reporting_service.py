@@ -9,6 +9,7 @@ from extensions import db
 from models.dilp import DILP_STATUSES, DilpApplication, DilpApplicationRemark
 from models.jobseeker import JobseekerProfile
 from services.dashboard_service import _month_buckets
+from utils.timezone import manila_day_bounds, to_manila
 
 # Statuses reachable only once an interview has actually been scheduled — used as the
 # denominator for the no-show rate (an application that never got scheduled can't have
@@ -73,19 +74,34 @@ def build_dilp_analytics(months: int = 6) -> dict:
     return {"applications_per_month": applications_per_month, "status_distribution": status_distribution}
 
 
-def query_dilp_applications_for_report():
-    return (
-        DilpApplication.query.options(
-            selectinload(DilpApplication.jobseeker_profile).selectinload(JobseekerProfile.user),
-            selectinload(DilpApplication.remarks).selectinload(DilpApplicationRemark.staff),
-        )
-        .order_by(DilpApplication.created_at.desc())
-        .limit(REPORT_ROW_LIMIT)
-        .all()
+def query_dilp_applications_for_report(status=None, search=None, date_from=None, date_to=None):
+    query = DilpApplication.query.options(
+        selectinload(DilpApplication.jobseeker_profile).selectinload(JobseekerProfile.user),
+        selectinload(DilpApplication.remarks).selectinload(DilpApplicationRemark.staff),
     )
+    if status:
+        query = query.filter(DilpApplication.status == status)
+    if search:
+        query = query.join(JobseekerProfile).filter(JobseekerProfile.full_name.ilike(f"%{search}%"))
+    start, end = manila_day_bounds(date_from, date_to)
+    if start:
+        query = query.filter(DilpApplication.created_at >= start)
+    if end:
+        query = query.filter(DilpApplication.created_at < end)
+    return query.order_by(DilpApplication.created_at.desc()).limit(REPORT_ROW_LIMIT).all()
+
+
+def _to_manila_or_none(dt):
+    return to_manila(dt) if dt is not None else None
 
 
 def dilp_report_row(dilp_app: DilpApplication) -> dict:
+    """Every datetime field is converted via to_manila() before being returned — the row's
+    consumers (Excel's tzinfo-stripping cell writer, the PDF report) both format/strip
+    directly from these values with no further conversion, so they must already be
+    Manila-correct here rather than relying on whatever tzinfo Postgres happened to attach
+    to a freshly-queried row (see blueprints/dilp.py's _interview_date_time_strings for the
+    same class of bug this prevents)."""
     remarks_summary = " | ".join(r.remark for r in dilp_app.remarks) if dilp_app.remarks else None
     return {
         "reference_number": str(dilp_app.id),
@@ -94,12 +110,12 @@ def dilp_report_row(dilp_app: DilpApplication) -> dict:
         "proposed_livelihood": dilp_app.proposed_livelihood,
         "capital_needed": float(dilp_app.capital_needed) if dilp_app.capital_needed is not None else None,
         "status": dilp_app.status,
-        "created_at": dilp_app.created_at,
-        "interview_at": dilp_app.interview_at,
-        "completed_at": dilp_app.completed_at,
-        "ready_for_claiming_at": dilp_app.ready_for_claiming_at,
-        "approved_at": dilp_app.approved_at,
-        "submitted_to_esfo_at": dilp_app.submitted_to_esfo_at,
+        "created_at": _to_manila_or_none(dilp_app.created_at),
+        "interview_at": _to_manila_or_none(dilp_app.interview_at),
+        "completed_at": _to_manila_or_none(dilp_app.completed_at),
+        "ready_for_claiming_at": _to_manila_or_none(dilp_app.ready_for_claiming_at),
+        "approved_at": _to_manila_or_none(dilp_app.approved_at),
+        "submitted_to_esfo_at": _to_manila_or_none(dilp_app.submitted_to_esfo_at),
         "no_show_count": dilp_app.no_show_count,
         "remarks": remarks_summary,
     }

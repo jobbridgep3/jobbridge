@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
 import { ArrowLeft, FileText } from 'lucide-react'
 import { useState } from 'react'
@@ -16,6 +15,7 @@ import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
+import { manila } from '../../lib/manilaTime'
 import { fadeIn } from '../../lib/motion'
 
 export default function StaffSPESApplicationDetail() {
@@ -116,7 +116,7 @@ export default function StaffSPESApplicationDetail() {
                   {history.map((h) => (
                     <li key={h.label} className="flex items-center justify-between">
                       <span className="text-text-secondary">{h.label}</span>
-                      <span className="text-text-muted">{dayjs(h.at).format('MMM D, YYYY h:mm A')}</span>
+                      <span className="text-text-muted">{manila(h.at).format('MMM D, YYYY h:mm A')}</span>
                     </li>
                   ))}
                 </ul>

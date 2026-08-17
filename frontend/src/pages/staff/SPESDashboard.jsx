@@ -1,20 +1,39 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarClock, CheckCircle2, ClipboardList, GraduationCap, ScanLine, Users } from 'lucide-react'
 import { useState } from 'react'
 
+import { ApplicantTable } from '../../components/spes/ApplicantTable'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Label, Select } from '../../components/ui/Input'
 import { StatCard } from '../../components/ui/StatCard'
 import { ChartSkeleton } from '../../components/ui/Skeleton'
+import { useDebouncedValue } from '../../hooks/useDebouncedValue'
+import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 
 export function SPESDashboard({ batches, onNavigate }) {
+  const queryClient = useQueryClient()
   const [batchId, setBatchId] = useState('')
+  const [filters, setFilters] = useState({ batchId: '', status: '', search: '' })
+  const debouncedSearch = useDebouncedValue(filters.search)
+  const applicantParams = { batch_id: filters.batchId || undefined, status: filters.status || undefined, search: debouncedSearch || undefined }
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['staff', 'spes', 'dashboard', batchId],
     queryFn: async () => (await api.get('/api/staff/spes/dashboard', { params: { batch_id: batchId || undefined } })).data.data,
+  })
+
+  const { data: applications, isLoading: applicationsLoading } = useQuery({
+    queryKey: ['staff', 'spes', 'applications', applicantParams],
+    queryFn: async () => (await api.get('/api/staff/spes/applications', { params: applicantParams })).data.data,
+    placeholderData: keepPreviousData,
+  })
+
+  useSocket({
+    'spes:status_change': () => queryClient.invalidateQueries({ queryKey: ['staff', 'spes', 'applications'] }),
+    'spes:board_update': () => queryClient.invalidateQueries({ queryKey: ['staff', 'spes', 'applications'] }),
+    'spes:batch_update': () => queryClient.invalidateQueries({ queryKey: ['staff', 'spes', 'dashboard'] }),
   })
 
   return (
@@ -31,8 +50,8 @@ export function SPESDashboard({ batches, onNavigate }) {
             </Select>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="secondary" onClick={() => onNavigate('applicants')}>
-              <ClipboardList className="h-4 w-4" /> Review Applications
+            <Button size="sm" variant="secondary" onClick={() => onNavigate('schedules')}>
+              <ClipboardList className="h-4 w-4" /> Manage Schedules
             </Button>
             <Button size="sm" variant="secondary" onClick={() => onNavigate('scanner')}>
               <ScanLine className="h-4 w-4" /> Scan Attendance
@@ -55,6 +74,15 @@ export function SPESDashboard({ batches, onNavigate }) {
           <StatCard label="Exam Passed" value={stats.exam_passed} icon={CheckCircle2} tone="success" />
         </div>
       )}
+
+      <ApplicantTable
+        applications={applications}
+        isLoading={applicationsLoading}
+        batches={batches}
+        filters={filters}
+        onFilterChange={setFilters}
+        getRowLink={(app) => `/staff/spes/applicants/${app.id}`}
+      />
     </div>
   )
 }

@@ -13,7 +13,9 @@ import { Dialog, DialogContent } from '../../components/ui/Dialog'
 import { Input, Label } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { CardSkeleton } from '../../components/ui/Skeleton'
+import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
+import { manila } from '../../lib/manilaTime'
 import { fadeIn } from '../../lib/motion'
 
 function DressCodeDisplay({ dressCode }) {
@@ -39,7 +41,7 @@ function ScheduleCard({ label, when, venue, dressCode }) {
         {when ? (
           <>
             <p className="flex items-center gap-1.5 text-sm text-text-secondary">
-              <CalendarDays className="h-4 w-4" /> {dayjs(when).format('MMMM D, YYYY [at] h:mm A')}
+              <CalendarDays className="h-4 w-4" /> {manila(when).format('MMMM D, YYYY [at] h:mm A')}
             </p>
             {venue && (
               <p className="mt-1 flex items-center gap-1.5 text-sm text-text-secondary">
@@ -75,6 +77,10 @@ export default function JobseekerSPESBatchDetail() {
   const { data: profile } = useQuery({
     queryKey: ['profile'],
     queryFn: async () => (await api.get('/api/profile')).data.data,
+  })
+
+  useSocket({
+    'spes:batch_update': (p) => p.batch_id === batchId && queryClient.invalidateQueries({ queryKey: ['spes', 'batches', batchId] }),
   })
 
   const register = useMutation({

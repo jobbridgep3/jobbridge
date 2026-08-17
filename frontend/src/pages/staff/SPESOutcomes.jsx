@@ -13,6 +13,7 @@ import { TableSkeleton } from '../../components/ui/Skeleton'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { downloadFile, parseBlobError } from '../../lib/download'
+import { manila } from '../../lib/manilaTime'
 import { cn } from '../../lib/utils'
 
 // Attendance is recorded automatically by the QR scanner (see SPESScanner.jsx) — this
@@ -33,6 +34,8 @@ export function SPESOutcomes({ batches }) {
   const queryClient = useQueryClient()
   const [batchId, setBatchId] = useState('')
   const [mode, setMode] = useState('orientation')
+  const [subView, setSubView] = useState('pending') // 'pending' = awaiting decision, 'results' = already decided
+  const [resultFilter, setResultFilter] = useState('passed')
   const [selected, setSelected] = useState(new Set())
   const [remarks, setRemarks] = useState('')
   const [exporting, setExporting] = useState(null)
@@ -40,10 +43,13 @@ export function SPESOutcomes({ batches }) {
   const { confirm, ConfirmDialogElement } = useConfirmDialog()
 
   const config = MODES[mode]
+  const isResultsView = subView === 'results'
+  const queryStatus = isResultsView ? (resultFilter === 'passed' ? config.passedStatus : config.failedStatus) : config.sourceStatus
+  const resultAtField = mode === 'orientation' ? 'orientation_outcome_at' : 'exam_result_at'
 
   const { data: applications, isLoading } = useQuery({
-    queryKey: ['staff', 'spes', 'applications', { batchId, status: config.sourceStatus }],
-    queryFn: async () => (await api.get('/api/staff/spes/applications', { params: { batch_id: batchId, status: config.sourceStatus } })).data.data,
+    queryKey: ['staff', 'spes', 'applications', { batchId, status: queryStatus }],
+    queryFn: async () => (await api.get('/api/staff/spes/applications', { params: { batch_id: batchId, status: queryStatus } })).data.data,
     enabled: Boolean(batchId),
   })
 
@@ -143,6 +149,38 @@ export function SPESOutcomes({ batches }) {
       </Card>
 
       <Card>
+        <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <Label>View</Label>
+            <div className="flex rounded-lg border border-border-hover bg-surface p-0.5">
+              {[
+                { key: 'pending', label: 'Pending Decisions' },
+                { key: 'results', label: 'Results' },
+              ].map((v) => (
+                <button
+                  key={v.key}
+                  type="button"
+                  onClick={() => { setSubView(v.key); resetSelection() }}
+                  className={cn('flex-1 rounded-md px-3 py-1.5 text-sm font-medium', subView === v.key ? 'bg-primary-800 text-white' : 'text-text-secondary hover:bg-surface-hover')}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {isResultsView && (
+            <div>
+              <Label>Result</Label>
+              <Select value={resultFilter} onChange={(e) => setResultFilter(e.target.value)}>
+                <option value="passed">Passed</option>
+                <option value="failed">Failed</option>
+              </Select>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm text-text-secondary">Export applicants who {mode === 'orientation' ? 'passed or failed Orientation/Interview' : 'passed or failed the Exam'}:</p>
           <div className="flex flex-wrap gap-2">
@@ -167,7 +205,41 @@ export function SPESOutcomes({ batches }) {
       ) : isLoading ? (
         <TableSkeleton />
       ) : !applications?.length ? (
-        <EmptyState title="No applicants at this stage" description={`No applicants have attended ${mode === 'orientation' ? 'orientation' : 'the exam'} yet in this batch, awaiting a result.`} />
+        <EmptyState
+          title={isResultsView ? `No ${resultFilter} applicants` : 'No applicants at this stage'}
+          description={
+            isResultsView
+              ? `No applicants in this batch have been marked ${resultFilter} for ${mode === 'orientation' ? 'Orientation/Interview' : 'the Exam'} yet.`
+              : `No applicants have attended ${mode === 'orientation' ? 'orientation' : 'the exam'} yet in this batch, awaiting a result.`
+          }
+        />
+      ) : isResultsView ? (
+        <Card>
+          <CardContent className="space-y-2">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="text-xs uppercase text-text-muted">
+                  <tr>
+                    <th className="px-2 py-2">Applicant</th>
+                    <th className="px-2 py-2">Result</th>
+                    <th className="px-2 py-2">Result Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border-subtle">
+                  {applications.map((app) => (
+                    <tr key={app.id}>
+                      <td className="px-2 py-2 text-text-primary">{app.full_name}</td>
+                      <td className="px-2 py-2 capitalize text-text-secondary">{resultFilter}</td>
+                      <td className="px-2 py-2 text-text-muted">
+                        {app[resultAtField] ? manila(app[resultAtField]).format('MMM D, YYYY h:mm A') : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       ) : (
         <>
           {selected.size > 0 && (

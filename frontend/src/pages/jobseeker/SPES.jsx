@@ -18,6 +18,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { downloadFile, parseBlobError } from '../../lib/download'
+import { manila } from '../../lib/manilaTime'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
 import { cn } from '../../lib/utils'
 
@@ -153,7 +154,7 @@ function ApplicationCard({ application, onChanged }) {
           <div className="rounded-lg border border-border-subtle p-3">
             <p className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-text-primary"><MapPin className="h-4 w-4" /> PESO Office Appointment</p>
             {application.peso_appointment_at ? (
-              <p className="text-sm text-text-secondary">{dayjs(application.peso_appointment_at).format('MMMM D, YYYY [at] h:mm A')} — PESO Pila Office</p>
+              <p className="text-sm text-text-secondary">{manila(application.peso_appointment_at).format('MMMM D, YYYY [at] h:mm A')} — PESO Pila Office</p>
             ) : (
               <p className="text-sm text-text-muted">Awaiting your PESO Office appointment — you'll be notified once it's scheduled.</p>
             )}

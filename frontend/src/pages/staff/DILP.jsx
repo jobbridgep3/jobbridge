@@ -30,7 +30,7 @@ export default function StaffDILP() {
   const [search, setSearch] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [exporting, setExporting] = useState(false)
+  const [exporting, setExporting] = useState(null)
 
   const params = { status: status || undefined, search: search || undefined, date_from: dateFrom || undefined, date_to: dateTo || undefined }
 
@@ -50,14 +50,16 @@ export default function StaffDILP() {
 
   useSocket({ 'dilp:board_update': () => queryClient.invalidateQueries({ queryKey: ['staff', 'dilp'] }) })
 
-  const handleExport = async () => {
-    setExporting(true)
+  const handleExport = async (format) => {
+    setExporting(format)
     try {
-      await downloadFile('/api/staff/dilp/export/excel', { params, filename: 'dilp_report.xlsx' })
+      await downloadFile(`/api/staff/dilp/export/${format}`, {
+        params, filename: `dilp_report.${format === 'excel' ? 'xlsx' : 'pdf'}`,
+      })
     } catch (err) {
       toast.error(await parseBlobError(err))
     } finally {
-      setExporting(false)
+      setExporting(null)
     }
   }
 
@@ -116,8 +118,11 @@ export default function StaffDILP() {
                 </button>
               ))}
             </div>
-            <Button variant="secondary" size="sm" onClick={handleExport} disabled={exporting}>
-              <Download className="h-4 w-4" /> {exporting ? 'Exporting…' : 'Export Excel'}
+            <Button variant="secondary" size="sm" onClick={() => handleExport('excel')} disabled={exporting === 'excel'}>
+              <Download className="h-4 w-4" /> {exporting === 'excel' ? 'Exporting…' : 'Export Excel'}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => handleExport('pdf')} disabled={exporting === 'pdf'}>
+              <Download className="h-4 w-4" /> {exporting === 'pdf' ? 'Exporting…' : 'Export PDF'}
             </Button>
           </>
         }

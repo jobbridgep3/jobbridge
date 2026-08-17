@@ -13,6 +13,7 @@ import { Input, Label, Select } from '../../components/ui/Input'
 import { TimePicker } from '../../components/ui/TimePicker'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
+import { manila } from '../../lib/manilaTime'
 import { cn } from '../../lib/utils'
 
 function to12h(time24) {
@@ -25,8 +26,8 @@ function to24h(time12) {
 function ScheduleForm({ batch, event, onSaved }) {
   const { confirm, ConfirmDialogElement } = useConfirmDialog()
   const prefix = event // 'orientation' | 'exam'
-  const [date, setDate] = useState(batch[`${prefix}_at`] ? dayjs(batch[`${prefix}_at`]).format('YYYY-MM-DD') : '')
-  const [time, setTime] = useState(batch[`${prefix}_at`] ? dayjs(batch[`${prefix}_at`]).format('HH:mm') : '')
+  const [date, setDate] = useState(batch[`${prefix}_at`] ? manila(batch[`${prefix}_at`]).format('YYYY-MM-DD') : '')
+  const [time, setTime] = useState(batch[`${prefix}_at`] ? manila(batch[`${prefix}_at`]).format('HH:mm') : '')
   const [venue, setVenue] = useState(batch[`${prefix}_venue`] || '')
   const [dressCode, setDressCode] = useState(batch[`${prefix}_dress_code`] || { top: [], bottom: [], footwear: [] })
 
@@ -92,7 +93,7 @@ export function SPESBatchSchedule({ batches }) {
   const batch = (batches || []).find((b) => b.id === batchId)
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['staff', 'spes'] })
-  useSocket({ 'spes:status_change': invalidate })
+  useSocket({ 'spes:status_change': invalidate, 'spes:batch_update': invalidate })
 
   return (
     <div className="space-y-4">

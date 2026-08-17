@@ -38,7 +38,7 @@ export default function AdminDILP() {
   const isMobile = useIsMobile()
   const chartHeight = isMobile ? 220 : 260
   const [status, setStatus] = useState('')
-  const [exporting, setExporting] = useState(false)
+  const [exporting, setExporting] = useState(null)
 
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['dilp', 'stats'],
@@ -58,14 +58,16 @@ export default function AdminDILP() {
 
   useSocket({ 'dilp:board_update': () => queryClient.invalidateQueries({ queryKey: ['dilp'] }) })
 
-  const handleExport = async () => {
-    setExporting(true)
+  const handleExport = async (format) => {
+    setExporting(format)
     try {
-      await downloadFile('/api/staff/dilp/export/excel', { params: status ? { status } : {}, filename: 'dilp_report.xlsx' })
+      await downloadFile(`/api/staff/dilp/export/${format}`, {
+        params: status ? { status } : {}, filename: `dilp_report.${format === 'excel' ? 'xlsx' : 'pdf'}`,
+      })
     } catch (err) {
       toast.error(await parseBlobError(err))
     } finally {
-      setExporting(false)
+      setExporting(null)
     }
   }
 
@@ -103,9 +105,14 @@ export default function AdminDILP() {
         title="DILP — Livelihood Assistance"
         description="Read-only oversight of all DOLE Integrated Livelihood Program applications."
         actions={
-          <Button variant="secondary" size="sm" onClick={handleExport} disabled={exporting}>
-            <Download className="h-4 w-4" /> {exporting ? 'Exporting…' : 'Export Excel'}
-          </Button>
+          <>
+            <Button variant="secondary" size="sm" onClick={() => handleExport('excel')} disabled={exporting === 'excel'}>
+              <Download className="h-4 w-4" /> {exporting === 'excel' ? 'Exporting…' : 'Export Excel'}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => handleExport('pdf')} disabled={exporting === 'pdf'}>
+              <Download className="h-4 w-4" /> {exporting === 'pdf' ? 'Exporting…' : 'Export PDF'}
+            </Button>
+          </>
         }
       />
 

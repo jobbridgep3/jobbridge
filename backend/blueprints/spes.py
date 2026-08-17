@@ -40,7 +40,7 @@ from services.email_service import (
     send_spes_result_passed_email,
 )
 from services.excel_service import build_excel_report, build_multi_sheet_excel_report
-from services.notification_service import notify_board, notify_user
+from services.notification_service import notify_board, notify_role, notify_user
 from services.pdf_service import (
     SPES_STAT_LABELS,
     generate_spes_application_form,
@@ -51,7 +51,7 @@ from services.pdf_service import (
 from services.qr_service import generate_qr_data_url
 from utils.decorators import role_required
 from utils.responses import fail, ok
-from utils.timezone import MANILA_TZ, now_manila
+from utils.timezone import MANILA_TZ, now_manila, to_manila
 
 spes_bp = Blueprint("spes", __name__, url_prefix="/api")
 
@@ -74,6 +74,17 @@ def _notify_board(application: SpesApplication, title: str, message: str):
         "spes_board", title, message,
         socket_event="spes:board_update", socket_payload=payload,
     )
+
+
+def _ping_batch(batch_id):
+    """Lightweight live-refresh broadcast (no persisted bell notification) for a batch-level
+    edit (admin batch info, close, archive, or staff schedule save) — every connected staff,
+    admin, and jobseeker socket gets the ping; only sessions with that batch's data actually
+    on screen will invalidate/refetch, so it's safe and cheap to broadcast broadly rather than
+    tracking exactly who's affected."""
+    payload = {"batch_id": str(batch_id)}
+    for role in ("staff", "admin", "jobseeker"):
+        notify_role(role, "spes:batch_update", payload)
 
 
 def _notify_spes_orientation_result(application: SpesApplication, result: str):
@@ -424,6 +435,7 @@ def staff_set_spes_orientation_schedule(batch_id):
             application.jobseeker_profile.user.email, application.full_name, batch.batch_name, date_str, time_str, venue, dress_code,
         )
         _notify_jobseeker(application, "SPES orientation scheduled", f"Orientation for {batch.batch_name} is scheduled on {date_str} at {time_str}.")
+    _ping_batch(batch.id)
     return ok(batch.to_dict(), f"Orientation schedule saved — {len(applications)} applicant(s) notified.")
 
 
@@ -463,6 +475,7 @@ def staff_set_spes_exam_schedule(batch_id):
             application.jobseeker_profile.user.email, application.full_name, batch.batch_name, date_str, time_str, venue, dress_code,
         )
         _notify_jobseeker(application, "SPES exam scheduled", f"Your SPES exam for {batch.batch_name} is scheduled on {date_str} at {time_str}.")
+    _ping_batch(batch.id)
     return ok(batch.to_dict(), f"Exam schedule saved — {len(applications)} applicant(s) notified.")
 
 
@@ -796,7 +809,7 @@ def _spes_applicants_export_data(args):
     table_rows = [
         [
             r["jobseeker_name"], r["batch_name"], r["address"] or "Not provided", r["contact_number"] or "Not provided",
-            r["submitted_at"].strftime("%b %d, %Y") if r["submitted_at"] else "",
+            to_manila(r["submitted_at"]).strftime("%b %d, %Y") if r["submitted_at"] else "",
             r["gwa"] if r["gwa"] is not None else "",
             f"₱{r['family_income']:,.2f}" if r["family_income"] is not None else "",
             r["status"].replace("_", " ").title(),
@@ -851,8 +864,8 @@ def _spes_attendance_export_data(args):
     table_rows = [
         [
             log.application.full_name, batch.batch_name, event_type.title(),
-            log.scanned_at.strftime("%b %d, %Y") if log.scanned_at else "",
-            log.scanned_at.strftime("%I:%M %p") if log.scanned_at else "",
+            to_manila(log.scanned_at).strftime("%b %d, %Y") if log.scanned_at else "",
+            to_manila(log.scanned_at).strftime("%I:%M %p") if log.scanned_at else "",
             "Present", log.application.application_ref_no,
         ]
         for log in logs
@@ -922,9 +935,9 @@ def _spes_outcomes_export_data(args):
             row["jobseeker_name"], row["batch_name"], row["address"] or "Not provided", row["contact_number"] or "Not provided",
             row["gwa"] if row["gwa"] is not None else "",
             f"₱{row['family_income']:,.2f}" if row["family_income"] is not None else "",
-            row["submitted_at"].strftime("%b %d, %Y") if row["submitted_at"] else "",
+            to_manila(row["submitted_at"]).strftime("%b %d, %Y") if row["submitted_at"] else "",
             result.title(),
-            result_at.strftime("%b %d, %Y %I:%M %p") if result_at else "",
+            to_manila(result_at).strftime("%b %d, %Y %I:%M %p") if result_at else "",
             remarks or "",
         ])
     batch_name = SpesBatch.query.get(batch_id).batch_name if batch_id else None
@@ -1023,6 +1036,7 @@ def admin_update_spes_batch(batch_id):
     _apply_batch_fields(batch, data)
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Update", "spes_batch", batch.id)
+    _ping_batch(batch.id)
     return ok(batch.to_dict(), "Batch updated.")
 
 
@@ -1039,6 +1053,7 @@ def admin_close_spes_batch(batch_id):
     batch.closed_at = now_manila()
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Update", "spes_batch", batch.id, details="Closed")
+    _ping_batch(batch.id)
     return ok(batch.to_dict(), "Batch closed.")
 
 
@@ -1054,6 +1069,7 @@ def admin_archive_spes_batch(batch_id):
     batch.status = "archived"
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Update", "spes_batch", batch.id, details="Archived")
+    _ping_batch(batch.id)
     return ok(batch.to_dict(), "Batch archived.")
 
 

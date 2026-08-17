@@ -13,6 +13,7 @@ import { CardSkeleton } from '../../components/ui/Skeleton'
 import { TimePicker } from '../../components/ui/TimePicker'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
+import { manila } from '../../lib/manilaTime'
 
 function to12h(time24) {
   return time24 ? dayjs(time24, 'HH:mm').format('h:mm A') : ''
@@ -111,7 +112,7 @@ export function SPESAppointments() {
                 <CardHeader><CardTitle>{app.full_name}</CardTitle></CardHeader>
                 <CardContent>
                   <p className="text-sm text-text-secondary">{app.batch_name}</p>
-                  <p className="text-xs text-text-muted">PESO Office — {dayjs(app.peso_appointment_at).format('MMMM D, YYYY [at] h:mm A')}</p>
+                  <p className="text-xs text-text-muted">PESO Office — {manila(app.peso_appointment_at).format('MMMM D, YYYY [at] h:mm A')}</p>
                 </CardContent>
               </Card>
             ))}

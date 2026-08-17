@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { CalendarClock, GraduationCap, Users } from 'lucide-react'
 
@@ -6,13 +6,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Ca
 import { EmptyState } from '../../components/ui/EmptyState'
 import { StatCard } from '../../components/ui/StatCard'
 import { ChartSkeleton } from '../../components/ui/Skeleton'
+import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 
 export function SPESOverview() {
+  const queryClient = useQueryClient()
+  const queryKey = ['admin', 'spes', 'overview']
   const { data, isLoading } = useQuery({
-    queryKey: ['admin', 'spes', 'overview'],
+    queryKey,
     queryFn: async () => (await api.get('/api/admin/spes/overview')).data.data,
   })
+
+  useSocket({ 'spes:batch_update': () => queryClient.invalidateQueries({ queryKey }) })
 
   if (isLoading || !data) return <ChartSkeleton />
 

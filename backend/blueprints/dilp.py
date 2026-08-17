@@ -37,7 +37,7 @@ from services.excel_service import build_multi_sheet_excel_report
 from services.notification_service import notify_board, notify_role, notify_user
 from utils.decorators import role_required
 from utils.responses import fail, ok
-from utils.timezone import now_manila, parse_manila
+from utils.timezone import manila_day_bounds, now_manila, parse_manila, to_manila
 
 dilp_bp = Blueprint("dilp", __name__, url_prefix="/api")
 
@@ -90,11 +90,18 @@ def _ping_board(dilp_app_id):
 
 
 def _interview_date_time_strings(dilp_app: DilpApplication):
-    """interview_at is already Manila-aware (written via parse_manila) — format directly,
-    never re-localize."""
+    """interview_at is written via parse_manila, but Flask-SQLAlchemy expires ORM objects
+    on commit (default expire_on_commit=True) — a post-commit attribute access re-fetches
+    from Postgres, and no DB session here pins Asia/Manila, so the re-fetched value comes
+    back UTC-tagged. to_manila() is safe to call regardless of which case this is: it always
+    converts *to* Manila from whatever tzinfo is actually present, so it's a no-op for an
+    already-Manila-aware value and a correct conversion for a UTC-re-fetched one — never a
+    double conversion. Formatting the raw attribute directly (bypassing this) is what
+    produced the "10:00 AM shows as 2:00 AM in the email" bug."""
     if not dilp_app.interview_at:
         return None, None
-    return dilp_app.interview_at.strftime("%B %d, %Y"), dilp_app.interview_at.strftime("%I:%M %p")
+    manila_dt = to_manila(dilp_app.interview_at)
+    return manila_dt.strftime("%B %d, %Y"), manila_dt.strftime("%I:%M %p")
 
 
 def _record_transition(dilp_app: DilpApplication, new_status: str, actor_user: User, note: str = None):
@@ -126,6 +133,22 @@ def _record_transition(dilp_app: DilpApplication, new_status: str, actor_user: U
     title, message = _STATUS_NOTIFICATIONS.get(new_status, (f"DILP application {new_status}", None))
     _notify_jobseeker(dilp_app, title, message)
     _notify_board(dilp_app, title, f"{profile.full_name if profile else 'An applicant'}'s DILP application was marked {new_status.replace('_', ' ')}.")
+
+
+def _apply_dilp_filters(query, args):
+    """Single source of truth for DILP status/search/date-range filtering — used by the
+    staff queue, Excel export, and PDF export alike, so the table and every export can
+    never disagree about which records match the active filters."""
+    if args.get("status"):
+        query = query.filter(DilpApplication.status == args["status"])
+    if args.get("search"):
+        query = query.filter(JobseekerProfile.full_name.ilike(f"%{args['search']}%"))
+    start, end = manila_day_bounds(args.get("date_from"), args.get("date_to"))
+    if start:
+        query = query.filter(DilpApplication.created_at >= start)
+    if end:
+        query = query.filter(DilpApplication.created_at < end)
+    return query
 
 
 def _transition(application_id, expected_statuses, error_message):
@@ -269,15 +292,7 @@ def delete_dilp_document(document_id):
 @role_required("staff", "admin")
 def staff_dilp_queue():
     query = DilpApplication.query.options(*_EAGER_LOAD).join(JobseekerProfile)
-    if request.args.get("status"):
-        query = query.filter(DilpApplication.status == request.args["status"])
-    if request.args.get("search"):
-        query = query.filter(JobseekerProfile.full_name.ilike(f"%{request.args['search']}%"))
-    if request.args.get("date_from"):
-        query = query.filter(DilpApplication.created_at >= request.args["date_from"])
-    if request.args.get("date_to"):
-        query = query.filter(DilpApplication.created_at <= request.args["date_to"] + "T23:59:59")
-
+    query = _apply_dilp_filters(query, request.args)
     applications = query.order_by(DilpApplication.created_at.desc()).all()
     return ok([a.to_dict() for a in applications])
 
@@ -311,11 +326,36 @@ def staff_dilp_analytics():
     return ok(dilp_reporting_service.build_dilp_analytics(months))
 
 
+def _parse_dilp_report_filters(args):
+    return {
+        "status": args.get("status") or None,
+        "search": args.get("search") or None,
+        "date_from": args.get("date_from") or None,
+        "date_to": args.get("date_to") or None,
+    }
+
+
+_DILP_APPLICATION_COLUMNS = [
+    "Reference Number", "Applicant", "Email", "Proposed Livelihood", "Capital Needed", "Status",
+    "Date Submitted", "Interview Date", "Completed Date", "Ready for Claiming Date",
+    "Approved Date", "Submitted to ESFO Date", "No-Show Count", "Remarks",
+]
+
+
+def _dilp_application_row_values(d):
+    return [
+        d["reference_number"], d["jobseeker_name"], d["email"], d["proposed_livelihood"], d["capital_needed"],
+        d["status"], d["created_at"], d["interview_at"], d["completed_at"], d["ready_for_claiming_at"],
+        d["approved_at"], d["submitted_to_esfo_at"], d["no_show_count"], d["remarks"],
+    ]
+
+
 @dilp_bp.get("/staff/dilp/export/excel")
 @jwt_required()
 @role_required("staff", "admin")
 def export_dilp_excel():
-    applications = dilp_reporting_service.query_dilp_applications_for_report()
+    filters = _parse_dilp_report_filters(request.args)
+    applications = dilp_reporting_service.query_dilp_applications_for_report(**filters)
     stats = dilp_reporting_service.build_dilp_stats()
     user = User.query.get(get_jwt_identity())
     date_str = datetime.utcnow().strftime("%B %d, %Y %I:%M %p UTC")
@@ -327,31 +367,37 @@ def export_dilp_excel():
         ["Metric", "Value"],
         *[[k.replace("_", " ").title(), v] for k, v in stats.items()],
     ]
-    application_rows = [
-        [
-            d["reference_number"], d["jobseeker_name"], d["email"], d["proposed_livelihood"], d["capital_needed"],
-            d["status"], d["created_at"], d["interview_at"], d["completed_at"], d["ready_for_claiming_at"],
-            d["approved_at"], d["submitted_to_esfo_at"], d["no_show_count"], d["remarks"],
-        ]
-        for d in (dilp_reporting_service.dilp_report_row(a) for a in applications)
-    ]
+    application_rows = [_dilp_application_row_values(d) for d in (dilp_reporting_service.dilp_report_row(a) for a in applications)]
 
     buf = build_multi_sheet_excel_report([
         ("Summary", ["PESO Pila, Laguna — DILP Report", ""], summary_rows),
-        (
-            "Applications",
-            [
-                "Reference Number", "Applicant", "Email", "Proposed Livelihood", "Capital Needed", "Status",
-                "Date Submitted", "Interview Date", "Completed Date", "Ready for Claiming Date",
-                "Approved Date", "Submitted to ESFO Date", "No-Show Count", "Remarks",
-            ],
-            application_rows,
-        ),
-    ])
+        ("Applications", _DILP_APPLICATION_COLUMNS, application_rows),
+    ], landscape=True)
     log_audit(user, "Export", "dilp_report", details="excel")
     return send_file(
         buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         as_attachment=True, download_name="dilp_report.xlsx",
+    )
+
+
+@dilp_bp.get("/staff/dilp/export/pdf")
+@jwt_required()
+@role_required("staff", "admin")
+def export_dilp_pdf():
+    from services.pdf_service import generate_dilp_report, to_bytesio
+
+    filters = _parse_dilp_report_filters(request.args)
+    applications = dilp_reporting_service.query_dilp_applications_for_report(**filters)
+    stats = dilp_reporting_service.build_dilp_stats()
+    user = User.query.get(get_jwt_identity())
+    date_str = datetime.utcnow().strftime("%B %d, %Y %I:%M %p UTC")
+
+    rows = [dilp_reporting_service.dilp_report_row(a) for a in applications]
+    pdf_bytes = generate_dilp_report(stats, rows, date_str, user.email, user.role)
+    log_audit(user, "Export", "dilp_report", details="pdf")
+    return send_file(
+        to_bytesio(pdf_bytes), mimetype="application/pdf",
+        as_attachment=True, download_name="dilp_report.pdf",
     )
 
 

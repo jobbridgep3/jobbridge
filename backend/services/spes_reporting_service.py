@@ -4,7 +4,7 @@ dashboard/report summary cards, query_*_for_report()/*_report_row() for Excel/PD
 exports.
 """
 
-from datetime import date, timedelta
+from datetime import date
 
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload
@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from extensions import db
 from models.spes import SPES_APPLICATION_STATUSES, SpesApplication, SpesAttendanceLog, SpesBatch
 from services.dashboard_service import _month_buckets
+from utils.timezone import manila_day_bounds, to_manila
 
 REPORT_ROW_LIMIT = 20000
 
@@ -28,15 +29,24 @@ ORIENTATION_PASSED_STATUSES = ("orientation_passed", "attended_exam", "passed", 
 def _spes_application_filters(query, batch_id=None, status=None, date_from=None, date_to=None, search=None):
     """Shared filter logic applied consistently to every SpesApplication-based query
     across stats/report/export, so on-screen numbers, tables, and exports can never
-    diverge for the same set of active filters."""
+    diverge for the same set of active filters.
+
+    date_from/date_to boundaries go through manila_day_bounds() rather than a raw
+    date/string comparison against submitted_at (a DateTime(timezone=True) column) —
+    comparing a bare date directly lets Postgres cast it using the DB session's timezone
+    (UTC, since no session here pins Asia/Manila), silently shifting the intended Manila
+    day boundary by 8 hours and excluding early-morning Manila submissions from a "today"
+    filter. manila_day_bounds() works whether date_from/date_to arrive as 'YYYY-MM-DD'
+    strings or date objects (str() of either interpolates the same way)."""
     if batch_id:
         query = query.filter(SpesApplication.batch_id == batch_id)
     if status:
         query = query.filter(SpesApplication.status == status)
-    if date_from:
-        query = query.filter(SpesApplication.submitted_at >= date_from)
-    if date_to:
-        query = query.filter(SpesApplication.submitted_at < date_to + timedelta(days=1))
+    start, end = manila_day_bounds(date_from, date_to)
+    if start:
+        query = query.filter(SpesApplication.submitted_at >= start)
+    if end:
+        query = query.filter(SpesApplication.submitted_at < end)
     if search:
         query = query.filter(SpesApplication.full_name.ilike(f"%{search}%"))
     return query
@@ -164,7 +174,15 @@ def spes_applicant_address(jobseeker_profile) -> str | None:
     return ", ".join(filter(None, [jobseeker_profile.barangay, jobseeker_profile.municipality, jobseeker_profile.province])) or jobseeker_profile.address
 
 
+def _to_manila_or_none(dt):
+    return to_manila(dt) if dt is not None else None
+
+
 def spes_report_row(application: SpesApplication) -> dict:
+    """Every datetime field is converted via to_manila() before being returned, so any
+    downstream .strftime() call formats a Manila-correct value regardless of what tzinfo
+    Postgres happened to attach to this freshly-queried row — see blueprints/dilp.py's
+    _interview_date_time_strings for the same class of bug this prevents."""
     logged_events = {log.event_type for log in application.attendance_logs}
     profile = application.jobseeker_profile
     return {
@@ -176,10 +194,10 @@ def spes_report_row(application: SpesApplication) -> dict:
         "family_income": float(application.family_income) if application.family_income is not None else None,
         "contact_number": profile.contact_number if profile else None,
         "address": spes_applicant_address(profile),
-        "submitted_at": application.submitted_at,
-        "reviewed_at": application.reviewed_at,
+        "submitted_at": _to_manila_or_none(application.submitted_at),
+        "reviewed_at": _to_manila_or_none(application.reviewed_at),
         "orientation_attended": "orientation" in logged_events,
-        "orientation_outcome_at": application.orientation_outcome_at,
+        "orientation_outcome_at": _to_manila_or_none(application.orientation_outcome_at),
         "exam_attended": "exam" in logged_events,
-        "exam_result_at": application.exam_result_at,
+        "exam_result_at": _to_manila_or_none(application.exam_result_at),
     }
