@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import dayjs from 'dayjs'
-import { FileText, Megaphone } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText, Megaphone } from 'lucide-react'
 import { useState } from 'react'
 
 import { AnnouncementCard } from './AnnouncementCard'
@@ -20,7 +20,9 @@ import { useAuthStore } from '../../store/authStore'
  * bar) differs between the two. */
 export function AnnouncementContent({ id, basePath = '/announcements' }) {
   const token = useAuthStore((s) => s.token)
-  const [lightbox, setLightbox] = useState(null)
+  // Index into gallery_images (not a URL) so the lightbox can navigate prev/next
+  // without needing to re-look-up position from a URL.
+  const [lightboxIndex, setLightboxIndex] = useState(null)
 
   const { data: announcement, isLoading, error } = useQuery({
     queryKey: ['announcements', id, Boolean(token)],
@@ -36,6 +38,10 @@ export function AnnouncementContent({ id, basePath = '/announcements' }) {
       <EmptyState icon={Megaphone} title="Announcement not found" description="It may have been unpublished or you don't have access to it." />
     )
   }
+
+  const galleryImages = announcement.gallery_images || []
+  const showPrevImage = () => setLightboxIndex((i) => (i - 1 + galleryImages.length) % galleryImages.length)
+  const showNextImage = () => setLightboxIndex((i) => (i + 1) % galleryImages.length)
 
   return (
     <div className="space-y-6">
@@ -68,7 +74,7 @@ export function AnnouncementContent({ id, basePath = '/announcements' }) {
                     src={img.url}
                     alt={img.name || ''}
                     className="aspect-square cursor-pointer rounded-lg object-cover"
-                    onClick={() => setLightbox(img.url)}
+                    onClick={() => setLightboxIndex(i)}
                   />
                 ))}
               </div>
@@ -99,9 +105,36 @@ export function AnnouncementContent({ id, basePath = '/announcements' }) {
         </div>
       )}
 
-      <Dialog open={!!lightbox} onOpenChange={(open) => !open && setLightbox(null)}>
+      <Dialog open={lightboxIndex !== null} onOpenChange={(open) => !open && setLightboxIndex(null)}>
         <DialogContent className="max-w-3xl">
-          {lightbox && <img src={lightbox} alt="" className="w-full rounded-lg object-contain" />}
+          {lightboxIndex !== null && (
+            <div className="relative">
+              <img src={galleryImages[lightboxIndex].url} alt="" className="w-full rounded-lg object-contain" />
+              {galleryImages.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={showPrevImage}
+                    aria-label="Previous image"
+                    className="absolute left-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-surface/80 text-text-secondary shadow hover:bg-surface"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={showNextImage}
+                    aria-label="Next image"
+                    className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-surface/80 text-text-secondary shadow hover:bg-surface"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-slate-900/60 px-2 py-0.5 text-xs text-white">
+                    {lightboxIndex + 1} / {galleryImages.length}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
