@@ -41,7 +41,19 @@ def _spes_application_filters(query, batch_id=None, status=None, date_from=None,
     if batch_id:
         query = query.filter(SpesApplication.batch_id == batch_id)
     if status:
-        query = query.filter(SpesApplication.status == status)
+        if status == "orientation_passed":
+            # Cumulative, not exact-match: once an applicant passes orientation they
+            # move on to attended_exam/passed/failed and no longer carry this literal
+            # status, but they DID pass orientation — a "give me who passed
+            # orientation" filter must still include them. Matches the cumulative
+            # semantics _orientation_result_label() below already uses for display
+            # labeling (identical status set, just never applied to filtering until
+            # now). failed_orientation/passed/failed and every other status are
+            # genuinely terminal or intentionally current-status-only, so they stay
+            # an exact match.
+            query = query.filter(SpesApplication.status.in_(ORIENTATION_PASSED_STATUSES))
+        else:
+            query = query.filter(SpesApplication.status == status)
     start, end = manila_day_bounds(date_from, date_to)
     if start:
         query = query.filter(SpesApplication.submitted_at >= start)
@@ -178,26 +190,63 @@ def _to_manila_or_none(dt):
     return to_manila(dt) if dt is not None else None
 
 
+def _orientation_result_label(status: str) -> str:
+    """"Passed" is cumulative (ORIENTATION_PASSED_STATUSES), not exact-match, mirroring
+    the filter fix above — an applicant who has since progressed to the exam stage
+    still passed orientation. Both the Excel export (which uses this dict directly) and
+    the PDF export (via pdf_service.generate_spes_report, fed this same row dict) show
+    the identical label."""
+    if status == "failed_orientation":
+        return "Failed"
+    if status in ORIENTATION_PASSED_STATUSES:
+        return "Passed"
+    return "Pending"
+
+
+def _exam_result_label(status: str) -> str:
+    if status == "passed":
+        return "Passed"
+    if status == "failed":
+        return "Failed"
+    return "Pending"
+
+
 def spes_report_row(application: SpesApplication) -> dict:
     """Every datetime field is converted via to_manila() before being returned, so any
     downstream .strftime() call formats a Manila-correct value regardless of what tzinfo
     Postgres happened to attach to this freshly-queried row — see blueprints/dilp.py's
-    _interview_date_time_strings for the same class of bug this prevents."""
+    _interview_date_time_strings for the same class of bug this prevents.
+
+    Comprehensive — covers every applicant-facing field that actually exists in the
+    system (application + jobseeker profile + batch schedule), for the Excel/PDF export's
+    "complete applicant details" requirement. Nothing invented: fields with no data are
+    simply None/False and rendered as an em dash by the export layer."""
     logged_events = {log.event_type for log in application.attendance_logs}
     profile = application.jobseeker_profile
+    batch = application.batch
     return {
         "application_ref_no": application.application_ref_no,
         "jobseeker_name": application.full_name,
-        "batch_name": application.batch.batch_name if application.batch else None,
+        "email": profile.user.email if profile and profile.user else None,
+        "batch_name": batch.batch_name if batch else None,
         "status": application.status,
+        "status_label": application.status.replace("_", " ").title(),
         "gwa": float(application.gwa) if application.gwa is not None else None,
         "family_income": float(application.family_income) if application.family_income is not None else None,
         "contact_number": profile.contact_number if profile else None,
+        "date_of_birth": application.date_of_birth,
         "address": spes_applicant_address(profile),
         "submitted_at": _to_manila_or_none(application.submitted_at),
         "reviewed_at": _to_manila_or_none(application.reviewed_at),
+        "orientation_at": _to_manila_or_none(batch.orientation_at) if batch else None,
         "orientation_attended": "orientation" in logged_events,
+        "orientation_attendance_label": "Attended" if "orientation" in logged_events else "Absent",
         "orientation_outcome_at": _to_manila_or_none(application.orientation_outcome_at),
+        "orientation_result_label": _orientation_result_label(application.status),
+        "exam_at": _to_manila_or_none(batch.exam_at) if batch else None,
         "exam_attended": "exam" in logged_events,
+        "exam_attendance_label": "Attended" if "exam" in logged_events else "Absent",
         "exam_result_at": _to_manila_or_none(application.exam_result_at),
+        "exam_result_label": _exam_result_label(application.status),
+        "peso_appointment_at": _to_manila_or_none(application.peso_appointment_at),
     }

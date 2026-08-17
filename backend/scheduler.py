@@ -71,6 +71,32 @@ def _auto_close_vacancies(app):
             logger.info("APScheduler: auto-closed %d vacancy(ies).", len(due))
 
 
+def _auto_close_spes_batches(app):
+    """open -> closed once registration_deadline passes (end of that Manila calendar
+    day) — idempotent, only touches batches still open with a passed deadline. Emits
+    the same spes:batch_update broadcast the SPES blueprint already uses for batch
+    edits/close/archive, so every Staff/Admin/Jobseeker page already listening for it
+    (from the SPES realtime fixes) picks this up live with no new listener wiring."""
+    with app.app_context():
+        from extensions import db
+        from models.spes import SpesBatch
+        from services.notification_service import notify_role
+        from utils.timezone import now_manila
+
+        today = now_manila().date()
+        due = SpesBatch.query.filter(SpesBatch.status == "open", SpesBatch.registration_deadline < today).all()
+        for batch in due:
+            batch.status = "closed"
+            batch.closed_at = now_manila()
+        if due:
+            db.session.commit()
+            for batch in due:
+                payload = {"batch_id": str(batch.id)}
+                for role in ("staff", "admin", "jobseeker"):
+                    notify_role(role, "spes:batch_update", payload)
+            logger.info("APScheduler: auto-closed %d SPES batch(es).", len(due))
+
+
 def _send_interview_reminders(app):
     """Notifies both the jobseeker and the employer once per interview, for
     accepted interviews happening in the next 24 hours."""
@@ -207,6 +233,10 @@ def init_scheduler(app):
     scheduler.add_job(
         lambda: _auto_close_vacancies(app),
         trigger="cron", minute=10, id="auto_close_vacancies", replace_existing=True,
+    )
+    scheduler.add_job(
+        lambda: _auto_close_spes_batches(app),
+        trigger="cron", minute=15, id="auto_close_spes_batches", replace_existing=True,
     )
     scheduler.add_job(
         lambda: _send_interview_reminders(app),
