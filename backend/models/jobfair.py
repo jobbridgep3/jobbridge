@@ -36,12 +36,18 @@ class JobFair(BaseModel):
 
     __table_args__ = (db.CheckConstraint(f"status IN {JOBFAIR_STATUSES}", name="ck_jobfair_status"),)
 
+    def _active_booths(self) -> list:
+        # "Active" = still an occupying/participating registration — excludes
+        # withdrawn (cancelled) and disapproved (rejected) ones, so both the
+        # slot-limit check and the displayed "registered employers" count
+        # agree on what counts as a real registration.
+        return [b for b in self.booths if b.status not in ("cancelled", "rejected")]
+
     def _jobseeker_slots_full(self) -> bool:
         return bool(self.max_jobseeker_slots) and len(self.registrations) >= self.max_jobseeker_slots
 
     def _employer_slots_full(self) -> bool:
-        active_booths = [b for b in self.booths if b.status not in ("cancelled", "rejected")]
-        return bool(self.max_employer_slots) and len(active_booths) >= self.max_employer_slots
+        return bool(self.max_employer_slots) and len(self._active_booths()) >= self.max_employer_slots
 
     def _deadline_passed(self) -> bool:
         return bool(self.registration_deadline) and now_manila() > self.registration_deadline
@@ -70,7 +76,7 @@ class JobFair(BaseModel):
             "status": self.status,
             "published_at": iso_manila(self.published_at),
             "registered_jobseekers": len(self.registrations),
-            "registered_employers": len(self.booths),
+            "registered_employers": len(self._active_booths()),
             "attended_count": sum(1 for r in self.registrations if r.attended),
             # Computed live (never persisted) so deadline/slot state can never drift
             # out of sync with the underlying data — see jobfair_capacity_service.py

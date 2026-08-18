@@ -64,7 +64,21 @@ def list_jobfairs():
     else:
         query = query.order_by(JobFair.event_date.desc())
     fairs = query.all()
-    return ok([f.to_dict() for f in fairs])
+    results = [f.to_dict() for f in fairs]
+
+    if role == "employer":
+        company = EmployerCompany.query.filter_by(user_id=get_jwt_identity()).first()
+        if company:
+            # One bulk query instead of one per card, so the "Browse Job Fairs"
+            # grid can show "Registered" vs "Register as Participant" per fair.
+            booths_by_fair = {
+                b.jobfair_id: b for b in JobFairBooth.query.filter_by(employer_company_id=company.id).all()
+            }
+            for result, fair in zip(results, fairs):
+                booth = booths_by_fair.get(fair.id)
+                if booth:
+                    result["my_booth"] = booth.to_dict()
+    return ok(results)
 
 
 @jobfair_bp.get("/jobfair/<jobfair_id>")
@@ -281,21 +295,36 @@ def register_booth(jobfair_id):
     fair, capacity_ok, error = lock_jobfair_for_employer_registration(jobfair_id)
     if not capacity_ok:
         return fail(error, 400 if fair else 404)
-    if JobFairBooth.query.filter_by(jobfair_id=fair.id, employer_company_id=company.id).first():
+
+    existing = JobFairBooth.query.filter_by(jobfair_id=fair.id, employer_company_id=company.id).first()
+    if existing and existing.status != "cancelled":
         db.session.rollback()
         return fail("Already registered for this job fair.", 409)
 
-    booth = JobFairBooth(
-        jobfair_id=fair.id, employer_company_id=company.id, status="pending",
-        booth_name=company.company_name,
-    )
-    db.session.add(booth)
+    if existing:
+        # Re-registering after a withdrawal — reuse the same row (the
+        # jobfair_id+employer_company_id pair is unique, so a second insert
+        # would fail) rather than leaving the employer permanently locked out.
+        booth = existing
+        booth.status = "pending"
+        booth.review_remarks = None
+        booth.reviewed_by = None
+        booth.reviewed_at = None
+        booth.booth_name = company.company_name
+        audit_action, audit_note = "Update", f"Re-registered for {fair.name}"
+    else:
+        booth = JobFairBooth(
+            jobfair_id=fair.id, employer_company_id=company.id, status="pending",
+            booth_name=company.company_name,
+        )
+        db.session.add(booth)
+        audit_action, audit_note = "Create", f"Registered for {fair.name}"
     try:
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
         return fail("Already registered for this job fair.", 409)
-    log_audit(User.query.get(company.user_id), "Create", "jobfair_booths", booth.id, f"Registered for {fair.name}", after={"status": "pending"})
+    log_audit(User.query.get(company.user_id), audit_action, "jobfair_booths", booth.id, audit_note, after={"status": "pending"})
     notify_board(
         [("staff", "/staff/jobfair")],
         "jobfair_board", "New Employer Registration",

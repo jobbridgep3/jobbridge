@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { CalendarDays, Download, MapPinned, Users, XCircle } from 'lucide-react'
+import { CalendarDays, MapPinned, Users, XCircle } from 'lucide-react'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 
+import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Dialog, DialogContent } from '../../components/ui/Dialog'
@@ -14,7 +15,6 @@ import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
-import { downloadFile, parseBlobError } from '../../lib/download'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
 import { manila } from '../../lib/manilaTime'
 
@@ -163,22 +163,10 @@ function RegistrantsDialog({ fair, onClose }) {
 }
 
 function ParticipationsPanel() {
-  const [exporting, setExporting] = useState(false)
   const { data: participations, isLoading } = useQuery({
     queryKey: ['employer', 'jobfair', 'participations'],
     queryFn: async () => (await api.get('/api/employer/jobfair/participations')).data.data,
   })
-
-  const exportReport = async (format) => {
-    setExporting(true)
-    try {
-      await downloadFile(`/api/employer/jobfair/export/${format}`, { filename: `jobfair_participations.${format === 'excel' ? 'xlsx' : 'pdf'}` })
-    } catch (err) {
-      toast.error(await parseBlobError(err))
-    } finally {
-      setExporting(false)
-    }
-  }
 
   if (isLoading) return <CardSkeleton />
   if (!participations?.length) {
@@ -187,14 +175,6 @@ function ParticipationsPanel() {
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end gap-2">
-        <Button size="sm" variant="secondary" disabled={exporting} onClick={() => exportReport('excel')}>
-          <Download className="h-3.5 w-3.5" /> Excel
-        </Button>
-        <Button size="sm" variant="secondary" disabled={exporting} onClick={() => exportReport('pdf')}>
-          <Download className="h-3.5 w-3.5" /> PDF
-        </Button>
-      </div>
       {participations.map((p) => (
         <Card key={p.booth_id}>
           <CardContent className="space-y-2">
@@ -208,22 +188,21 @@ function ParticipationsPanel() {
               <StatusBadge status={p.booth_status} />
             </div>
             {p.review_remarks && <p className="text-xs text-red-600">Reason: {p.review_remarks}</p>}
-            <p className="text-xs text-slate-500">{p.assigned_vacancy_count} vacancy(ies) included in this job fair</p>
-            {p.attendance_summary && (
-              <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-2 sm:grid-cols-4">
-                {[
-                  ['Job Fair Attendees', p.attendance_summary.booth_visitors],
-                  ['Rejected', p.attendance_summary.rejected],
-                  ['Hired', p.attendance_summary.hired],
-                  ['Applications', p.attendance_summary.total],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-lg bg-slate-50 px-2 py-1.5 text-center">
-                    <p className="text-sm font-semibold text-slate-900">{value}</p>
-                    <p className="text-xs text-slate-500">{label}</p>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="border-t border-slate-100 pt-2">
+              <p className="mb-1 text-xs font-medium text-slate-600">Vacancies tagged for this job fair</p>
+              {p.vacancies?.length ? (
+                <div className="space-y-1">
+                  {p.vacancies.map((v) => (
+                    <div key={v.id} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="text-slate-700">{v.title}</span>
+                      {v.job_type && <Badge className="capitalize">{v.job_type.replace(/_/g, ' ')}</Badge>}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400">No vacancies tagged for this job fair yet.</p>
+              )}
+            </div>
           </CardContent>
         </Card>
       ))}
@@ -309,10 +288,16 @@ export default function EmployerJobFair() {
                   </p>
                   {fair.employer_slots_full && <p className="mt-1 text-xs font-medium text-red-600">Employer slots full</p>}
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {fair.employer_registration_open && (
-                      <Button size="sm" onClick={() => registerMutation.mutate(fair.id)} disabled={registerMutation.isPending}>
-                        Register as Participant
+                    {fair.my_booth && fair.my_booth.status !== 'cancelled' ? (
+                      <Button size="sm" variant="secondary" disabled>
+                        Registered
                       </Button>
+                    ) : (
+                      fair.employer_registration_open && (
+                        <Button size="sm" onClick={() => registerMutation.mutate(fair.id)} disabled={registerMutation.isPending}>
+                          Register as Participant
+                        </Button>
+                      )
                     )}
                     <Button size="sm" variant="secondary" onClick={() => setRegistrationFair(fair)}>
                       My Registration

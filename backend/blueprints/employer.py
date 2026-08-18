@@ -175,35 +175,6 @@ def employer_jobfair_participations():
     return ok(build_participations(company))
 
 
-@employer_bp.get("/jobfair/export/excel")
-@jwt_required()
-@role_required("employer")
-def employer_jobfair_export_excel():
-    from services.employer_jobfair_service import build_participations_excel
-
-    company = _company()
-    if not company:
-        return fail("Company profile not found.", 404)
-    buf = build_participations_excel(company)
-    log_audit(User.query.get(company.user_id), "Export", "employer_jobfair_participations")
-    return send_file(buf, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", as_attachment=True, download_name="jobfair_participations.xlsx")
-
-
-@employer_bp.get("/jobfair/export/pdf")
-@jwt_required()
-@role_required("employer")
-def employer_jobfair_export_pdf():
-    from services.employer_jobfair_service import build_participations_pdf
-    from services.pdf_service import to_bytesio
-
-    company = _company()
-    if not company:
-        return fail("Company profile not found.", 404)
-    pdf_bytes = build_participations_pdf(company, now_manila().strftime("%Y-%m-%d"))
-    log_audit(User.query.get(company.user_id), "Export", "employer_jobfair_participations")
-    return send_file(to_bytesio(pdf_bytes), mimetype="application/pdf", as_attachment=True, download_name="jobfair_participations.pdf")
-
-
 @employer_bp.get("/profile")
 @jwt_required()
 @role_required("employer")

@@ -3,7 +3,7 @@ import dayjs from 'dayjs'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { motion } from 'framer-motion'
 import { Archive, Check, Download, FileBarChart, FileDown, ImagePlus, Pencil, Plus, QrCode, Send, Trash2, Users, X, XCircle } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
 
@@ -188,8 +188,20 @@ export default function StaffJobFair({ basePath = '/staff' }) {
   const [editing, setEditing] = useState(null) // fair being edited, or null = creating
   const [form, setForm] = useState(EMPTY_FORM)
   const [confirm, setConfirm] = useState(null) // { action, fair }
-  const bannerRef = useRef(null)
-  const [bannerTarget, setBannerTarget] = useState(null)
+  const bannerFileRef = useRef(null)
+  const [pendingBannerFile, setPendingBannerFile] = useState(null) // staged until the draft is created
+  const [bannerPreviewUrl, setBannerPreviewUrl] = useState(null)
+  const [uploadingBanner, setUploadingBanner] = useState(false)
+
+  useEffect(() => {
+    if (!pendingBannerFile) {
+      setBannerPreviewUrl(null)
+      return
+    }
+    const url = URL.createObjectURL(pendingBannerFile)
+    setBannerPreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [pendingBannerFile])
 
   const { data: fairs, isLoading } = useQuery({
     queryKey: ['jobfair', 'staff', statusTab],
@@ -208,10 +220,30 @@ export default function StaffJobFair({ basePath = '/staff' }) {
     'public:homepage_update': (payload) => payload?.sections?.includes('jobfairs') && refresh(),
   })
 
+  const uploadBannerFile = async (fairId, file) => {
+    setUploadingBanner(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await api.post(`/api/staff/jobfair/${fairId}/banner`, formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+      return res.data.data
+    } finally {
+      setUploadingBanner(false)
+    }
+  }
+
   const saveFair = useMutation({
     mutationFn: () => (editing ? api.put(`/api/staff/jobfair/${editing.id}`, form) : api.post('/api/staff/jobfair', form)),
-    onSuccess: () => {
+    onSuccess: async (res) => {
       toast.success(editing ? 'Job fair updated.' : 'Draft created — publish it when ready.')
+      if (!editing && pendingBannerFile) {
+        try {
+          await uploadBannerFile(res.data.data.id, pendingBannerFile)
+        } catch {
+          toast.error('Job fair created, but the banner upload failed — you can add it from Edit.')
+        }
+      }
+      setPendingBannerFile(null)
       setFormOpen(false)
       refresh()
     },
@@ -228,18 +260,19 @@ export default function StaffJobFair({ basePath = '/staff' }) {
     onError: (err) => toast.error(err.response?.data?.message || 'Action failed.'),
   })
 
-  const uploadBanner = async (file) => {
-    if (!file || !bannerTarget) return
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      await api.post(`/api/staff/jobfair/${bannerTarget}/banner`, formData, { headers: { 'Content-Type': 'multipart/form-data' } })
-      toast.success('Banner uploaded.')
-      refresh()
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Could not upload banner.')
-    } finally {
-      setBannerTarget(null)
+  const handleBannerFileSelected = async (file) => {
+    if (!file) return
+    if (editing) {
+      try {
+        const updated = await uploadBannerFile(editing.id, file)
+        toast.success('Banner uploaded.')
+        setEditing(updated)
+        refresh()
+      } catch (err) {
+        toast.error(err.response?.data?.message || 'Could not upload banner.')
+      }
+    } else {
+      setPendingBannerFile(file)
     }
   }
 
@@ -260,11 +293,13 @@ export default function StaffJobFair({ basePath = '/staff' }) {
   const openCreate = () => {
     setEditing(null)
     setForm(EMPTY_FORM)
+    setPendingBannerFile(null)
     setFormOpen(true)
   }
   const openEdit = (fair) => {
     setEditing(fair)
     setForm(fairToForm(fair))
+    setPendingBannerFile(null)
     setFormOpen(true)
   }
 
@@ -365,18 +400,6 @@ export default function StaffJobFair({ basePath = '/staff' }) {
                         <Pencil className="h-3.5 w-3.5" /> Edit
                       </Button>
                     )}
-                    {fair.status !== 'archived' && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => {
-                          setBannerTarget(fair.id)
-                          bannerRef.current?.click()
-                        }}
-                      >
-                        <ImagePlus className="h-3.5 w-3.5" /> Banner
-                      </Button>
-                    )}
                     {['completed', 'cancelled'].includes(fair.status) && (
                       <Button size="sm" variant="ghost" onClick={() => setConfirm({ action: 'archive', fair })}>
                         <Archive className="h-3.5 w-3.5" /> Archive
@@ -400,14 +423,41 @@ export default function StaffJobFair({ basePath = '/staff' }) {
         </motion.div>
       )}
 
-      <input ref={bannerRef} type="file" accept="image/*" className="hidden" onChange={(e) => uploadBanner(e.target.files?.[0])} />
-
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent title={editing ? 'Edit Job Fair' : 'Create Job Fair'} className="max-w-2xl">
           <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
             <div>
               <Label>Event Title</Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </div>
+            <div>
+              <Label>Banner Image (optional)</Label>
+              <div className="flex items-center gap-3">
+                {(bannerPreviewUrl || editing?.banner_url) && (
+                  <img
+                    src={bannerPreviewUrl || editing.banner_url}
+                    alt="Banner preview"
+                    className="h-16 w-28 rounded-md border border-slate-200 object-cover"
+                  />
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => bannerFileRef.current?.click()}
+                  disabled={uploadingBanner}
+                >
+                  <ImagePlus className="h-3.5 w-3.5" />
+                  {uploadingBanner ? 'Uploading…' : editing?.banner_url || pendingBannerFile ? 'Change Banner' : 'Choose Banner'}
+                </Button>
+              </div>
+              <input
+                ref={bannerFileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleBannerFileSelected(e.target.files?.[0])}
+              />
             </div>
             <div>
               <Label>Description</Label>
