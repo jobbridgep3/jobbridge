@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Building2, CalendarDays, FileDown, MapPinned, Paperclip, Phone, User } from 'lucide-react'
 import { useState } from 'react'
@@ -10,8 +9,10 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent } from '../../components/ui/Card'
 import { CardSkeleton } from '../../components/ui/Skeleton'
+import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { downloadFile, parseBlobError } from '../../lib/download'
+import { manila } from '../../lib/manilaTime'
 import { fadeIn } from '../../lib/motion'
 
 function DetailRow({ icon: Icon, label, children }) {
@@ -34,6 +35,10 @@ export default function JobseekerJobFairDetail() {
   const { data: fair, isLoading } = useQuery({
     queryKey: ['jobfair', id],
     queryFn: async () => (await api.get(`/api/jobfair/${id}`)).data.data,
+    // Registration-open state (deadline/slots) has no triggering socket event of
+    // its own, so poll lightly while viewing — keeps "Registration Closed" /
+    // "Slots Full" accurate without requiring a manual refresh.
+    refetchInterval: 60000,
   })
 
   const registerMutation = useMutation({
@@ -45,16 +50,12 @@ export default function JobseekerJobFairDetail() {
     onError: (err) => toast.error(err.response?.data?.message || 'Could not register.'),
   })
 
-  const [visitingBoothId, setVisitingBoothId] = useState(null)
-  const visitBoothMutation = useMutation({
-    mutationFn: (boothId) => api.post(`/api/jobfair/${id}/booths/${boothId}/visit`),
-    onMutate: (boothId) => setVisitingBoothId(boothId),
-    onSuccess: (res) => {
-      toast.success(res.data?.message || 'Registered for this booth!')
-      queryClient.invalidateQueries({ queryKey: ['jobfair', id] })
-    },
-    onError: (err) => toast.error(err.response?.data?.message || 'Could not register for this booth.'),
-    onSettled: () => setVisitingBoothId(null),
+  // Deadline/slot state can change from any jobseeker's registration, so
+  // refresh instantly rather than waiting for the poll below.
+  useSocket({
+    'jobfair:updated': () => queryClient.invalidateQueries({ queryKey: ['jobfair', id] }),
+    'public:homepage_update': (payload) =>
+      payload?.sections?.includes('jobfairs') && queryClient.invalidateQueries({ queryKey: ['jobfair', id] }),
   })
 
   const downloadForm = async () => {
@@ -71,10 +72,13 @@ export default function JobseekerJobFairDetail() {
   if (isLoading || !fair) return <CardSkeleton />
 
   const registration = fair.my_registration
-  const canRegister =
-    !registration &&
-    ['published', 'ongoing'].includes(fair.status) &&
-    (!fair.registration_deadline || dayjs().isBefore(dayjs(fair.registration_deadline)))
+  const canRegister = !registration && fair.jobseeker_registration_open
+
+  let closedReason = 'Registration for this job fair is closed.'
+  if (fair.status === 'completed') closedReason = 'This job fair has ended.'
+  else if (fair.status === 'cancelled') closedReason = 'This job fair has been cancelled.'
+  else if (fair.registration_deadline_passed) closedReason = 'The registration deadline for this job fair has passed.'
+  else if (fair.jobseeker_slots_full) closedReason = 'This job fair has reached its maximum number of participants.'
 
   return (
     <motion.div {...fadeIn} className="mx-auto max-w-3xl space-y-4">
@@ -87,13 +91,18 @@ export default function JobseekerJobFairDetail() {
         <CardContent className="space-y-5">
           <div>
             <h1 className="text-xl font-semibold text-slate-900">{fair.name}</h1>
-            {fair.description && <p className="mt-1 text-sm text-slate-600">{fair.description}</p>}
+            {fair.description && (
+              <div
+                className="prose prose-sm mt-1 max-w-none text-slate-600"
+                dangerouslySetInnerHTML={{ __html: fair.description }}
+              />
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-3 rounded-lg bg-slate-50 p-4 sm:grid-cols-2">
             <DetailRow icon={CalendarDays} label="Date & Time">
-              {dayjs(fair.event_date).format('MMMM D, YYYY h:mm A')}
-              {fair.end_time ? ` – ${dayjs(fair.end_time).format('h:mm A')}` : ''}
+              {manila(fair.event_date).format('MMM D, YYYY h:mm A')}
+              {fair.end_time ? ` – ${manila(fair.end_time).format('h:mm A')}` : ''}
             </DetailRow>
             <DetailRow icon={MapPinned} label="Venue">
               {fair.venue}
@@ -101,7 +110,7 @@ export default function JobseekerJobFairDetail() {
             </DetailRow>
             {fair.registration_deadline && (
               <DetailRow icon={CalendarDays} label="Registration Deadline">
-                {dayjs(fair.registration_deadline).format('MMMM D, YYYY h:mm A')}
+                {manila(fair.registration_deadline).format('MMM D, YYYY h:mm A')}
               </DetailRow>
             )}
             {fair.contact_person && (
@@ -121,8 +130,8 @@ export default function JobseekerJobFairDetail() {
 
           {fair.requirements && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-              <p className="text-xs font-semibold text-amber-800">What to bring</p>
-              <p className="mt-0.5 text-sm text-amber-900">{fair.requirements}</p>
+              <p className="text-xs font-semibold text-amber-800">What to Bring</p>
+              <p className="mt-0.5 whitespace-pre-wrap text-sm text-amber-900">{fair.requirements}</p>
             </div>
           )}
 
@@ -149,29 +158,11 @@ export default function JobseekerJobFairDetail() {
             <h2 className="mb-2 text-sm font-semibold text-slate-800">Participating Employers</h2>
             {fair.booths?.length ? (
               <div className="space-y-2">
-                {fair.booths.map((b) => {
-                  const visited = fair.visited_booth_ids?.includes(b.id)
-                  return (
-                    <div key={b.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 p-3">
-                      <div>
-                        <p className="text-sm font-medium text-slate-800">{b.booth_name || b.company_name}</p>
-                        {b.description && <p className="text-xs text-slate-500">{b.description}</p>}
-                      </div>
-                      {visited ? (
-                        <Badge variant="success">Registered ✓</Badge>
-                      ) : registration ? (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={visitBoothMutation.isPending && visitingBoothId === b.id}
-                          onClick={() => visitBoothMutation.mutate(b.id)}
-                        >
-                          {visitBoothMutation.isPending && visitingBoothId === b.id ? 'Registering…' : 'Register to Booth'}
-                        </Button>
-                      ) : null}
-                    </div>
-                  )
-                })}
+                {fair.booths.map((b) => (
+                  <div key={b.id} className="rounded-lg border border-slate-200 p-3">
+                    <p className="text-sm font-medium text-slate-800">{b.company_name}</p>
+                  </div>
+                ))}
               </div>
             ) : (
               <p className="text-sm text-slate-400">No employers registered yet.</p>
@@ -211,7 +202,7 @@ export default function JobseekerJobFairDetail() {
               </Button>
               {registration.attended && (
                 <p className="text-xs font-medium text-emerald-700">
-                  ✓ Attendance recorded {registration.scanned_at ? dayjs(registration.scanned_at).format('MMM D, h:mm A') : ''}
+                  ✓ Attendance recorded {registration.scanned_at ? manila(registration.scanned_at).format('MMM D, h:mm A') : ''}
                 </p>
               )}
             </div>
@@ -222,9 +213,7 @@ export default function JobseekerJobFairDetail() {
               </Button>
             </div>
           ) : (
-            <p className="border-t border-slate-100 pt-4 text-center text-sm text-slate-500">
-              {fair.status === 'completed' ? 'This job fair has ended.' : 'Registration for this job fair is closed.'}
-            </p>
+            <p className="border-t border-slate-100 pt-4 text-center text-sm text-slate-500">{closedReason}</p>
           )}
         </CardContent>
       </Card>

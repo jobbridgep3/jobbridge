@@ -60,7 +60,6 @@ import EmployerReferrals from './pages/employer/Referrals'
 import EmployerReferralDetail from './pages/employer/ReferralDetail'
 import EmployerInterviews from './pages/employer/Interviews'
 import EmployerJobFair from './pages/employer/JobFair'
-import EmployerJobFairBooth from './pages/employer/JobFairBooth'
 import EmployerEmployment from './pages/employer/Employment'
 import EmployerNotifications from './pages/employer/Notifications'
 import EmployerSettings from './pages/employer/Settings'
@@ -193,7 +192,6 @@ export default function App() {
             <Route path="referrals/:id" element={<EmployerReferralDetail />} />
             <Route path="interviews" element={<EmployerInterviews />} />
             <Route path="jobfair" element={<EmployerJobFair />} />
-            <Route path="jobfair/:id/booth" element={<EmployerJobFairBooth />} />
             <Route path="employment" element={<EmployerEmployment />} />
             <Route path="notifications" element={<EmployerNotifications />} />
             <Route path="settings" element={<EmployerSettings />} />

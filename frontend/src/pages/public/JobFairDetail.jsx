@@ -1,5 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
-import dayjs from 'dayjs'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Building2, CalendarDays, CalendarX, MapPinned } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
@@ -9,7 +8,9 @@ import { Button } from '../../components/ui/Button'
 import { Card, CardContent } from '../../components/ui/Card'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
+import { manila } from '../../lib/manilaTime'
 import { fadeIn } from '../../lib/motion'
 import { resolveJobseekerCta } from '../../lib/publicCta'
 import { useAuthStore } from '../../store/authStore'
@@ -26,13 +27,20 @@ function DetailRow({ icon: Icon, children }) {
 export default function PublicJobFairDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const token = useAuthStore((s) => s.token)
   const role = useAuthStore((s) => s.user?.role)
 
   const { data: fair, isLoading, error } = useQuery({
     queryKey: ['public', 'jobfairs', id],
     queryFn: async () => (await api.get(`/api/jobfair/${id}`)).data.data,
+    refetchInterval: 60000,
   })
+
+  useSocket(
+    { 'public:homepage_update': (payload) => payload?.sections?.includes('jobfairs') && queryClient.invalidateQueries({ queryKey: ['public', 'jobfairs', id] }) },
+    { allowAnonymous: true }
+  )
 
   if (isLoading) {
     return (
@@ -50,8 +58,14 @@ export default function PublicJobFairDetail() {
     )
   }
 
-  const canRegister = ['published', 'ongoing'].includes(fair.status)
+  const canRegister = fair.jobseeker_registration_open
   const action = resolveJobseekerCta({ token, role, targetPath: `/jobseeker/jobfair/${id}` })
+
+  let closedReason = 'Registration for this job fair is closed.'
+  if (fair.status === 'completed') closedReason = 'This job fair has ended.'
+  else if (fair.status === 'cancelled') closedReason = 'This job fair has been cancelled.'
+  else if (fair.registration_deadline_passed) closedReason = 'The registration deadline for this job fair has passed.'
+  else if (fair.jobseeker_slots_full) closedReason = 'This job fair has reached its maximum number of participants.'
 
   return (
     <motion.div {...fadeIn} className="mx-auto max-w-3xl space-y-4 p-6">
@@ -64,13 +78,18 @@ export default function PublicJobFairDetail() {
         <CardContent className="space-y-4">
           <div>
             <h1 className="text-xl font-semibold text-text-primary">{fair.name}</h1>
-            {fair.description && <p className="mt-1 text-sm text-text-secondary">{fair.description}</p>}
+            {fair.description && (
+              <div
+                className="prose prose-sm dark:prose-invert mt-1 max-w-none text-text-secondary"
+                dangerouslySetInnerHTML={{ __html: fair.description }}
+              />
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-3 rounded-lg bg-surface-secondary p-4 sm:grid-cols-2">
             <DetailRow icon={CalendarDays}>
-              {dayjs(fair.event_date).format('MMMM D, YYYY h:mm A')}
-              {fair.end_time ? ` – ${dayjs(fair.end_time).format('h:mm A')}` : ''}
+              {manila(fair.event_date).format('MMM D, YYYY h:mm A')}
+              {fair.end_time ? ` – ${manila(fair.end_time).format('h:mm A')}` : ''}
             </DetailRow>
             {fair.venue && (
               <DetailRow icon={MapPinned}>
@@ -87,7 +106,7 @@ export default function PublicJobFairDetail() {
               <h2 className="mb-2 text-sm font-semibold text-text-primary">Participating Employers</h2>
               <div className="flex flex-wrap gap-2">
                 {fair.booths.map((b) => (
-                  <Badge key={b.id}>{b.booth_name || b.company_name}</Badge>
+                  <Badge key={b.id}>{b.company_name}</Badge>
                 ))}
               </div>
             </div>
@@ -123,9 +142,7 @@ export default function PublicJobFairDetail() {
               </div>
             )
           ) : (
-            <p className="border-t border-border-subtle pt-4 text-center text-sm text-text-muted">
-              {fair.status === 'completed' ? 'This job fair has ended.' : 'Registration for this job fair is closed.'}
-            </p>
+            <p className="border-t border-border-subtle pt-4 text-center text-sm text-text-muted">{closedReason}</p>
           )}
         </CardContent>
       </Card>

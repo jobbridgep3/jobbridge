@@ -4,6 +4,8 @@ import threading
 import requests
 from flask import current_app
 
+from utils.timezone import to_manila
+
 logger = logging.getLogger(__name__)
 
 BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
@@ -358,54 +360,105 @@ def send_jobfair_update_email(to: str, fair_name: str, change_summary: str):
     return send_email(to, f"Job fair update — {fair_name}", html)
 
 
-def send_jobfair_booth_status_email(to: str, company_name: str, fair_name: str, status: str, remarks: str | None = None):
-    url = f"{current_app.config['FRONTEND_URL']}/employer/jobfair"
-    if status == "confirmed":
-        subject = f"Booth confirmed — {fair_name}"
-        body = f"""
-        <p>Hi {company_name},</p>
-        <p>Your booth request for <b>{fair_name}</b> has been <b>approved</b> by PESO Pila, Laguna.</p>
-        <p>You can now assign your approved vacancies to this job fair from your Job Fair page.</p>
-        """
-    elif status == "rejected":
-        subject = f"Booth request update — {fair_name}"
-        body = f"""
-        <p>Hi {company_name},</p>
-        <p>Your booth request for <b>{fair_name}</b> was <b>not approved</b> by PESO Pila, Laguna.</p>
-        {f"<p><b>Reason:</b> {remarks}</p>" if remarks else ""}
-        """
-    else:  # suspended
-        subject = f"Booth suspended — {fair_name}"
-        body = f"""
-        <p>Hi {company_name},</p>
-        <p>Your booth for <b>{fair_name}</b> has been <b>suspended</b> by PESO Pila, Laguna.</p>
-        {f"<p><b>Reason:</b> {remarks}</p>" if remarks else ""}
-        """
+def _jobfair_fmt_datetime(dt) -> str | None:
+    converted = to_manila(dt)
+    return converted.strftime("%b %d, %Y %I:%M %p") if converted else None
+
+
+def _jobfair_fmt_time(dt) -> str | None:
+    converted = to_manila(dt)
+    return converted.strftime("%I:%M %p") if converted else None
+
+
+def _jobfair_detail_table(fair, extra_rows: str = "") -> str:
+    """Shared Date/Start/End/Venue/Deadline detail-rows table for job fair
+    emails, formatted identically to every other Job Fair surface (see
+    utils/timezone.py on the backend and lib/manilaTime.js on the frontend —
+    one canonical Manila-time format everywhere)."""
+    date_str = _jobfair_fmt_datetime(fair.event_date) or "TBA"
+    start_str = _jobfair_fmt_time(fair.event_date) or "TBA"
+    end_str = _jobfair_fmt_time(fair.end_time) if fair.end_time else "TBA"
+    deadline_str = _jobfair_fmt_datetime(fair.registration_deadline) if fair.registration_deadline else None
+    deadline_row = (
+        f'<tr><td style="padding:4px 0;color:#64748b">Registration Deadline</td>'
+        f'<td style="padding:4px 0;font-weight:bold">{deadline_str}</td></tr>'
+        if deadline_str else ""
+    )
+    return f"""
+    <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:14px">
+      <tr><td style="padding:4px 0;color:#64748b">Job Fair</td><td style="padding:4px 0;font-weight:bold">{fair.name}</td></tr>
+      <tr><td style="padding:4px 0;color:#64748b">Date</td><td style="padding:4px 0;font-weight:bold">{date_str}</td></tr>
+      <tr><td style="padding:4px 0;color:#64748b">Start Time</td><td style="padding:4px 0;font-weight:bold">{start_str}</td></tr>
+      <tr><td style="padding:4px 0;color:#64748b">End Time</td><td style="padding:4px 0;font-weight:bold">{end_str}</td></tr>
+      <tr><td style="padding:4px 0;color:#64748b">Venue</td><td style="padding:4px 0;font-weight:bold">{fair.venue}</td></tr>
+      {deadline_row}
+      {extra_rows}
+    </table>
+    """
+
+
+def _jobfair_requirements_block(fair) -> str:
+    if not fair.requirements:
+        return ""
+    return f"""
+    <div style="margin-top:16px;padding:12px;background:#f1f5f9;border-radius:8px">
+      <p style="margin:0 0 6px;font-weight:bold;color:#1e3a8a">What to Bring / Prepare</p>
+      <p style="margin:0;white-space:pre-wrap">{fair.requirements}</p>
+    </div>
+    """
+
+
+def send_jobfair_registration_confirmation_email(to: str, full_name: str, fair, registration_number: str, qr_data_url: str):
+    """Jobseeker's job fair registration confirmation — embeds the exact same
+    QR code (generated from the registration's stored qr_token) shown in-app,
+    plus the full event details and What to Bring section."""
+    extra_rows = f"""
+    <tr><td style="padding:4px 0;color:#64748b">Registration No.</td><td style="padding:4px 0;font-weight:bold">{registration_number}</td></tr>
+    <tr><td style="padding:4px 0;color:#64748b">Registration Status</td><td style="padding:4px 0;font-weight:bold">Registered</td></tr>
+    """
     html = f"""
     <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
-      <h2 style="color:#1e3a8a">Job Fair Booth Update</h2>
-      {body}
-      <p><a href="{url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">View Job Fair</a></p>
+      <h2 style="color:#1e3a8a">Registration Confirmed</h2>
+      <p>Hi {full_name}, you are registered for <b>{fair.name}</b>.</p>
+      {_jobfair_detail_table(fair, extra_rows)}
+      {_jobfair_requirements_block(fair)}
+      <p style="margin-top:16px">Present the QR code below (or from your JobBridge account) at the venue for attendance:</p>
+      <p style="text-align:center"><img src="{qr_data_url}" alt="QR Code" width="180" height="180"/></p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"Job Fair Registration — {fair.name}", html)
+
+
+def send_jobfair_booth_status_email(to: str, company_name: str, fair, status: str, remarks: str | None = None):
+    """Employer registration approval/rejection/suspension email — includes
+    the full job fair details (date, time, venue, what to bring) alongside
+    the status update, not just the status line."""
+    url = f"{current_app.config['FRONTEND_URL']}/employer/jobfair"
+    status_label = {"confirmed": "Approved", "rejected": "Not Approved", "suspended": "Suspended"}.get(status, status.title())
+    if status == "confirmed":
+        subject = f"Registration confirmed — {fair.name}"
+        intro = f"<p>Hi {company_name},</p><p>Your registration to participate in <b>{fair.name}</b> has been <b>approved</b> by PESO Pila, Laguna.</p>"
+    elif status == "rejected":
+        subject = f"Registration update — {fair.name}"
+        intro = f"<p>Hi {company_name},</p><p>Your registration for <b>{fair.name}</b> was <b>not approved</b> by PESO Pila, Laguna.</p>"
+    else:  # suspended
+        subject = f"Registration suspended — {fair.name}"
+        intro = f"<p>Hi {company_name},</p><p>Your registration for <b>{fair.name}</b> has been <b>suspended</b> by PESO Pila, Laguna.</p>"
+    reason_html = f"<p><b>Reason:</b> {remarks}</p>" if remarks else ""
+    extra_rows = f'<tr><td style="padding:4px 0;color:#64748b">Registration Status</td><td style="padding:4px 0;font-weight:bold">{status_label}</td></tr>'
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Job Fair Registration Update</h2>
+      {intro}
+      {reason_html}
+      {_jobfair_detail_table(fair, extra_rows)}
+      {_jobfair_requirements_block(fair)}
+      <p style="margin-top:16px"><a href="{url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">View Job Fair</a></p>
       <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
     </div>
     """
     return send_email(to, subject, html)
-
-
-def send_jobfair_booth_visit_email(to: str, company_name: str, fair_name: str, jobseeker_name: str, preferred_position: str | None = None):
-    url = f"{current_app.config['FRONTEND_URL']}/employer/jobfair"
-    html = f"""
-    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
-      <h2 style="color:#1e3a8a">New Booth Registration</h2>
-      <p>Hi {company_name},</p>
-      <p><b>{jobseeker_name}</b> has registered for your booth at <b>{fair_name}</b>.</p>
-      {f"<p><b>Preferred position:</b> {preferred_position}</p>" if preferred_position else ""}
-      <p>Check in the jobseeker via QR when they arrive, and view their profile from your booth roster.</p>
-      <p><a href="{url}" style="background:#1e3a8a;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">View My Booth</a></p>
-      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
-    </div>
-    """
-    return send_email(to, f"New booth registration — {fair_name}", html)
 
 
 def send_employment_status_email(to: str, full_name: str, position: str, employer_name: str, status_label: str, note: str | None = None):

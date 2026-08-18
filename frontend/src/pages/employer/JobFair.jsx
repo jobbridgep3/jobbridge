@@ -1,16 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
-import { CalendarDays, Download, MapPinned, Paperclip, Store, Upload, Users } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { CalendarDays, Download, MapPinned, Users, XCircle } from 'lucide-react'
+import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { Link } from 'react-router-dom'
 
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Dialog, DialogContent } from '../../components/ui/Dialog'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { Input, Label, Textarea } from '../../components/ui/Input'
+import { Label } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -18,24 +16,21 @@ import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { downloadFile, parseBlobError } from '../../lib/download'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
+import { manila } from '../../lib/manilaTime'
 
 function fairChip(fair) {
-  if (fair.status === 'published' && dayjs(fair.event_date).isAfter(dayjs())) return { status: 'upcoming' }
+  if (fair.status === 'published' && manila(fair.event_date).isAfter(manila())) return { status: 'upcoming' }
   return { status: fair.status }
 }
 
-function BoothDialog({ fair, onClose }) {
+function RegistrationDialog({ fair, onClose }) {
   const queryClient = useQueryClient()
-  const fileRef = useRef(null)
-  const [uploading, setUploading] = useState(false)
 
   const { data: detail, isLoading } = useQuery({
     queryKey: ['jobfair', fair.id],
     queryFn: async () => (await api.get(`/api/jobfair/${fair.id}`)).data.data,
   })
   const booth = detail?.my_booth
-  const [form, setForm] = useState(null)
-  const boothForm = form ?? { booth_name: booth?.booth_name || '', description: booth?.description || '' }
 
   const { data: myVacancies } = useQuery({
     queryKey: ['vacancies', 'my'],
@@ -44,13 +39,14 @@ function BoothDialog({ fair, onClose }) {
   })
   const publishedVacancies = (myVacancies || []).filter((v) => v.status === 'published')
 
-  const saveBooth = useMutation({
-    mutationFn: () => api.put(`/api/jobfair/${fair.id}/booth`, boothForm),
+  const withdraw = useMutation({
+    mutationFn: () => api.put(`/api/jobfair/${fair.id}/booth`, { action: 'cancel' }),
     onSuccess: () => {
-      toast.success('Booth updated.')
+      toast.success('Registration withdrawn.')
       queryClient.invalidateQueries({ queryKey: ['jobfair', fair.id] })
+      queryClient.invalidateQueries({ queryKey: ['jobfair'] })
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Could not update booth.'),
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not withdraw registration.'),
   })
 
   const toggleVacancy = useMutation({
@@ -62,71 +58,25 @@ function BoothDialog({ fair, onClose }) {
     onError: (err) => toast.error(err.response?.data?.message || 'Could not update vacancy.'),
   })
 
-  const uploadMaterial = async (file) => {
-    if (!file) return
-    setUploading(true)
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      await api.post(`/api/jobfair/${fair.id}/booth/materials`, formData, { headers: { 'Content-Type': 'multipart/form-data' } })
-      toast.success('Material uploaded.')
-      queryClient.invalidateQueries({ queryKey: ['jobfair', fair.id] })
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Could not upload material.')
-    } finally {
-      setUploading(false)
-    }
-  }
-
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent title={`Manage Booth — ${fair.name}`} className="max-w-lg">
+      <DialogContent title={`My Registration — ${fair.name}`} className="max-w-lg">
         {isLoading ? (
           <CardSkeleton />
         ) : !booth ? (
-          <p className="py-4 text-center text-sm text-slate-500">No booth registered for this fair.</p>
+          <p className="py-4 text-center text-sm text-slate-500">You haven't registered for this job fair.</p>
         ) : (
           <div className="space-y-4">
             <div className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-              <span className="text-sm text-slate-600">Booth Status</span>
+              <span className="text-sm text-slate-600">Registration Status</span>
               <StatusBadge status={booth.status} />
             </div>
             {booth.status === 'pending' && (
-              <p className="text-xs text-slate-500">Your booth request is pending PESO review.</p>
+              <p className="text-xs text-slate-500">Your registration is pending PESO review.</p>
             )}
             {['rejected', 'suspended'].includes(booth.status) && booth.review_remarks && (
               <p className="text-xs text-red-600">Reason: {booth.review_remarks}</p>
             )}
-            <div>
-              <Label>Booth Name</Label>
-              <Input value={boothForm.booth_name} onChange={(e) => setForm({ ...boothForm, booth_name: e.target.value })} />
-            </div>
-            <div>
-              <Label>Booth Description</Label>
-              <Textarea
-                value={boothForm.description}
-                onChange={(e) => setForm({ ...boothForm, description: e.target.value })}
-                placeholder="What your booth offers — openings, on-the-spot interviews, etc."
-              />
-            </div>
-            <div>
-              <Label>Banner / Promotional Materials</Label>
-              <div className="space-y-1">
-                {booth.materials?.length ? (
-                  booth.materials.map((m, i) => (
-                    <a key={i} href={m.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm text-primary-700 hover:underline">
-                      <Paperclip className="h-3.5 w-3.5" /> {m.name}
-                    </a>
-                  ))
-                ) : (
-                  <p className="text-sm text-slate-500">No materials uploaded yet.</p>
-                )}
-              </div>
-              <input ref={fileRef} type="file" className="hidden" onChange={(e) => uploadMaterial(e.target.files?.[0])} />
-              <Button size="sm" variant="secondary" className="mt-2" onClick={() => fileRef.current?.click()} disabled={uploading}>
-                <Upload className="h-3.5 w-3.5" /> {uploading ? 'Uploading…' : 'Upload Material'}
-              </Button>
-            </div>
             {booth.status === 'confirmed' && (
               <div>
                 <Label>Vacancies in this Job Fair</Label>
@@ -155,11 +105,13 @@ function BoothDialog({ fair, onClose }) {
                 )}
               </div>
             )}
-            <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
-              <Button size="sm" onClick={() => saveBooth.mutate()} disabled={saveBooth.isPending}>
-                Save Booth
-              </Button>
-            </div>
+            {['pending', 'confirmed'].includes(booth.status) && (
+              <div className="flex justify-end border-t border-slate-100 pt-3">
+                <Button size="sm" variant="danger" onClick={() => withdraw.mutate()} disabled={withdraw.isPending}>
+                  <XCircle className="h-3.5 w-3.5" /> {withdraw.isPending ? 'Withdrawing…' : 'Withdraw Registration'}
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </DialogContent>
@@ -176,7 +128,7 @@ function RegistrantsDialog({ fair, onClose }) {
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent title={`Registered Applicants — ${fair.name}`} className="max-w-2xl">
+      <DialogContent title={`Registered Jobseekers — ${fair.name}`} className="max-w-2xl">
         {isLoading ? (
           <CardSkeleton />
         ) : error ? (
@@ -230,7 +182,7 @@ function ParticipationsPanel() {
 
   if (isLoading) return <CardSkeleton />
   if (!participations?.length) {
-    return <EmptyState icon={MapPinned} title="No job fair participations yet" description="Register a booth from Browse Job Fairs to get started." />
+    return <EmptyState icon={MapPinned} title="No job fair participations yet" description="Register from Browse Job Fairs to get started." />
   }
 
   return (
@@ -250,7 +202,7 @@ function ParticipationsPanel() {
               <div>
                 <h3 className="text-sm font-semibold text-slate-900">{p.jobfair_name}</h3>
                 <p className="flex items-center gap-1.5 text-xs text-slate-500">
-                  <CalendarDays className="h-3.5 w-3.5" /> {p.event_date ? dayjs(p.event_date).format('MMM D, YYYY h:mm A') : '—'} · {p.venue}
+                  <CalendarDays className="h-3.5 w-3.5" /> {p.event_date ? manila(p.event_date).format('MMM D, YYYY h:mm A') : '—'} · {p.venue}
                 </p>
               </div>
               <StatusBadge status={p.booth_status} />
@@ -260,7 +212,7 @@ function ParticipationsPanel() {
             {p.attendance_summary && (
               <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-2 sm:grid-cols-4">
                 {[
-                  ['Booth Visitors', p.attendance_summary.booth_visitors],
+                  ['Job Fair Attendees', p.attendance_summary.booth_visitors],
                   ['Rejected', p.attendance_summary.rejected],
                   ['Hired', p.attendance_summary.hired],
                   ['Applications', p.attendance_summary.total],
@@ -281,7 +233,7 @@ function ParticipationsPanel() {
 
 export default function EmployerJobFair() {
   const queryClient = useQueryClient()
-  const [boothFair, setBoothFair] = useState(null)
+  const [registrationFair, setRegistrationFair] = useState(null)
   const [registrantsFair, setRegistrantsFair] = useState(null)
   const [tab, setTab] = useState('browse')
 
@@ -290,28 +242,32 @@ export default function EmployerJobFair() {
     queryFn: async () => (await api.get('/api/jobfair')).data.data,
   })
 
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['jobfair'] })
   useSocket({
-    'jobfair:published': () => queryClient.invalidateQueries({ queryKey: ['jobfair'] }),
-    'jobfair:updated': () => queryClient.invalidateQueries({ queryKey: ['jobfair'] }),
-    'jobfair:booth_confirmed': () => queryClient.invalidateQueries({ queryKey: ['jobfair'] }),
-    'jobfair:booth_rejected': () => queryClient.invalidateQueries({ queryKey: ['jobfair'] }),
-    'jobfair:booth_suspended': () => queryClient.invalidateQueries({ queryKey: ['jobfair'] }),
+    'jobfair:published': refresh,
+    'jobfair:updated': refresh,
+    'jobfair:booth_confirmed': refresh,
+    'jobfair:booth_rejected': refresh,
+    'jobfair:booth_suspended': refresh,
+    // Fires on every registration (deadline/slot state can change from anyone's
+    // action, not just this employer's), so slot-full indicators stay live.
+    'public:homepage_update': (payload) => payload?.sections?.includes('jobfairs') && refresh(),
   })
 
   const registerMutation = useMutation({
     mutationFn: (id) => api.post(`/api/jobfair/${id}/register-booth`),
     onSuccess: (res) => {
-      toast.success(res.data.message || 'Booth request submitted — pending PESO review.')
+      toast.success(res.data.message || 'Registration submitted — pending PESO review.')
       queryClient.invalidateQueries({ queryKey: ['jobfair'] })
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Could not register booth.'),
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not register.'),
   })
 
   return (
     <motion.div {...fadeIn} className="space-y-4">
       <PageHeader
         title="Job Fair"
-        description="Register your company, manage your booth, and view registered applicants."
+        description="Register your company as a participant and track your job fair registrations."
         actions={
           <div className="flex gap-2">
             <Button size="sm" variant={tab === 'browse' ? 'primary' : 'secondary'} onClick={() => setTab('browse')}>
@@ -342,7 +298,7 @@ export default function EmployerJobFair() {
                     <StatusBadge {...fairChip(fair)} />
                   </div>
                   <p className="flex items-center gap-1.5 text-xs text-slate-500">
-                    <CalendarDays className="h-3.5 w-3.5" /> {dayjs(fair.event_date).format('MMM D, YYYY h:mm A')}
+                    <CalendarDays className="h-3.5 w-3.5" /> {manila(fair.event_date).format('MMM D, YYYY h:mm A')}
                   </p>
                   <p className="flex items-center gap-1.5 text-xs text-slate-500">
                     <MapPinned className="h-3.5 w-3.5" /> {fair.venue}
@@ -351,22 +307,18 @@ export default function EmployerJobFair() {
                   <p className="mt-1 text-xs text-slate-400">
                     {fair.registered_employers} employers · {fair.registered_jobseekers} jobseekers registered
                   </p>
+                  {fair.employer_slots_full && <p className="mt-1 text-xs font-medium text-red-600">Employer slots full</p>}
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {['published', 'ongoing'].includes(fair.status) && (
+                    {fair.employer_registration_open && (
                       <Button size="sm" onClick={() => registerMutation.mutate(fair.id)} disabled={registerMutation.isPending}>
-                        Register Company Booth
+                        Register as Participant
                       </Button>
                     )}
-                    <Button size="sm" variant="secondary" onClick={() => setBoothFair(fair)}>
-                      Manage Booth
-                    </Button>
-                    <Button size="sm" variant="secondary" asChild>
-                      <Link to={`/employer/jobfair/${fair.id}/booth`}>
-                        <Store className="h-3.5 w-3.5" /> My Booth
-                      </Link>
+                    <Button size="sm" variant="secondary" onClick={() => setRegistrationFair(fair)}>
+                      My Registration
                     </Button>
                     <Button size="sm" variant="secondary" onClick={() => setRegistrantsFair(fair)}>
-                      <Users className="h-3.5 w-3.5" /> Applicants
+                      <Users className="h-3.5 w-3.5" /> Registrants
                     </Button>
                   </div>
                 </CardContent>
@@ -376,7 +328,7 @@ export default function EmployerJobFair() {
         </motion.div>
       )}
 
-      {boothFair && <BoothDialog fair={boothFair} onClose={() => setBoothFair(null)} />}
+      {registrationFair && <RegistrationDialog fair={registrationFair} onClose={() => setRegistrationFair(null)} />}
       {registrantsFair && <RegistrantsDialog fair={registrantsFair} onClose={() => setRegistrantsFair(null)} />}
     </motion.div>
   )

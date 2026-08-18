@@ -4,6 +4,7 @@ from sqlalchemy.dialects.postgresql import UUID
 
 from extensions import db
 from models.base import BaseModel
+from utils.timezone import iso_manila, now_manila
 
 JOBFAIR_STATUSES = ("draft", "published", "ongoing", "completed", "cancelled", "archived")
 BOOTH_STATUSES = ("pending", "confirmed", "cancelled", "rejected", "suspended")
@@ -35,7 +36,21 @@ class JobFair(BaseModel):
 
     __table_args__ = (db.CheckConstraint(f"status IN {JOBFAIR_STATUSES}", name="ck_jobfair_status"),)
 
+    def _jobseeker_slots_full(self) -> bool:
+        return bool(self.max_jobseeker_slots) and len(self.registrations) >= self.max_jobseeker_slots
+
+    def _employer_slots_full(self) -> bool:
+        active_booths = [b for b in self.booths if b.status not in ("cancelled", "rejected")]
+        return bool(self.max_employer_slots) and len(active_booths) >= self.max_employer_slots
+
+    def _deadline_passed(self) -> bool:
+        return bool(self.registration_deadline) and now_manila() > self.registration_deadline
+
     def to_dict(self):
+        deadline_passed = self._deadline_passed()
+        jobseeker_slots_full = self._jobseeker_slots_full()
+        employer_slots_full = self._employer_slots_full()
+        is_live = self.status in ("published", "ongoing")
         return {
             "id": str(self.id),
             "name": self.name,
@@ -43,9 +58,9 @@ class JobFair(BaseModel):
             "banner_url": self.banner_url,
             "venue": self.venue,
             "municipality": self.municipality,
-            "event_date": self.event_date.isoformat() if self.event_date else None,
-            "end_time": self.end_time.isoformat() if self.end_time else None,
-            "registration_deadline": self.registration_deadline.isoformat() if self.registration_deadline else None,
+            "event_date": iso_manila(self.event_date),
+            "end_time": iso_manila(self.end_time),
+            "registration_deadline": iso_manila(self.registration_deadline),
             "max_employer_slots": self.max_employer_slots,
             "max_jobseeker_slots": self.max_jobseeker_slots,
             "contact_person": self.contact_person,
@@ -53,10 +68,18 @@ class JobFair(BaseModel):
             "requirements": self.requirements,
             "attachments": self.attachments or [],
             "status": self.status,
-            "published_at": self.published_at.isoformat() if self.published_at else None,
+            "published_at": iso_manila(self.published_at),
             "registered_jobseekers": len(self.registrations),
             "registered_employers": len(self.booths),
             "attended_count": sum(1 for r in self.registrations if r.attended),
+            # Computed live (never persisted) so deadline/slot state can never drift
+            # out of sync with the underlying data — see jobfair_capacity_service.py
+            # for the server-side enforcement that uses the same logic.
+            "registration_deadline_passed": deadline_passed,
+            "jobseeker_slots_full": jobseeker_slots_full,
+            "employer_slots_full": employer_slots_full,
+            "jobseeker_registration_open": is_live and not deadline_passed and not jobseeker_slots_full,
+            "employer_registration_open": is_live and not deadline_passed and not employer_slots_full,
         }
 
 
@@ -80,18 +103,23 @@ class JobFairRegistration(BaseModel):
             "id": str(self.id),
             "jobfair_id": str(self.jobfair_id),
             "jobfair_name": self.jobfair.name if self.jobfair else None,
-            "event_date": self.jobfair.event_date.isoformat() if self.jobfair and self.jobfair.event_date else None,
+            "event_date": iso_manila(self.jobfair.event_date) if self.jobfair else None,
             "jobseeker_profile_id": str(self.jobseeker_profile_id),
             "jobseeker_name": self.jobseeker_profile.full_name if self.jobseeker_profile else None,
             "registration_number": self.registration_number,
             "qr_token": self.qr_token,
             "attended": self.attended,
-            "scanned_at": self.scanned_at.isoformat() if self.scanned_at else None,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "scanned_at": iso_manila(self.scanned_at),
+            "created_at": iso_manila(self.created_at),
         }
 
 
 class JobFairBooth(BaseModel):
+    """An employer's registration as a participant for a job fair. Predates the
+    in-person-only redesign (hence the "booth" naming and the now-unused
+    booth_name/description/materials columns, kept but no longer editable —
+    see blueprints/jobfair.py) — this model is the employer registration record,
+    carrying the pending/confirmed/rejected/suspended approval state machine."""
     __tablename__ = "jobfair_booths"
 
     jobfair_id = db.Column(UUID(as_uuid=True), db.ForeignKey("jobfairs.id"), nullable=False)
@@ -99,7 +127,7 @@ class JobFairBooth(BaseModel):
     status = db.Column(db.String(20), default="pending", nullable=False)
     booth_name = db.Column(db.String(255), nullable=True)
     description = db.Column(db.Text, nullable=True)
-    materials = db.Column(db.JSON, default=list)  # [{"name": ..., "url": ...}] banners / promo files
+    materials = db.Column(db.JSON, default=list)  # unused since the in-person-only redesign
     review_remarks = db.Column(db.Text, nullable=True)
     reviewed_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=True)
     reviewed_at = db.Column(db.DateTime(timezone=True), nullable=True)
@@ -107,7 +135,6 @@ class JobFairBooth(BaseModel):
     jobfair = db.relationship("JobFair", back_populates="booths")
     employer_company = db.relationship("EmployerCompany")
     reviewed_by_user = db.relationship("User", foreign_keys=[reviewed_by])
-    visits = db.relationship("JobFairBoothVisit", back_populates="booth", cascade="all, delete-orphan")
 
     __table_args__ = (
         db.UniqueConstraint("jobfair_id", "employer_company_id", name="uq_jobfair_employer"),
@@ -123,56 +150,21 @@ class JobFairBooth(BaseModel):
             "company_name": company.company_name if company else None,
             "company_logo_url": company.logo_url if company else None,
             "status": self.status,
-            "booth_name": self.booth_name,
-            "description": self.description,
-            "materials": self.materials or [],
             "review_remarks": self.review_remarks,
-            "reviewed_at": self.reviewed_at.isoformat() if self.reviewed_at else None,
+            "reviewed_at": iso_manila(self.reviewed_at),
             "reviewed_by_name": self.reviewed_by_user.email if self.reviewed_by_user else None,
-            "visitor_count": len(self.visits),
-            "checked_in_count": sum(1 for v in self.visits if v.checked_in),
+            "created_at": iso_manila(self.created_at),
         }
 
 
-class JobFairBoothVisit(BaseModel):
-    """A jobseeker registering interest in a specific employer's booth (distinct
-    from JobFairRegistration, which is fair-wide). Check-in reuses the jobseeker's
-    existing fair QR token — see scan_booth_qr in blueprints/jobfair.py."""
-    __tablename__ = "jobfair_booth_visits"
+class JobFairRegistrationCounter(db.Model):
+    """Atomic per-year sequence backing JobFairRegistration.registration_number
+    (format JF-<year>-NNNNN). Locked via with_for_update() in
+    services/jobfair_capacity_service.py so concurrent registrations across
+    fairs in the same year can't collide — replaces the previous approach of
+    string-parsing the latest matching row, which wasn't safe under
+    concurrent writes."""
+    __tablename__ = "jobfair_registration_counters"
 
-    jobfair_id = db.Column(UUID(as_uuid=True), db.ForeignKey("jobfairs.id"), nullable=False)
-    booth_id = db.Column(UUID(as_uuid=True), db.ForeignKey("jobfair_booths.id"), nullable=False)
-    jobseeker_profile_id = db.Column(UUID(as_uuid=True), db.ForeignKey("jobseeker_profiles.id"), nullable=False)
-    application_id = db.Column(UUID(as_uuid=True), db.ForeignKey("applications.id"), nullable=True)
-    checked_in = db.Column(db.Boolean, default=False, nullable=False)
-    checked_in_at = db.Column(db.DateTime(timezone=True), nullable=True)
-
-    booth = db.relationship("JobFairBooth", back_populates="visits")
-    jobseeker_profile = db.relationship("JobseekerProfile")
-    application = db.relationship("Application")
-
-    __table_args__ = (db.UniqueConstraint("booth_id", "jobseeker_profile_id", name="uq_booth_visit_jobseeker"),)
-
-    def to_dict(self):
-        from models.application import APPLICATION_STATUS_LABELS
-
-        profile = self.jobseeker_profile
-        application = self.application
-        return {
-            "id": str(self.id),
-            "jobfair_id": str(self.jobfair_id),
-            "booth_id": str(self.booth_id),
-            "jobseeker_profile_id": str(self.jobseeker_profile_id),
-            "jobseeker_name": profile.full_name if profile else None,
-            "is_verified_by_staff": profile.is_verified_by_staff if profile else False,
-            "resume_url": profile.resume_url if profile else None,
-            "preferred_position": profile.preferred_job_position if profile else None,
-            "municipality": profile.municipality if profile else None,
-            "contact_number": profile.contact_number if profile else None,
-            "checked_in": self.checked_in,
-            "checked_in_at": self.checked_in_at.isoformat() if self.checked_in_at else None,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "application_id": str(self.application_id) if self.application_id else None,
-            "application_status": application.status if application else None,
-            "application_status_label": APPLICATION_STATUS_LABELS.get(application.status, application.status) if application else None,
-        }
+    year = db.Column(db.Integer, primary_key=True)
+    next_seq = db.Column(db.Integer, nullable=False, default=1)

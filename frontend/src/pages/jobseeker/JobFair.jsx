@@ -1,5 +1,4 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
 import { CalendarDays, FileDown, MapPinned, QrCode } from 'lucide-react'
 import { useState } from 'react'
@@ -15,11 +14,12 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { downloadFile, parseBlobError } from '../../lib/download'
+import { manila } from '../../lib/manilaTime'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
 import { cn } from '../../lib/utils'
 
 function fairChip(fair) {
-  if (fair.status === 'published' && dayjs(fair.event_date).isAfter(dayjs())) return { status: 'upcoming' }
+  if (fair.status === 'published' && manila(fair.event_date).isAfter(manila())) return { status: 'upcoming' }
   return { status: fair.status }
 }
 
@@ -37,9 +37,11 @@ export default function JobseekerJobFair() {
     queryFn: async () => (await api.get('/api/jobfair/my-registrations')).data.data,
   })
 
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['jobfair'] })
   useSocket({
-    'jobfair:published': () => queryClient.invalidateQueries({ queryKey: ['jobfair'] }),
-    'jobfair:updated': () => queryClient.invalidateQueries({ queryKey: ['jobfair'] }),
+    'jobfair:published': refresh,
+    'jobfair:updated': refresh,
+    'public:homepage_update': (payload) => payload?.sections?.includes('jobfairs') && refresh(),
   })
 
   const downloadForm = async (jobfairId) => {
@@ -94,18 +96,19 @@ export default function JobseekerJobFair() {
                         <StatusBadge {...fairChip(fair)} />
                       </div>
                       <p className="flex items-center gap-1.5 text-xs text-slate-500">
-                        <CalendarDays className="h-3.5 w-3.5" /> {dayjs(fair.event_date).format('MMM D, YYYY h:mm A')}
+                        <CalendarDays className="h-3.5 w-3.5" /> {manila(fair.event_date).format('MMM D, YYYY h:mm A')}
                       </p>
                       <p className="flex items-center gap-1.5 text-xs text-slate-500">
                         <MapPinned className="h-3.5 w-3.5" /> {fair.venue}
                         {fair.municipality ? `, ${fair.municipality}` : ''}
                       </p>
                       {fair.registration_deadline && (
-                        <p className="mt-1 text-xs text-amber-600">Register by {dayjs(fair.registration_deadline).format('MMM D, YYYY')}</p>
+                        <p className="mt-1 text-xs text-amber-600">Register by {manila(fair.registration_deadline).format('MMM D, YYYY h:mm A')}</p>
                       )}
                       <p className="mt-2 text-xs text-slate-500">
                         {fair.registered_employers} employers · {fair.registered_jobseekers} registered
                       </p>
+                      {fair.jobseeker_slots_full && <p className="mt-1 text-xs font-medium text-red-600">Slots full</p>}
                     </div>
                   </Link>
                 </Card>
@@ -127,10 +130,10 @@ export default function JobseekerJobFair() {
                   <div>
                     <p className="text-sm font-semibold text-slate-900">{reg.jobfair_name}</p>
                     <p className="text-xs text-slate-500">
-                      {reg.registration_number} · {dayjs(reg.event_date).format('MMM D, YYYY h:mm A')}
+                      {reg.registration_number} · {manila(reg.event_date).format('MMM D, YYYY h:mm A')}
                     </p>
                     {reg.attended && reg.scanned_at && (
-                      <p className="text-xs text-emerald-600">Attended — scanned {dayjs(reg.scanned_at).format('MMM D, YYYY h:mm A')}</p>
+                      <p className="text-xs text-emerald-600">Attended — scanned {manila(reg.scanned_at).format('MMM D, YYYY h:mm A')}</p>
                     )}
                   </div>
                   <div className="flex items-center gap-2">

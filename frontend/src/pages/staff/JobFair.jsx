@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 import { motion } from 'framer-motion'
-import { Archive, Check, Download, FileBarChart, FileDown, ImagePlus, Pencil, Plus, QrCode, Send, Store, Trash2, X, XCircle } from 'lucide-react'
+import { Archive, Check, Download, FileBarChart, FileDown, ImagePlus, Pencil, Plus, QrCode, Send, Trash2, Users, X, XCircle } from 'lucide-react'
 import { useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
@@ -15,12 +15,14 @@ import { Dialog, DialogContent } from '../../components/ui/Dialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Label, Textarea } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
+import { RichTextEditor } from '../../components/ui/RichTextEditor'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { TimePicker } from '../../components/ui/TimePicker'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { downloadFile, parseBlobError } from '../../lib/download'
+import { manila } from '../../lib/manilaTime'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
 import { cn } from '../../lib/utils'
 
@@ -47,6 +49,11 @@ const STATUS_TABS = [
   { key: 'archived', label: 'Archived' },
 ]
 
+const REPORT_TYPES = [
+  { type: 'employers', label: 'Employer Participant Report' },
+  { type: 'jobseekers', label: 'Jobseeker Participant Report' },
+]
+
 const EMPTY_FORM = {
   name: '', description: '', venue: '', municipality: '', event_date: '', end_time: '',
   registration_deadline: '', max_employer_slots: 20, max_jobseeker_slots: 200,
@@ -54,7 +61,10 @@ const EMPTY_FORM = {
 }
 
 function fairToForm(fair) {
-  const toLocal = (iso) => (iso ? dayjs(iso).format('YYYY-MM-DDTHH:mm') : '')
+  // manila(), not bare dayjs(), so the wall-clock values populated back into the
+  // Date/TimePicker match what was originally entered regardless of the staff
+  // member's browser timezone.
+  const toLocal = (iso) => (iso ? manila(iso).format('YYYY-MM-DDTHH:mm') : '')
   return {
     name: fair.name || '',
     description: fair.description || '',
@@ -91,35 +101,29 @@ function BoothsDialog({ fair, onClose }) {
     mutationFn: ({ boothId, action, reason }) =>
       api.put(`/api/staff/jobfair/${fair.id}/booths/${boothId}/${action}`, reason ? { remarks: reason } : undefined),
     onSuccess: (res) => {
-      toast.success(res.data?.message || 'Booth updated.')
+      toast.success(res.data?.message || 'Registration updated.')
       setRemarksTarget(null)
       setRemarks('')
       refresh()
     },
-    onError: (err) => toast.error(err.response?.data?.message || 'Could not update booth.'),
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not update registration.'),
   })
 
   const isRowPending = (boothId) => review.isPending && review.variables?.boothId === boothId
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent title={`Manage Booths — ${fair.name}`} className="max-w-2xl">
+      <DialogContent title={`Employer Registrations — ${fair.name}`} className="max-w-2xl">
         {isLoading ? (
           <CardSkeleton />
         ) : !booths.length ? (
-          <p className="py-4 text-center text-sm text-slate-500">No booth requests for this job fair yet.</p>
+          <p className="py-4 text-center text-sm text-slate-500">No employer registrations for this job fair yet.</p>
         ) : (
           <div className="max-h-[65vh] space-y-2 overflow-y-auto pr-1">
             {booths.map((b) => (
               <div key={b.id} className="rounded-lg border border-slate-200 p-3">
                 <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-medium text-slate-800">{b.company_name}</p>
-                    <p className="text-xs text-slate-500">{b.booth_name}</p>
-                    {b.status === 'confirmed' && (
-                      <p className="text-xs text-slate-400">{b.visitor_count} registered · {b.checked_in_count} checked in</p>
-                    )}
-                  </div>
+                  <p className="text-sm font-medium text-slate-800">{b.company_name}</p>
                   <StatusBadge status={b.status} />
                 </div>
                 {b.review_remarks && <p className="mt-1 text-xs text-red-600">Reason: {b.review_remarks}</p>}
@@ -130,7 +134,7 @@ function BoothsDialog({ fair, onClose }) {
                         <Check className="h-3.5 w-3.5" /> {isRowPending(b.id) ? 'Approving…' : 'Approve'}
                       </Button>
                       <Button size="sm" variant="danger" onClick={() => setRemarksTarget({ booth: b, action: 'reject' })}>
-                        <X className="h-3.5 w-3.5" /> Reject
+                        <X className="h-3.5 w-3.5" /> Disapprove
                       </Button>
                     </>
                   )}
@@ -147,15 +151,15 @@ function BoothsDialog({ fair, onClose }) {
       </DialogContent>
 
       <Dialog open={!!remarksTarget} onOpenChange={(open) => !open && setRemarksTarget(null)}>
-        <DialogContent title={remarksTarget?.action === 'reject' ? 'Reject Booth Request' : 'Suspend Booth'}>
+        <DialogContent title={remarksTarget?.action === 'reject' ? 'Disapprove Registration' : 'Suspend Registration'}>
           <div className="space-y-4">
             <p className="text-sm text-slate-600">
-              {remarksTarget?.action === 'reject' ? 'Rejecting' : 'Suspending'} the booth for <b>{remarksTarget?.booth.company_name}</b>.
+              {remarksTarget?.action === 'reject' ? 'Disapproving' : 'Suspending'} the registration for <b>{remarksTarget?.booth.company_name}</b>.
               The employer will be notified with your reason.
             </p>
             <div>
               <Label>Reason</Label>
-              <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Why is this booth being rejected/suspended?" />
+              <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Why is this registration being disapproved/suspended?" />
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => setRemarksTarget(null)}>
@@ -167,7 +171,7 @@ function BoothsDialog({ fair, onClose }) {
                 disabled={!remarks.trim() || isRowPending(remarksTarget?.booth.id)}
                 onClick={() => review.mutate({ boothId: remarksTarget.booth.id, action: remarksTarget.action, reason: remarks.trim() })}
               >
-                {isRowPending(remarksTarget?.booth.id) ? 'Submitting…' : remarksTarget?.action === 'reject' ? 'Reject Booth' : 'Suspend Booth'}
+                {isRowPending(remarksTarget?.booth.id) ? 'Submitting…' : remarksTarget?.action === 'reject' ? 'Disapprove' : 'Suspend'}
               </Button>
             </div>
           </div>
@@ -193,7 +197,16 @@ export default function StaffJobFair({ basePath = '/staff' }) {
   })
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['jobfair'] })
-  useSocket({ 'jobfair:qr_scanned': refresh, 'jobfair:booth_requested': refresh })
+  useSocket({
+    'jobfair:qr_scanned': refresh,
+    'jobfair:booth_requested': refresh,
+    'jobfair:booth_cancelled': refresh,
+    'jobfair:registered': refresh,
+    'jobfair:registrant': refresh,
+    // Covers approvals/disapprovals/suspensions and publish/cancel/archive from
+    // any staff session, so every open Job Fair Management tab stays in sync.
+    'public:homepage_update': (payload) => payload?.sections?.includes('jobfairs') && refresh(),
+  })
 
   const saveFair = useMutation({
     mutationFn: () => (editing ? api.put(`/api/staff/jobfair/${editing.id}`, form) : api.post('/api/staff/jobfair', form)),
@@ -235,17 +248,10 @@ export default function StaffJobFair({ basePath = '/staff' }) {
 
   const downloadReport = async (fairId, type, format) => {
     try {
-      if (type === 'attendance') {
-        await downloadFile(`/api/staff/jobfair/${fairId}/attendance-report`, {
-          params: { format },
-          filename: format === 'pdf' ? 'jobfair_attendance.pdf' : 'jobfair_attendance.xlsx',
-        })
-      } else {
-        await downloadFile(`/api/staff/jobfair/${fairId}/report`, {
-          params: { type, format },
-          filename: format === 'pdf' ? `jobfair_${type}.pdf` : `jobfair_${type}.xlsx`,
-        })
-      }
+      await downloadFile(`/api/staff/jobfair/${fairId}/report/${type}`, {
+        params: { format },
+        filename: format === 'pdf' ? `jobfair_${type}.pdf` : `jobfair_${type}.xlsx`,
+      })
     } catch (err) {
       toast.error(await parseBlobError(err))
     }
@@ -273,7 +279,7 @@ export default function StaffJobFair({ basePath = '/staff' }) {
     <motion.div {...fadeIn} className="space-y-4">
       <PageHeader
         title="Job Fair Management"
-        description="Create, publish, and operate PESO job fair events — including QR attendance and reports."
+        description="Create, publish, and operate PESO job fair scheduling and registration — including QR attendance and reports."
         actions={
           <Button onClick={openCreate}>
             <Plus className="h-4 w-4" /> Create Job Fair
@@ -317,14 +323,18 @@ export default function StaffJobFair({ basePath = '/staff' }) {
                     {fair.municipality ? `, ${fair.municipality}` : ''}
                   </p>
                   <p className="text-xs text-slate-500">
-                    {dayjs(fair.event_date).format('MMM D, YYYY h:mm A')}
-                    {fair.end_time ? ` – ${dayjs(fair.end_time).format('h:mm A')}` : ''}
+                    {manila(fair.event_date).format('MMM D, YYYY h:mm A')}
+                    {fair.end_time ? ` – ${manila(fair.end_time).format('h:mm A')}` : ''}
                   </p>
                   {fair.registration_deadline && (
-                    <p className="text-xs text-slate-400">Registration until {dayjs(fair.registration_deadline).format('MMM D, YYYY')}</p>
+                    <p className="text-xs text-slate-400">
+                      Registration until {manila(fair.registration_deadline).format('MMM D, YYYY h:mm A')}
+                      {fair.registration_deadline_passed ? ' (closed)' : ''}
+                    </p>
                   )}
                   <p className="mt-1 text-xs text-slate-400">
-                    {fair.registered_employers} employers · {fair.registered_jobseekers} jobseekers · {fair.attended_count} attended
+                    {fair.registered_employers} employers{fair.employer_slots_full ? ' (full)' : ''} · {fair.registered_jobseekers} jobseekers
+                    {fair.jobseeker_slots_full ? ' (full)' : ''} · {fair.attended_count} attended
                   </p>
 
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -379,7 +389,7 @@ export default function StaffJobFair({ basePath = '/staff' }) {
                     )}
                     {fair.status !== 'draft' && (
                       <Button size="sm" variant="secondary" onClick={() => setBoothsFair(fair)}>
-                        <Store className="h-3.5 w-3.5" /> Manage Booths
+                        <Users className="h-3.5 w-3.5" /> Employer Registrations
                       </Button>
                     )}
                   </div>
@@ -401,7 +411,7 @@ export default function StaffJobFair({ basePath = '/staff' }) {
             </div>
             <div>
               <Label>Description</Label>
-              <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+              <RichTextEditor value={form.description} onChange={(html) => setForm({ ...form, description: html })} />
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
@@ -499,13 +509,7 @@ export default function StaffJobFair({ basePath = '/staff' }) {
       <Dialog open={!!reportsFair} onOpenChange={(open) => !open && setReportsFair(null)}>
         <DialogContent title={reportsFair ? `Reports — ${reportsFair.name}` : 'Reports'}>
           <div className="space-y-2">
-            {[
-              { type: 'attendance', label: 'Attendance Report' },
-              { type: 'participants', label: 'Participant Report' },
-              { type: 'employers', label: 'Employer Participation Report' },
-              { type: 'vacancies', label: 'Vacancy Report' },
-              { type: 'booth_visits', label: 'Booth Visits Report' },
-            ].map((r) => (
+            {REPORT_TYPES.map((r) => (
               <div key={r.type} className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
                 <p className="text-sm font-medium text-slate-800">{r.label}</p>
                 <div className="flex gap-2">

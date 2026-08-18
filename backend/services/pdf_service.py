@@ -170,6 +170,7 @@ def generate_jobfair_registration_form(
     event_rows = f"""
     <tr><th style="width:200px">Event</th><td>{_esc(fair.get("name"))}</td></tr>
     <tr><th>Date &amp; Time</th><td>{_val(fair.get("event_date_str"))}</td></tr>
+    <tr><th>Registration Deadline</th><td>{_val(fair.get("registration_deadline_str"), "None")}</td></tr>
     <tr><th>Venue</th><td>{_val(fair.get("venue"))}</td></tr>
     <tr><th>Contact Person</th><td>{_val(fair.get("contact_person"))}</td></tr>
     <tr><th>Requirements</th><td>{_val(fair.get("requirements"), "None specified")}</td></tr>

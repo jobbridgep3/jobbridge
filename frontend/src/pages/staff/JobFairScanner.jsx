@@ -1,5 +1,4 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import dayjs from 'dayjs'
 import { Html5Qrcode } from 'html5-qrcode'
 import { motion } from 'framer-motion'
 import { ArrowLeft, CheckCircle2, KeyRound, Percent, UserCheck, Users } from 'lucide-react'
@@ -13,6 +12,7 @@ import { Input } from '../../components/ui/Input'
 import { StatCard } from '../../components/ui/StatCard'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
+import { manila } from '../../lib/manilaTime'
 import { fadeIn } from '../../lib/motion'
 
 const SCANNER_ELEMENT_ID = 'jobfair-qr-scanner'
@@ -139,7 +139,7 @@ export default function StaffJobFairScanner({ basePath = '/staff' }) {
                     <CheckCircle2 className="h-4 w-4 text-green-600" /> {log.jobseeker_name}
                     <span className="text-xs text-slate-400">{log.registration_number}</span>
                   </span>
-                  <span className="text-xs text-slate-400">{log.scanned_at ? dayjs(log.scanned_at).format('h:mm:ss A') : ''}</span>
+                  <span className="text-xs text-slate-400">{log.scanned_at ? manila(log.scanned_at).format('h:mm:ss A') : ''}</span>
                 </li>
               ))}
             </ul>

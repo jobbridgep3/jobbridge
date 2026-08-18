@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query'
-import dayjs from 'dayjs'
 import { CalendarDays, MapPinned } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
@@ -7,6 +6,7 @@ import { Button } from '../../../components/ui/Button'
 import { Card, CardContent } from '../../../components/ui/Card'
 import { Skeleton } from '../../../components/ui/Skeleton'
 import api from '../../../lib/axios'
+import { manila } from '../../../lib/manilaTime'
 
 export function JobFairPanel() {
   const { data: fairs, isLoading } = useQuery({
@@ -42,7 +42,7 @@ export function JobFairPanel() {
         )}
 
         {topFive.map((fair) => {
-          const date = dayjs(fair.event_date)
+          const date = manila(fair.event_date)
           return (
             <div key={fair.id} className="flex gap-3 px-5 py-4 first:pt-4">
               <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-lg border border-border bg-surface-secondary">
@@ -55,7 +55,7 @@ export function JobFairPanel() {
                     {fair.name}
                   </h3>
                 </Link>
-                <p className="mt-0.5 text-xs text-text-muted">{date.format('MMMM D, YYYY · h:mm A')}</p>
+                <p className="mt-0.5 text-xs text-text-muted">{date.format('MMM D, YYYY h:mm A')}</p>
                 {fair.venue && (
                   <p className="mt-0.5 flex items-center gap-1 text-xs text-text-muted">
                     <MapPinned className="h-3 w-3 shrink-0" /> <span className="truncate">{fair.venue}</span>
