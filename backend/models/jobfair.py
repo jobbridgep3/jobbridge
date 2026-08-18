@@ -141,6 +141,7 @@ class JobFairBooth(BaseModel):
     jobfair = db.relationship("JobFair", back_populates="booths")
     employer_company = db.relationship("EmployerCompany")
     reviewed_by_user = db.relationship("User", foreign_keys=[reviewed_by])
+    positions = db.relationship("JobFairPosition", back_populates="booth", cascade="all, delete-orphan")
 
     __table_args__ = (
         db.UniqueConstraint("jobfair_id", "employer_company_id", name="uq_jobfair_employer"),
@@ -159,6 +160,38 @@ class JobFairBooth(BaseModel):
             "review_remarks": self.review_remarks,
             "reviewed_at": iso_manila(self.reviewed_at),
             "reviewed_by_name": self.reviewed_by_user.email if self.reviewed_by_user else None,
+            "created_at": iso_manila(self.created_at),
+            "positions": [p.to_dict() for p in self.positions],
+        }
+
+
+class JobFairPosition(BaseModel):
+    """A job-fair-only position a confirmed employer plans to offer at that
+    specific Job Fair — entirely separate from the regular Vacancy model and
+    online-application pipeline. No staff approval, no general job search
+    visibility, no Application rows. Purely informational: identifies what
+    will be offered in person at the event, scoped to the employer's Job Fair
+    registration (JobFairBooth) for that fair's own management/reporting and
+    jobseeker/public awareness — deliberately never linked into the regular
+    Vacancy Management module."""
+    __tablename__ = "jobfair_positions"
+
+    booth_id = db.Column(UUID(as_uuid=True), db.ForeignKey("jobfair_booths.id"), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    job_type = db.Column(db.String(30), nullable=True)
+    num_slots = db.Column(db.Integer, nullable=True)
+
+    booth = db.relationship("JobFairBooth", back_populates="positions")
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "booth_id": str(self.booth_id),
+            "title": self.title,
+            "description": self.description,
+            "job_type": self.job_type,
+            "num_slots": self.num_slots,
             "created_at": iso_manila(self.created_at),
         }
 

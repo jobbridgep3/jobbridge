@@ -104,11 +104,27 @@ export default function PublicJobFairDetail() {
           {fair.booths?.length > 0 && (
             <div>
               <h2 className="mb-2 text-sm font-semibold text-text-primary">Participating Employers</h2>
-              <div className="flex flex-wrap gap-2">
+              <div className="space-y-2">
                 {fair.booths.map((b) => (
-                  <Badge key={b.id}>{b.company_name}</Badge>
+                  <div key={b.id} className="rounded-lg border border-border p-3">
+                    <Badge>{b.company_name}</Badge>
+                    {b.positions?.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {b.positions.map((p) => (
+                          <span key={p.id} className="rounded-full bg-surface-secondary px-2 py-0.5 text-xs text-text-muted">
+                            {p.title}{p.num_slots ? ` (${p.num_slots})` : ''}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
+              {fair.booths.some((b) => b.positions?.length > 0) && (
+                <p className="mt-1.5 text-xs text-text-muted">
+                  Positions shown above are offered in person at this event only — not online applications.
+                </p>
+              )}
             </div>
           )}
 

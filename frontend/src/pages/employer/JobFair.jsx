@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { CalendarDays, MapPinned, Users, XCircle } from 'lucide-react'
+import { CalendarDays, MapPinned, Plus, Users, X, XCircle } from 'lucide-react'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 
@@ -9,7 +9,7 @@ import { Button } from '../../components/ui/Button'
 import { Card, CardContent } from '../../components/ui/Card'
 import { Dialog, DialogContent } from '../../components/ui/Dialog'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { Label } from '../../components/ui/Input'
+import { Input, Label, Select } from '../../components/ui/Input'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { StatusBadge } from '../../components/ui/StatusBadge'
@@ -17,6 +17,9 @@ import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
 import { fadeIn, staggerContainer, staggerItem } from '../../lib/motion'
 import { manila } from '../../lib/manilaTime'
+import { EMPLOYMENT_TYPES } from './vacancy-sections/options'
+
+const EMPTY_POSITION_FORM = { title: '', job_type: '', num_slots: '', description: '' }
 
 function fairChip(fair) {
   if (fair.status === 'published' && manila(fair.event_date).isAfter(manila())) return { status: 'upcoming' }
@@ -56,6 +59,37 @@ function RegistrationDialog({ fair, onClose }) {
       queryClient.invalidateQueries({ queryKey: ['vacancies', 'my'] })
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Could not update vacancy.'),
+  })
+
+  const [addingPosition, setAddingPosition] = useState(false)
+  const [positionForm, setPositionForm] = useState(EMPTY_POSITION_FORM)
+
+  const refreshPositions = () => queryClient.invalidateQueries({ queryKey: ['jobfair', fair.id] })
+
+  const addPosition = useMutation({
+    mutationFn: () =>
+      api.post(`/api/jobfair/${fair.id}/positions`, {
+        title: positionForm.title.trim(),
+        job_type: positionForm.job_type || null,
+        num_slots: positionForm.num_slots ? Number(positionForm.num_slots) : null,
+        description: positionForm.description || null,
+      }),
+    onSuccess: () => {
+      toast.success('Position added.')
+      setPositionForm(EMPTY_POSITION_FORM)
+      setAddingPosition(false)
+      refreshPositions()
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not add position.'),
+  })
+
+  const removePosition = useMutation({
+    mutationFn: (positionId) => api.delete(`/api/jobfair/${fair.id}/positions/${positionId}`),
+    onSuccess: () => {
+      toast.success('Position removed.')
+      refreshPositions()
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Could not remove position.'),
   })
 
   return (
@@ -102,6 +136,84 @@ function RegistrationDialog({ fair, onClose }) {
                       )
                     })}
                   </div>
+                )}
+              </div>
+            )}
+            {booth.status === 'confirmed' && (
+              <div>
+                <Label>Positions Offered at This Job Fair</Label>
+                <p className="mb-2 text-xs text-slate-500">
+                  In-person only — separate from your regular vacancy postings. Not published online and no online applications.
+                </p>
+                {booth.positions?.length ? (
+                  <div className="mb-2 space-y-1.5">
+                    {booth.positions.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                        <div>
+                          <span className="font-medium text-slate-800">{p.title}</span>
+                          {p.num_slots ? <span className="ml-1 text-xs text-slate-500">({p.num_slots} slot{p.num_slots > 1 ? 's' : ''})</span> : null}
+                          {p.job_type && (
+                            <span className="ml-1 text-xs capitalize text-slate-500">
+                              · {EMPLOYMENT_TYPES.find((t) => t.value === p.job_type)?.label || p.job_type}
+                            </span>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => removePosition.mutate(p.id)}
+                          disabled={removePosition.isPending && removePosition.variables === p.id}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mb-2 text-sm text-slate-500">No positions added yet.</p>
+                )}
+                {addingPosition ? (
+                  <div className="space-y-2 rounded-lg border border-slate-200 p-3">
+                    <Input
+                      placeholder="Position title"
+                      value={positionForm.title}
+                      onChange={(e) => setPositionForm({ ...positionForm, title: e.target.value })}
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <Select value={positionForm.job_type} onChange={(e) => setPositionForm({ ...positionForm, job_type: e.target.value })}>
+                        <option value="">Employment type…</option>
+                        {EMPLOYMENT_TYPES.map((t) => (
+                          <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
+                      </Select>
+                      <Input
+                        type="number"
+                        min="1"
+                        placeholder="Slots (optional)"
+                        value={positionForm.num_slots}
+                        onChange={(e) => setPositionForm({ ...positionForm, num_slots: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setAddingPosition(false)
+                          setPositionForm(EMPTY_POSITION_FORM)
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button size="sm" onClick={() => addPosition.mutate()} disabled={!positionForm.title.trim() || addPosition.isPending}>
+                        {addPosition.isPending ? 'Adding…' : 'Add Position'}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button size="sm" variant="secondary" onClick={() => setAddingPosition(true)}>
+                    <Plus className="h-3.5 w-3.5" /> Add Position
+                  </Button>
                 )}
               </div>
             )}

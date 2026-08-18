@@ -9,7 +9,7 @@ from models.employer import EmployerCompany, EmployerCompanyDocument
 from models.employer_hr import EmployerHRDocument, EmployerHRProfile
 from models.employment import EmploymentRecord, EmploymentStatusHistory
 from models.interview import Interview, InterviewRescheduleRequest
-from models.jobfair import JobFair, JobFairBooth, JobFairRegistration, JobFairRegistrationCounter
+from models.jobfair import JobFair, JobFairBooth, JobFairPosition, JobFairRegistration, JobFairRegistrationCounter
 from models.jobseeker import Education, JobseekerDocument, JobseekerProfile, WorkExperience
 from models.manpower_training import ManpowerTrainingApplication, ManpowerTrainingBatch
 from models.notification import Notification
@@ -50,6 +50,7 @@ __all__ = [
     "JobFair",
     "JobFairRegistration",
     "JobFairBooth",
+    "JobFairPosition",
     "JobFairRegistrationCounter",
     "TrainingProgram",
     "TrainingEnrollment",

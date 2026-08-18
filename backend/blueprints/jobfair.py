@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 
 from extensions import db
 from models.employer import EmployerCompany
-from models.jobfair import JobFair, JobFairBooth, JobFairRegistration
+from models.jobfair import JobFair, JobFairBooth, JobFairPosition, JobFairRegistration
 from models.jobseeker import JobseekerProfile
 from models.notification import Notification
 from models.user import User
@@ -368,6 +368,49 @@ def update_booth(jobfair_id):
             )
         emit_broadcast("public:homepage_update", {"sections": ["jobfairs"]})
     return ok(booth.to_dict(), "Registration withdrawn." if cancelled else "Registration updated.")
+
+
+@jobfair_bp.post("/jobfair/<jobfair_id>/positions")
+@jwt_required()
+@role_required("employer")
+def create_jobfair_position(jobfair_id):
+    """A job-fair-only position a CONFIRMED employer plans to offer in person
+    at this event — deliberately not a Vacancy: no staff approval, no online
+    application, no general job search visibility. See JobFairPosition."""
+    company = EmployerCompany.query.filter_by(user_id=get_jwt_identity()).first()
+    booth = JobFairBooth.query.filter_by(jobfair_id=jobfair_id, employer_company_id=company.id).first() if company else None
+    if not booth or booth.status != "confirmed":
+        return fail("Your registration for this job fair must be confirmed before adding positions.", 403)
+    data = request.get_json(force=True) or {}
+    title = (data.get("title") or "").strip()
+    if not title:
+        return fail("Position title is required.", 400)
+
+    position = JobFairPosition(
+        booth_id=booth.id, title=title, description=data.get("description") or None,
+        job_type=data.get("job_type") or None, num_slots=data.get("num_slots") or None,
+    )
+    db.session.add(position)
+    db.session.commit()
+    log_audit(User.query.get(company.user_id), "Create", "jobfair_positions", position.id, f"Added position for {booth.jobfair.name}")
+    emit_broadcast("public:homepage_update", {"sections": ["jobfairs"]})
+    return ok(position.to_dict(), "Position added.", 201)
+
+
+@jobfair_bp.delete("/jobfair/<jobfair_id>/positions/<position_id>")
+@jwt_required()
+@role_required("employer")
+def delete_jobfair_position(jobfair_id, position_id):
+    company = EmployerCompany.query.filter_by(user_id=get_jwt_identity()).first()
+    booth = JobFairBooth.query.filter_by(jobfair_id=jobfair_id, employer_company_id=company.id).first() if company else None
+    position = JobFairPosition.query.filter_by(id=position_id, booth_id=booth.id).first() if booth else None
+    if not position:
+        return fail("Position not found.", 404)
+    db.session.delete(position)
+    db.session.commit()
+    log_audit(User.query.get(company.user_id), "Delete", "jobfair_positions", position_id)
+    emit_broadcast("public:homepage_update", {"sections": ["jobfairs"]})
+    return ok(message="Position removed.")
 
 
 # ---------- Staff CRUD + lifecycle ----------

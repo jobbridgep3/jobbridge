@@ -161,11 +161,25 @@ export default function JobseekerJobFairDetail() {
                 {fair.booths.map((b) => (
                   <div key={b.id} className="rounded-lg border border-slate-200 p-3">
                     <p className="text-sm font-medium text-slate-800">{b.company_name}</p>
+                    {b.positions?.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {b.positions.map((p) => (
+                          <span key={p.id} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                            {p.title}{p.num_slots ? ` (${p.num_slots})` : ''}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             ) : (
               <p className="text-sm text-slate-400">No employers registered yet.</p>
+            )}
+            {fair.booths?.some((b) => b.positions?.length > 0) && (
+              <p className="mt-1.5 text-xs text-slate-400">
+                Positions shown above are offered in person at this event only — not online applications.
+              </p>
             )}
           </div>
 

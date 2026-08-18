@@ -127,6 +127,15 @@ function BoothsDialog({ fair, onClose }) {
                   <StatusBadge status={b.status} />
                 </div>
                 {b.review_remarks && <p className="mt-1 text-xs text-red-600">Reason: {b.review_remarks}</p>}
+                {b.positions?.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {b.positions.map((p) => (
+                      <span key={p.id} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                        {p.title}{p.num_slots ? ` (${p.num_slots})` : ''}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div className="mt-2 flex flex-wrap gap-2">
                   {b.status === 'pending' && (
                     <>
