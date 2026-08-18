@@ -650,6 +650,10 @@ def publish_vacancy(vacancy_id):
 
     notify_jobseekers_of_new_vacancy(vacancy, company)
 
+    from services.lmi_service import notify_lmi_update
+
+    notify_lmi_update("vacancy_published")
+
     return ok(vacancy.to_dict(), "Vacancy published.")
 
 

@@ -136,6 +136,11 @@ def create_employment_record_for_application(application):
         f"{application.jobseeker_profile.full_name} was hired for {record.position}.",
         socket_event="employment:updated", socket_payload=record.to_dict(),
     )
+
+    from services.lmi_service import notify_lmi_update
+
+    notify_lmi_update("hired")
+
     return record
 
 

@@ -191,6 +191,10 @@ def approve_referral_letter(letter_id):
                 employer_user.email, vacancy.employer_company.company_name, profile.full_name, vacancy.title,
             )
 
+    from services.lmi_service import notify_lmi_update
+
+    notify_lmi_update("referral_approved")
+
     return ok(letter.to_dict(), "Referral letter approved and generated.")
 
 

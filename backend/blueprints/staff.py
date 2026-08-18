@@ -365,6 +365,12 @@ def update_jobseeker_profile(profile_id):
     apply_profile_update(profile, data)
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Update", "jobseekers", profile.id, "Profile edited by staff")
+
+    from services.lmi_service import LMI_RELEVANT_PROFILE_FIELDS, notify_lmi_update
+
+    if any(f in data for f in LMI_RELEVANT_PROFILE_FIELDS):
+        notify_lmi_update("jobseeker_profile_updated")
+
     return ok(profile.to_dict(), "Jobseeker profile updated.")
 
 

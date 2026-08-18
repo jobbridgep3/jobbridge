@@ -196,6 +196,10 @@ def create_interview():
     )
     log_audit(actor, "Create", "interviews", interview.id)
 
+    from services.lmi_service import notify_lmi_update
+
+    notify_lmi_update("interview_created")
+
     return ok(interview.to_dict(), "Interview scheduled.", 201)
 
 

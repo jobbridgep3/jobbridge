@@ -129,6 +129,10 @@ def register():
     if role == "jobseeker":
         emit_broadcast("public:homepage_update", {"sections": ["stats"]})
 
+    from services.lmi_service import notify_lmi_update
+
+    notify_lmi_update(f"{role}_registered")
+
     return ok(
         {"email": user.email, "role": role, "expires_in": ttl_seconds},
         "Registered. Check your email for the OTP code.",
