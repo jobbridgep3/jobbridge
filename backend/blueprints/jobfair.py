@@ -134,16 +134,30 @@ def register_jobfair(jobfair_id):
         db.session.rollback()
         return fail("Already registered for this job fair.", 409)
 
-    registration = JobFairRegistration(
-        jobfair_id=fair.id, jobseeker_profile_id=profile.id,
-        registration_number=next_registration_number(),
-    )
-    db.session.add(registration)
-    try:
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        return fail("Already registered for this job fair.", 409)
+    # Bounded retry: JobFairRegistration has THREE unique constraints
+    # (jobfair_id+jobseeker_profile_id, registration_number, qr_token) — an
+    # IntegrityError doesn't necessarily mean a genuine duplicate registration
+    # for this fair, so we re-check that specific condition before reporting
+    # it, and retry with a freshly-generated number otherwise (e.g. a
+    # registration_number collision, which is unrelated to this fair/jobseeker).
+    registration = None
+    committed = False
+    for _attempt in range(3):
+        registration = JobFairRegistration(
+            jobfair_id=fair.id, jobseeker_profile_id=profile.id,
+            registration_number=next_registration_number(),
+        )
+        db.session.add(registration)
+        try:
+            db.session.commit()
+            committed = True
+            break
+        except IntegrityError:
+            db.session.rollback()
+            if JobFairRegistration.query.filter_by(jobfair_id=fair.id, jobseeker_profile_id=profile.id).first():
+                return fail("Already registered for this job fair.", 409)
+    if not committed:
+        return fail("Could not complete registration — please try again.", 409)
     log_audit(User.query.get(profile.user_id), "Create", "jobfair_registrations", registration.id, f"Registered for {fair.name}")
 
     user = User.query.get(profile.user_id)
