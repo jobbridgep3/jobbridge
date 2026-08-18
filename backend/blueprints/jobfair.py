@@ -106,13 +106,17 @@ def get_jobfair(jobfair_id):
         if booth:
             result["my_booth"] = booth.to_dict()
 
-    # Vacancies the participating employers explicitly included in this fair
-    # ("Include in Job Fair"), so attendees can browse openings before the
-    # event. Also requires a still-confirmed registration, so a later-
-    # suspended registration's vacancies drop off without needing to clear
-    # every tag. This is informational only — no application-management flow
-    # is attached to it.
-    company_ids = [b.employer_company_id for b in fair.booths if b.status == "confirmed"]
+    # One merged "Available Vacancies" list — real published vacancies the
+    # participating employers explicitly included in this fair ("Include in
+    # Job Fair") alongside job-fair-only positions (JobFairPosition, added
+    # from the employer's Job Fair registration, never a real Vacancy row).
+    # Both require a still-confirmed registration, so a later-suspended
+    # registration's listings drop off without needing to clear every tag.
+    # `online_application` tells the frontend which entries link to the real
+    # apply page and which are in-person-only, informational listings.
+    confirmed_booths = [b for b in fair.booths if b.status == "confirmed"]
+    merged_vacancies = []
+    company_ids = [b.employer_company_id for b in confirmed_booths]
     if company_ids:
         vacancies = (
             Vacancy.query.filter(
@@ -122,12 +126,20 @@ def get_jobfair(jobfair_id):
             )
             .order_by(Vacancy.created_at.desc()).limit(50).all()
         )
-        result["vacancies"] = [
-            {"id": str(v.id), "title": v.title, "company_name": v.employer_company.company_name, "job_type": v.job_type}
+        merged_vacancies.extend(
+            {
+                "id": str(v.id), "title": v.title, "company_name": v.employer_company.company_name,
+                "job_type": v.job_type, "online_application": True,
+            }
             for v in vacancies
-        ]
-    else:
-        result["vacancies"] = []
+        )
+    for booth in confirmed_booths:
+        company_name = booth.employer_company.company_name if booth.employer_company else None
+        merged_vacancies.extend(
+            {"id": str(p.id), "title": p.title, "company_name": company_name, "job_type": p.job_type, "online_application": False}
+            for p in booth.positions
+        )
+    result["vacancies"] = merged_vacancies
     return ok(result)
 
 

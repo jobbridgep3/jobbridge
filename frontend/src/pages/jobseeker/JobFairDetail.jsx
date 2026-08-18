@@ -157,29 +157,13 @@ export default function JobseekerJobFairDetail() {
           <div>
             <h2 className="mb-2 text-sm font-semibold text-slate-800">Participating Employers</h2>
             {fair.booths?.length ? (
-              <div className="space-y-2">
+              <div className="flex flex-wrap gap-2">
                 {fair.booths.map((b) => (
-                  <div key={b.id} className="rounded-lg border border-slate-200 p-3">
-                    <p className="text-sm font-medium text-slate-800">{b.company_name}</p>
-                    {b.positions?.length > 0 && (
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {b.positions.map((p) => (
-                          <span key={p.id} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-                            {p.title}{p.num_slots ? ` (${p.num_slots})` : ''}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <Badge key={b.id}>{b.company_name}</Badge>
                 ))}
               </div>
             ) : (
               <p className="text-sm text-slate-400">No employers registered yet.</p>
-            )}
-            {fair.booths?.some((b) => b.positions?.length > 0) && (
-              <p className="mt-1.5 text-xs text-slate-400">
-                Positions shown above are offered in person at this event only — not online applications.
-              </p>
             )}
           </div>
 
@@ -187,19 +171,30 @@ export default function JobseekerJobFairDetail() {
             <div>
               <h2 className="mb-2 text-sm font-semibold text-slate-800">Available Vacancies</h2>
               <div className="space-y-2">
-                {fair.vacancies.map((v) => (
-                  <Link
-                    key={v.id}
-                    to={`/jobseeker/jobs/${v.id}`}
-                    className="flex items-center justify-between rounded-lg border border-slate-200 p-3 hover:border-primary-300 hover:bg-primary-50/40"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-slate-800">{v.title}</p>
-                      <p className="text-xs text-slate-500">{v.company_name}</p>
+                {fair.vacancies.map((v) => {
+                  const cardContent = (
+                    <>
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">{v.title}</p>
+                        <p className="text-xs text-slate-500">{v.company_name}</p>
+                      </div>
+                      {v.job_type && <Badge className="capitalize">{v.job_type.replace(/_/g, ' ')}</Badge>}
+                    </>
+                  )
+                  return v.online_application ? (
+                    <Link
+                      key={v.id}
+                      to={`/jobseeker/jobs/${v.id}`}
+                      className="flex items-center justify-between rounded-lg border border-slate-200 p-3 hover:border-primary-300 hover:bg-primary-50/40"
+                    >
+                      {cardContent}
+                    </Link>
+                  ) : (
+                    <div key={v.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-3">
+                      {cardContent}
                     </div>
-                    {v.job_type && <Badge className="capitalize">{v.job_type.replace(/_/g, ' ')}</Badge>}
-                  </Link>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
