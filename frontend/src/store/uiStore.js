@@ -42,6 +42,10 @@ export const useUiStore = create(
       setUnreadCount: (count) => set({ unreadCount: count }),
       incrementUnread: () => set((state) => ({ unreadCount: state.unreadCount + 1 })),
       decrementUnread: () => set((state) => ({ unreadCount: Math.max(0, state.unreadCount - 1) })),
+      /** Clears per-user UI state on logout/login-switch. Deliberately leaves
+       * theme/resolvedTheme/sidebarCollapsed untouched — those are global app
+       * preferences, not tied to a specific account. */
+      resetSession: () => set({ unreadCount: 0 }),
       /** Sets the user's theme choice, applies it immediately (no page refresh),
        * persists to localStorage for the next load's bootstrap script, and
        * fire-and-forgets the DB save so it survives logout/device changes. */

@@ -9,13 +9,13 @@ import { resolveIcon, resolveNotificationLink } from '../../config/notificationM
 import { ROLE_DASHBOARD } from '../../config/navigation'
 import { useSocket } from '../../hooks/useSocket'
 import api from '../../lib/axios'
+import { performLogout } from '../../lib/sessionReset'
 import { cn } from '../../lib/utils'
 import { useAuthStore } from '../../store/authStore'
 import { useUiStore } from '../../store/uiStore'
 
 export function Header({ breadcrumbItems = [] }) {
   const user = useAuthStore((s) => s.user)
-  const logout = useAuthStore((s) => s.logout)
   const unreadCount = useUiStore((s) => s.unreadCount)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -40,7 +40,7 @@ export function Header({ breadcrumbItems = [] }) {
   })
 
   const handleLogout = () => {
-    logout()
+    performLogout()
     navigate('/login')
   }
 

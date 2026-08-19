@@ -17,7 +17,9 @@ import { ROLE_DASHBOARD } from '../../config/navigation'
 import { LOGIN_SLIDESHOW_IMAGES } from '../../config/loginSlideshowImages'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
+import { queryClient } from '../../lib/queryClient'
 import { useAuthStore } from '../../store/authStore'
+import { useUiStore } from '../../store/uiStore'
 
 const schema = z.object({
   email: z.string().email('Enter a valid email address'),
@@ -49,10 +51,19 @@ export default function Login() {
     try {
       const res = await api.post('/api/auth/login', { ...values, recaptcha_token: recaptchaToken })
       const { token, user } = res.data.data
+      // Defensive second layer, on top of performLogout() on the way out: guarantees
+      // this freshly-authenticated session never starts out holding another
+      // account's cached API data or notification count, regardless of how /login
+      // was reached.
+      queryClient.clear()
+      useUiStore.getState().resetSession()
       setAuth(token, user)
       toast.success('Welcome back!')
-      const from = location.state?.from
-      navigate(from ? `${from.pathname}${from.search || ''}` : ROLE_DASHBOARD[user.role] || '/')
+      // Only the jobseeker-only "Apply Now while anonymous" CTA flow (see
+      // lib/publicCta.js) may redirect somewhere other than the role dashboard —
+      // and only when the account that just logged in is actually a jobseeker.
+      const ctaTarget = user.role === 'jobseeker' ? location.state?.ctaTarget : null
+      navigate(ctaTarget || ROLE_DASHBOARD[user.role] || '/')
     } catch (err) {
       setServerError(err.response?.data?.message || 'Login failed. Please try again.')
       // A reCAPTCHA token is single-use (Google's siteverify consumes it on the very

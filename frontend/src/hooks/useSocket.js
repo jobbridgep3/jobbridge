@@ -4,15 +4,35 @@ import { io } from 'socket.io-client'
 import { useAuthStore } from '../store/authStore'
 
 let socketInstance = null
+let socketToken = null
 let refCount = 0
 
 export function getSocket() {
   return socketInstance
 }
 
+/** Unconditionally tears down the shared connection, regardless of ref count —
+ * called on logout so a socket authenticated as the outgoing user can never be
+ * reused for whoever logs in next. Normal component unmounts still go through
+ * the ref-counted cleanup in useSocket() below; this is the "force it now" path. */
+export function disconnectSocket() {
+  socketInstance?.disconnect()
+  socketInstance = null
+  socketToken = null
+  refCount = 0
+}
+
 function ensureConnected(token) {
+  // A live socket opened for a different token (including a previous user's,
+  // or an anonymous connection from a public page) must never be silently
+  // reused — reconnect fresh instead of trusting stale auth.
+  if (socketInstance && socketToken !== token) {
+    socketInstance.disconnect()
+    socketInstance = null
+  }
   if (socketInstance) return socketInstance
   const url = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+  socketToken = token
   socketInstance = io(url, { query: { token }, transports: ['websocket', 'polling'] })
   return socketInstance
 }

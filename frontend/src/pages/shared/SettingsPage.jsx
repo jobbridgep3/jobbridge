@@ -14,8 +14,8 @@ import { PasswordRequirements } from '../../components/ui/PasswordRequirements'
 import api from '../../lib/axios'
 import { fadeIn } from '../../lib/motion'
 import { isStrongPassword } from '../../lib/passwordPolicy'
+import { performLogout } from '../../lib/sessionReset'
 import { cn } from '../../lib/utils'
-import { useAuthStore } from '../../store/authStore'
 import { useUiStore } from '../../store/uiStore'
 
 const THEME_OPTIONS = [
@@ -26,7 +26,6 @@ const THEME_OPTIONS = [
 
 export function SettingsPage({ showPrivacy = false, showDeactivate = false }) {
   const navigate = useNavigate()
-  const logout = useAuthStore((s) => s.logout)
   const theme = useUiStore((s) => s.theme)
   const setTheme = useUiStore((s) => s.setTheme)
   const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
@@ -62,7 +61,7 @@ export function SettingsPage({ showPrivacy = false, showDeactivate = false }) {
     try {
       await api.delete('/api/account')
       toast.success('Account deactivated.')
-      logout()
+      performLogout()
       navigate('/login')
     } catch {
       toast.error('Could not deactivate account.')
