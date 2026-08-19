@@ -60,6 +60,10 @@ class JobseekerProfile(BaseModel):
     # Verification
     verification_remarks = db.Column(db.Text, nullable=True)
 
+    # RA 11261 (First Time Jobseekers Assistance Act) — backs the LMI "FTJS" report
+    is_first_time_jobseeker = db.Column(db.Boolean, default=False, nullable=False)
+    barangay_certificate_number = db.Column(db.String(50), nullable=True)
+
     user = db.relationship("User", back_populates="jobseeker_profile")
     work_experiences = db.relationship(
         "WorkExperience", back_populates="profile", cascade="all, delete-orphan", order_by="WorkExperience.created_at.desc()"
@@ -127,6 +131,8 @@ class JobseekerProfile(BaseModel):
             "tags": self.tags or [],
             "is_verified_by_staff": self.is_verified_by_staff,
             "verification_remarks": self.verification_remarks,
+            "is_first_time_jobseeker": self.is_first_time_jobseeker,
+            "barangay_certificate_number": self.barangay_certificate_number,
             "profile_completion": completion["profile_completion"],
             "completed_count": completion["completed_count"],
             "total_count": completion["total_count"],

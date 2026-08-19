@@ -670,93 +670,57 @@ def generate_dilp_report(rows: list[dict], date_str: str, generated_by: str, gen
     return _render(body, landscape=True)
 
 
-LMI_KPI_LABELS = {
-    "total_jobseekers": "Total Registered Jobseekers", "active_jobseekers": "Active Jobseekers",
-    "total_employers": "Total Employers", "active_employers": "Active Employers",
-    "total_vacancies": "Total Job Vacancies", "total_applicants": "Total Applicants",
-    "total_referrals": "Total Referrals", "total_interviews": "Total Interviews",
-    "total_hired": "Total Hired / Placed", "employment_rate": "Employment Rate (%)",
-    "placement_rate": "Placement Rate (%)", "unfilled_vacancies": "Unfilled Vacancies",
-}
+def _lmi_fmt_rows(rows: list[dict], date_keys: tuple[str, ...] = ()) -> list[dict]:
+    """Formats plain date objects (e.g. DATE HIRED) into display strings for the
+    PDF table — the Excel export keeps the raw date value instead (see
+    services/excel_service.py::_cell_value), so this formatting is PDF-only."""
+    if not date_keys:
+        return rows
+    out = []
+    for r in rows:
+        r2 = dict(r)
+        for k in date_keys:
+            if r2.get(k):
+                r2[k] = r2[k].strftime("%b %d, %Y")
+        out.append(r2)
+    return out
 
 
-def generate_lmi_report(
-    kpi: dict, jobseeker: dict, demand: dict, skills: dict, funnel: dict,
-    employer_industry: dict, barangay: dict, filters_lines: list[tuple[str, str]],
-    date_str: str, generated_by: str,
+def generate_lmi_pdf_report(
+    referral_placement: list[dict], referral_placement_columns: list[tuple],
+    ftjs: list[dict], ftjs_columns: list[tuple],
+    job_vacancy_registration: list[dict], job_vacancy_registration_columns: list[tuple],
+    job_vacancies_solicited: list[dict], job_vacancies_solicited_columns: list[tuple],
+    filters_lines: list[tuple[str, str]], date_str: str, generated_by: str,
 ) -> bytes:
-    """Labor Market Information report — always landscape, per requirement. Every
-    section below renders from the exact same aggregation dicts the LMI dashboard
-    and Excel export use (services/lmi_service.py), via the shared _bar_list
-    (CSS bar chart, no image/map library — this is also how "no Barangay heatmap"
-    is satisfied) and _series_table (detail table) helpers."""
+    """PESO LMI report — Referral & Placement / FTJS / Job Vacancy Registration /
+    Job Vacancies Solicited, matching the actual paper/Excel report PESO submits
+    (verified against a real submitted file). Plain data tables via _series_table,
+    no KPI cards/bar charts — this export is a records report, not analytics
+    (contrast the LMI dashboard, which stays separate and unchanged). Always
+    landscape, per requirement."""
     filters_rows = "".join(
         f"<tr><th style='width:220px'>{_esc(label)}</th><td>{_val(value)}</td></tr>" for label, value in filters_lines
     )
-    kpi_rows = "".join(
-        f"<tr><th style='width:280px'>{_esc(LMI_KPI_LABELS.get(k, k))}</th><td>{_val(v)}</td></tr>" for k, v in kpi.items()
-    )
+
+    referral_placement = _lmi_fmt_rows(referral_placement, ("date_hired",))
 
     sections = [
         "<h3>Applied Filters</h3>" + f"<table>{filters_rows}</table>",
-        "<h3>Executive Summary</h3>" + f"<table>{kpi_rows}</table>",
 
-        "<h3>Labor Supply — Age Groups</h3>" + _bar_list(jobseeker["age_groups"], "label", "count"),
-        "<h3>Labor Supply — Gender</h3>" + _bar_list(jobseeker["gender"], "label", "count"),
-        "<h3>Labor Supply — Educational Attainment</h3>" + _series_table(
-            jobseeker["educational_attainment"], [("label", "Attainment"), ("count", "Jobseekers")]),
-        "<h3>Labor Supply — Employment Status</h3>" + _bar_list(jobseeker["employment_status"], "label", "count"),
-        "<h3>Labor Supply — Preferred Occupation</h3>" + _series_table(
-            jobseeker["preferred_occupation"], [("label", "Occupation"), ("count", "Jobseekers")]),
-        "<h3>Labor Supply — Preferred Industry</h3>" + _series_table(
-            jobseeker["preferred_industry"], [("label", "Industry"), ("count", "Jobseekers")]),
-        "<h3>Labor Supply — Barangay Distribution</h3>" + _bar_list(jobseeker["barangay"][:15], "label", "count"),
+        f"<h3>Referral &amp; Placement ({len(referral_placement)})</h3>"
+        + _series_table(referral_placement, referral_placement_columns),
 
-        "<h3>Labor Demand — Vacancies by Occupation</h3>" + _bar_list(demand["by_occupation"], "label", "count"),
-        "<h3>Labor Demand — Vacancies by Industry</h3>" + _bar_list(demand["by_industry"], "label", "count"),
-        "<h3>Labor Demand — Most In-Demand Jobs</h3>" + _series_table(
-            demand["most_in_demand"], [("label", "Position"), ("count", "Applications")]),
-        "<h3>Labor Demand — Employment Type</h3>" + _bar_list(demand["employment_type"], "label", "count"),
-        "<h3>Labor Demand — Filled vs Unfilled Vacancies</h3>" + _series_table(
-            [{"label": "Filled", "count": demand["filled_vs_unfilled"]["filled"]},
-             {"label": "Unfilled", "count": demand["filled_vs_unfilled"]["unfilled"]}],
-            [("label", "Status"), ("count", "Vacancies")]),
-        "<h3>Labor Demand — Applications per Vacancy</h3>" + _series_table(
-            demand["applications_per_vacancy"], [("label", "Vacancy"), ("count", "Applications")]),
+        f"<h3>FTJS — First-Time Jobseekers, RA 11261 ({len(ftjs)})</h3>"
+        + _series_table(ftjs, ftjs_columns),
 
-        "<h3>Skills Analysis — Top Skills Among Jobseekers</h3>" + _bar_list(skills["top_skills_jobseekers"], "label", "count"),
-        "<h3>Skills Analysis — Top Skills Requested by Employers</h3>" + _bar_list(skills["top_skills_employers"], "label", "count"),
-        "<h3>Skills Analysis — Supply vs Demand (Skills Gap)</h3>" + _series_table(
-            skills["gap_table"][:20],
-            [("skill", "Skill"), ("jobseekers", "Jobseekers"), ("vacancies", "Vacancies"), ("gap", "Gap"), ("demand_level", "Demand Level")]),
+        f"<h3>Job Vacancy Registration ({len(job_vacancy_registration)})</h3>"
+        + _series_table(job_vacancy_registration, job_vacancy_registration_columns),
 
-        "<h3>Employment &amp; Placement — Funnel</h3>" + _series_table(funnel["funnel"], [("stage", "Stage"), ("count", "Count")]),
-        "<h3>Employment &amp; Placement — Rates</h3>" + _series_table([
-            {"metric": "Referral Rate", "value": f"{funnel['referral_rate']}%"},
-            {"metric": "Interview Rate", "value": f"{funnel['interview_rate']}%"},
-            {"metric": "Placement Rate", "value": f"{funnel['placement_rate']}%"},
-            {"metric": "Employment Rate", "value": f"{funnel['employment_rate']}%"},
-            {"metric": f"Time-to-Placement (application-linked only, N={funnel['time_to_placement_n']})",
-             "value": f"{funnel['time_to_placement_days']} days" if funnel["time_to_placement_days"] is not None else "Insufficient data"},
-        ], [("metric", "Metric"), ("value", "Value")]),
-
-        "<h3>Employer Analysis — Top Hiring Employers</h3>" + _bar_list(employer_industry["top_hiring_employers"], "label", "count"),
-        "<h3>Employer Analysis — Detail</h3>" + _series_table(
-            employer_industry["by_employer"],
-            [("employer", "Employer"), ("industry", "Industry"), ("vacancies", "Vacancies"), ("filled", "Filled"),
-             ("unfilled", "Unfilled"), ("applicants", "Applicants"), ("referrals", "Referrals"), ("hires", "Hired")]),
-        "<h3>Industry Analysis</h3>" + _series_table(
-            employer_industry["by_industry"],
-            [("industry", "Industry"), ("jobseekers", "Jobseekers"), ("vacancies", "Vacancies"),
-             ("applicants", "Applicants"), ("placements", "Placements"), ("filled", "Filled"), ("unfilled", "Unfilled")]),
-
-        # Barangay: bar chart + detail table only — explicitly no heatmap/map.
-        "<h3>Barangay Labor Market — Comparison</h3>" + _bar_list(barangay["barangays"][:15], "barangay", "jobseekers"),
-        "<h3>Barangay Labor Market — Detail</h3>" + _series_table(
-            barangay["barangays"],
-            [("barangay", "Barangay"), ("jobseekers", "Jobseekers"), ("employed", "Employed"), ("unemployed", "Unemployed"),
-             ("applicants", "Applicants"), ("referrals", "Referrals"), ("interviews", "Interviews"), ("hired", "Hired/Placed"),
-             ("employment_rate", "Employment Rate (%)"), ("placement_rate", "Placement Rate (%)")]),
+        "<h3>Database of Job Vacancies Solicited</h3>"
+        + "<p style='color:#475569;font-size:11px'>Regional Office No. 4A | Province: LAGUNA | Implementing PESO/JPO: PILA</p>"
+        + f"<p style='color:#475569;font-size:11px'>{len(job_vacancies_solicited)} vacancies solicited</p>"
+        + _series_table(job_vacancies_solicited, job_vacancies_solicited_columns),
     ]
 
     body = f"""

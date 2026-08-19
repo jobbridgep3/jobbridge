@@ -132,6 +132,28 @@ export function PersonalInfoSection({
           <Label>ZIP Code</Label>
           <Input value={form.zip_code || ''} onChange={set('zip_code')} onBlur={onBlur('zip_code')} placeholder="e.g. 4000" className={fieldClass('zip_code')} />
         </div>
+        <div className="flex items-center gap-2 pt-6">
+          <input
+            id="is_first_time_jobseeker"
+            type="checkbox"
+            checked={!!form.is_first_time_jobseeker}
+            onChange={(e) => setForm((f) => ({ ...f, is_first_time_jobseeker: e.target.checked }))}
+            className="h-4 w-4 rounded border-slate-300"
+          />
+          <Label htmlFor="is_first_time_jobseeker" className="mb-0">First-time Jobseeker (RA 11261)</Label>
+        </div>
+        {form.is_first_time_jobseeker && (
+          <div>
+            <Label>Barangay Certificate Number</Label>
+            <Input
+              value={form.barangay_certificate_number || ''}
+              onChange={set('barangay_certificate_number')}
+              onBlur={onBlur('barangay_certificate_number')}
+              placeholder="e.g. 11261-763-83-001"
+              className={fieldClass('barangay_certificate_number')}
+            />
+          </div>
+        )}
     </CollapsibleCard>
   )
 }

@@ -406,16 +406,6 @@ def build_kpi_summary(filters: LmiFilters) -> dict:
     }
 
 
-KPI_LABELS = {
-    "total_jobseekers": "Total Registered Jobseekers", "active_jobseekers": "Active Jobseekers",
-    "total_employers": "Total Employers", "active_employers": "Active Employers",
-    "total_vacancies": "Total Job Vacancies", "total_applicants": "Total Applicants",
-    "total_referrals": "Total Referrals", "total_interviews": "Total Interviews",
-    "total_hired": "Total Hired / Placed", "employment_rate": "Employment Rate (%)",
-    "placement_rate": "Placement Rate (%)", "unfilled_vacancies": "Unfilled Vacancies",
-}
-
-
 # ---------- Jobseeker Labor Profile Analytics ----------
 
 AGE_BRACKETS = [(15, 24), (25, 34), (35, 44), (45, 54), (55, 200)]
@@ -922,112 +912,190 @@ def notify_lmi_update(reason: str) -> None:
     notify_role("admin", "lmi:data_updated", payload)
 
 
-# ---------- Excel export ----------
+# ---------- PESO LMI Report export (Excel + PDF) ----------
+#
+# These 4 sheets/sections are the ONLY thing PESO actually submits upstream —
+# verified column-for-column against a real submitted LMI report file. They are
+# intentionally separate from the analytics dashboard above (KPI/jobseeker/demand/
+# skills/funnel/employer/barangay), which stays exactly as-is for on-screen use.
+
+REPORT_ROW_LIMIT = 5000
+
+
+def _reporting_period(value) -> tuple:
+    """value: a date or tz-aware datetime. Returns (year, month-name-upper) for the
+    REPORTING YEAR / REPORTING MONTH columns every PESO LMI sheet uses, or ("", "")
+    if unset."""
+    if not value:
+        return "", ""
+    return value.year, value.strftime("%B").upper()
+
+
+REFERRAL_PLACEMENT_COLUMNS = [
+    ("no", "NO."), ("reporting_year", "REPORTING YEAR"), ("reporting_month", "REPORTING MONTH"),
+    ("name_of_client", "NAME OF CLIENT"), ("referred_to", "REFERRED TO"),
+    ("referred_as", "REFERRED AS (POSITION)"),
+    ("name_of_company", "NAME OF COMPANY/AGENCY/TRAINING INSTITUTION REFERRED TO"),
+    ("type_of_employer", "TYPE OF EMPLOYER (FOR WAGE EMPLOYMENT ONLY)"),
+    ("placement", "PLACEMENT"), ("date_hired", "DATE HIRED"),
+]
+
+FTJS_COLUMNS = [
+    ("reporting_year", "REPORTING YEAR"), ("reporting_month", "REPORTING MONTH"),
+    ("barangay", "BARANGAY"), ("name", "NAME OF BENEFICIARY/AVAILEE"),
+    ("barangay_certificate_number", "BARANGAY CERTIFICATE NUMBER"), ("sex", "SEX"),
+    ("marital_status", "MARITAL STATUS"), ("educational_attainment", "HIGHEST EDUCATIONAL ATTAINMENT"),
+    ("pwd", "PWD"),
+]
+
+JOB_VACANCY_REGISTRATION_COLUMNS = [
+    ("reporting_year", "REPORTING YEAR"), ("reporting_month", "REPORTING MONTH"),
+    ("province", "PROVINCE"), ("employer_name", "EMPLOYER NAME"), ("abbreviation", "ABBREVIATION"),
+    ("employer_type", "EMPLOYER TYPE"), ("employer_province", "PROVINCE"), ("barangay", "BARANGAY"),
+    ("municipality", "MUNICIPALITY"), ("contact_person", "CONTACT PERSON"),
+    ("peso_accredited_partner", "PESO ACCREDITED PARTNER?"),
+]
+
+JOB_VACANCIES_SOLICITED_COLUMNS = [
+    ("reporting_year", "REPORTING YEAR"), ("reporting_month", "REPORTING MONTH"),
+    ("province", "PROVINCE"), ("city_municipality", "CITY/MUNICIPALITY"),
+    ("establishment", "NAME OF REPORTING ESTABLISHMENT"), ("industry", "INDUSTRY"),
+    ("occupation", "OCCUPATION/POSITION TITLE"), ("minor_group", "MINOR GROUP"),
+]
+
+
+def _referral_placement_rows(filters: LmiFilters) -> list[dict]:
+    """One row per referral that resulted in an actual placement. Walk-in hires
+    (EmploymentRecord.application_id IS NULL) never had a referral to begin with,
+    so they're correctly excluded here (contrast the dashboard's "Total Hired/
+    Placed" KPI, which does include them) — this sheet reports referrals that led
+    to placement, not every hire."""
+    records = (
+        _employment_query(filters)
+        .join(Application, EmploymentRecord.application_id == Application.id)
+        .join(ReferralLetter, ReferralLetter.application_id == Application.id)
+        .filter(ReferralLetter.status == "approved")
+        .order_by(EmploymentRecord.start_date)
+        .limit(REPORT_ROW_LIMIT)
+        .all()
+    )
+    rows = []
+    for idx, rec in enumerate(records, start=1):
+        jobseeker = rec.jobseeker_profile
+        employer = rec.employer_company
+        year, month = _reporting_period(rec.start_date)
+        rows.append({
+            "no": idx, "reporting_year": year, "reporting_month": month,
+            "name_of_client": jobseeker.full_name if jobseeker else "",
+            # This platform only supports one referral pathway (local wage
+            # employment via a posted vacancy) — no overseas/self-employment/
+            # training referral flow exists, so these three are real constants,
+            # not placeholders.
+            "referred_to": "WAGE EMPLOYMENT",
+            "referred_as": rec.position or "",
+            "name_of_company": employer.company_name if employer else "",
+            "type_of_employer": "LOCAL - PRIVATE (WAGE)",
+            "placement": "HIRED (LOCAL - PRIVATE)",
+            "date_hired": rec.start_date,
+        })
+    return rows
+
+
+def _ftjs_rows(filters: LmiFilters) -> list[dict]:
+    """RA 11261 First-Time Jobseekers — scoped to profiles with the self-declared
+    is_first_time_jobseeker flag set (see JobseekerProfile), not every registrant."""
+    profiles = (
+        _jobseeker_query(filters)
+        .filter(JobseekerProfile.is_first_time_jobseeker.is_(True))
+        .order_by(JobseekerProfile.created_at)
+        .limit(REPORT_ROW_LIMIT)
+        .all()
+    )
+    rows = []
+    for p in profiles:
+        year, month = _reporting_period(p.created_at)
+        attainment = p.educations[0].attainment_level if p.educations else ""
+        rows.append({
+            "reporting_year": year, "reporting_month": month,
+            "barangay": p.barangay or "", "name": p.full_name or "",
+            "barangay_certificate_number": p.barangay_certificate_number or "",
+            "sex": p.gender or "", "marital_status": p.civil_status or "",
+            "educational_attainment": attainment or "",
+            "pwd": "YES" if "PWD" in (p.tags or []) else "NO",
+        })
+    return rows
+
+
+def _job_vacancy_registration_rows(filters: LmiFilters) -> list[dict]:
+    """One row per registered employer establishment."""
+    employers = _employer_query(filters).order_by(EmployerCompany.created_at).limit(REPORT_ROW_LIMIT).all()
+    rows = []
+    for e in employers:
+        year, month = _reporting_period(e.created_at)
+        rows.append({
+            "reporting_year": year, "reporting_month": month,
+            "province": "LAGUNA",  # PESO office's own province — matches the source format's fixed left-hand PROVINCE column
+            "employer_name": e.company_name or "", "abbreviation": e.trade_name or "",
+            "employer_type": "PRIVATE",  # system tracks only private-sector employers today
+            "employer_province": e.province_name or "", "barangay": e.barangay_name or "",
+            "municipality": e.city_municipality_name or "", "contact_person": e.rep_name or "",
+            "peso_accredited_partner": "YES" if e.accreditation_status == "accredited" else "NO",
+        })
+    return rows
+
+
+def _job_vacancies_solicited_rows(filters: LmiFilters) -> list[dict]:
+    """One row per vacancy that actually reached PESO posting (draft/pending/
+    rejected vacancies were never solicited from the establishment)."""
+    vacancies = (
+        _vacancy_query(filters)
+        .filter(Vacancy.status.notin_(("draft", "pending", "rejected")))
+        .order_by(Vacancy.posting_date)
+        .limit(REPORT_ROW_LIMIT)
+        .all()
+    )
+    rows = []
+    for v in vacancies:
+        employer = v.employer_company
+        report_date = v.posting_date or (v.created_at.date() if v.created_at else None)
+        year, month = _reporting_period(report_date)
+        rows.append({
+            "reporting_year": year, "reporting_month": month,
+            "province": v.province_name or (employer.province_name if employer else "") or "",
+            "city_municipality": v.city_municipality_name or (employer.city_municipality_name if employer else "") or "",
+            "establishment": employer.company_name if employer else "",
+            # Real free-text value as stored — not PSIC-coded (no such classification exists in this schema).
+            "industry": v.industry or (employer.industry if employer else "") or "",
+            "occupation": v.title or "",
+            "minor_group": "",  # no PSOC occupation classification exists in this schema
+        })
+    return rows
+
+
+def _sheet(title: str, columns: list[tuple], rows: list[dict]) -> tuple:
+    headers = [label for _, label in columns]
+    data = [[row.get(key, "") for key, _ in columns] for row in rows]
+    return title, headers, data
+
 
 def build_lmi_excel(filters: LmiFilters):
-    kpi = build_kpi_summary(filters)
-    jobseeker = build_jobseeker_profile_analytics(filters)
-    demand = build_job_demand_analytics(filters)
-    skills = build_skills_gap_analytics(filters)
-    funnel = build_employment_funnel(filters)
-    employer_industry = build_employer_industry_analytics(filters)
-    barangay = build_barangay_analytics(filters)
-
-    sheets = []
-
-    summary_rows = [[label, value] for label, value in filters_display(filters)]
-    summary_rows.append(["", ""])
-    summary_rows += [[KPI_LABELS[k], v] for k, v in kpi.items()]
-    sheets.append(("Executive Summary", ["Metric", "Value"], summary_rows))
-
-    jobseeker_columns = [
-        "Registration #", "Full Name", "Age", "Gender", "Barangay", "Municipality", "Province",
-        "Educational Attainment", "Employment Status", "Preferred Occupation", "Preferred Industry",
-        "Technical Skills", "Soft Skills", "Certifications",
+    sheets = [
+        _sheet("Referral & Placement", REFERRAL_PLACEMENT_COLUMNS, _referral_placement_rows(filters)),
+        _sheet("FTJS", FTJS_COLUMNS, _ftjs_rows(filters)),
+        _sheet("Job Vacancy Registration", JOB_VACANCY_REGISTRATION_COLUMNS, _job_vacancy_registration_rows(filters)),
+        _sheet("Job Vacancies Solicited", JOB_VACANCIES_SOLICITED_COLUMNS, _job_vacancies_solicited_rows(filters)),
     ]
-    jobseeker_rows = []
-    for idx, p in enumerate(_jobseeker_query(filters).limit(5000).all(), start=1):
-        attainment = p.educations[0].attainment_level if p.educations else ""
-        jobseeker_rows.append([
-            f"JS-{idx:06d}", p.full_name, p.age() or "", p.gender or "", p.barangay or "", p.municipality or "",
-            p.province or "", attainment or "", p.employment_status or "", p.preferred_job_position or "",
-            p.preferred_industry or "", ", ".join(p.technical_skills or []), ", ".join(p.soft_skills or []),
-            ", ".join(p.certifications or []),
-        ])
-    sheets.append(("Jobseeker Profile", jobseeker_columns, jobseeker_rows))
-
-    vacancy_columns = ["Job Title", "Employer", "Industry", "Employment Type", "Location", "Salary Range", "Status", "Applicants", "Referrals", "Interviews", "Hired", "Filled/Unfilled"]
-    vacancy_rows = []
-    for v in _vacancy_query(filters).limit(5000).all():
-        applicants = Application.query.filter_by(vacancy_id=v.id).count()
-        referrals = ReferralLetter.query.filter_by(vacancy_id=v.id, status="approved").count()
-        interviews = Interview.query.join(Application, Interview.application_id == Application.id).filter(Application.vacancy_id == v.id).count()
-        hired = Application.query.filter_by(vacancy_id=v.id, status="hired").count()
-        salary = (f"₱{v.salary_min:,.0f}–₱{v.salary_max:,.0f}" if v.salary_min and v.salary_max else "Not specified") if not v.hide_salary else "Confidential"
-        vacancy_rows.append([
-            v.title, v.employer_company.company_name if v.employer_company else "", v.industry or "",
-            (v.job_type or "").replace("_", " ").title(), v.city_municipality_name or v.work_location or "",
-            salary, v.status.title(), applicants, referrals, interviews, hired,
-            "Filled" if v.status == "filled" else "Unfilled",
-        ])
-    sheets.append(("Job Demand-Vacancies", vacancy_columns, vacancy_rows))
-
-    employer_columns = ["Employer", "Industry", "Vacancies", "Applicants", "Referrals", "Interviews", "Hired", "Filled", "Unfilled"]
-    employer_rows = [
-        [r["employer"], r["industry"], r["vacancies"], r["applicants"], r["referrals"], r["interviews"], r["hires"], r["filled"], r["unfilled"]]
-        for r in employer_industry["by_employer"]
-    ]
-    sheets.append(("Employer Analysis", employer_columns, employer_rows))
-
-    sheets.append(("Skills Demand", ["Skill", "Jobseekers", "Vacancies", "Demand Level"], [
-        [row["skill"], row["jobseekers"], row["vacancies"], row["demand_level"]] for row in skills["gap_table"]
-    ]))
-    sheets.append(("Skills Gap", ["Skill", "Jobseeker Supply", "Employer Demand", "Gap", "Demand Level"], [
-        [row["skill"], row["jobseekers"], row["vacancies"], row["gap"], row["demand_level"]] for row in skills["gap_table"]
-    ]))
-
-    funnel_rows = [[f["stage"], f["count"]] for f in funnel["funnel"]]
-    funnel_rows += [
-        ["Referral Rate (%)", funnel["referral_rate"]], ["Interview Rate (%)", funnel["interview_rate"]],
-        ["Placement Rate (%)", funnel["placement_rate"]], ["Employment Rate (%)", funnel["employment_rate"]],
-        ["Time-to-Placement (days, application-linked only, N=" + str(funnel["time_to_placement_n"]) + ")", funnel["time_to_placement_days"] or "Insufficient data"],
-    ]
-    sheets.append(("Employment and Placement", ["Metric", "Value"], funnel_rows))
-
-    barangay_columns = ["Barangay", "Jobseekers", "Active Jobseekers", "Employed", "Unemployed", "Applicants", "Referrals", "Interviews", "Hired/Placed", "Employment Rate (%)", "Placement Rate (%)", "Top Skills", "Most In-Demand Jobs"]
-    barangay_rows = [
-        [r["barangay"], r["jobseekers"], r["active_jobseekers"], r["employed"], r["unemployed"], r["applicants"], r["referrals"],
-         r["interviews"], r["hired"], r["employment_rate"], r["placement_rate"], r["top_skills"], r["top_jobs"]]
-        for r in barangay["barangays"]
-    ]
-    sheets.append(("Barangay Analysis", barangay_columns, barangay_rows))
-
-    industry_columns = ["Industry/Sector", "Jobseekers", "Vacancies", "Applicants", "Placements", "Filled", "Unfilled"]
-    industry_rows = [
-        [r["industry"], r["jobseekers"], r["vacancies"], r["applicants"], r["placements"], r["filled"], r["unfilled"]]
-        for r in employer_industry["by_industry"]
-    ]
-    sheets.append(("Industry Analysis", industry_columns, industry_rows))
-
     return build_multi_sheet_excel_report(sheets, landscape=True)
 
 
-# ---------- PDF export ----------
-
 def build_lmi_pdf(filters: LmiFilters, generated_by: str) -> bytes:
-    from services.pdf_service import generate_lmi_report
+    from services.pdf_service import generate_lmi_pdf_report
 
-    kpi = build_kpi_summary(filters)
-    jobseeker = build_jobseeker_profile_analytics(filters)
-    demand = build_job_demand_analytics(filters)
-    skills = build_skills_gap_analytics(filters)
-    funnel = build_employment_funnel(filters)
-    employer_industry = build_employer_industry_analytics(filters)
-    barangay = build_barangay_analytics(filters)
     date_str = now_manila().strftime("%B %d, %Y %I:%M %p")
-
-    return generate_lmi_report(
-        kpi=kpi, jobseeker=jobseeker, demand=demand, skills=skills, funnel=funnel,
-        employer_industry=employer_industry, barangay=barangay,
+    return generate_lmi_pdf_report(
+        referral_placement=_referral_placement_rows(filters), referral_placement_columns=REFERRAL_PLACEMENT_COLUMNS,
+        ftjs=_ftjs_rows(filters), ftjs_columns=FTJS_COLUMNS,
+        job_vacancy_registration=_job_vacancy_registration_rows(filters), job_vacancy_registration_columns=JOB_VACANCY_REGISTRATION_COLUMNS,
+        job_vacancies_solicited=_job_vacancies_solicited_rows(filters), job_vacancies_solicited_columns=JOB_VACANCIES_SOLICITED_COLUMNS,
         filters_lines=filters_display(filters), date_str=date_str, generated_by=generated_by,
     )

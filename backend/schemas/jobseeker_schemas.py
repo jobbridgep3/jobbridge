@@ -75,6 +75,8 @@ class ProfileUpdateSchema(Schema):
     region_code = fields.String(allow_none=True)
     region_name = fields.String(allow_none=True)
     zip_code = fields.String(allow_none=True)
+    is_first_time_jobseeker = fields.Boolean(allow_none=True)
+    barangay_certificate_number = fields.String(allow_none=True)
 
     employment_status = fields.String(allow_none=True, validate=validate.OneOf(EMPLOYMENT_STATUSES))
     preferred_job_position = fields.String(allow_none=True)

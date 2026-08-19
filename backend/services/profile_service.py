@@ -20,6 +20,7 @@ PROFILE_SCALAR_FIELDS = (
     "employment_status", "preferred_job_position",
     "preferred_industry", "preferred_work_location", "expected_salary", "employment_type",
     "technical_skills", "soft_skills", "languages_spoken", "certifications",
+    "is_first_time_jobseeker", "barangay_certificate_number",
 )
 
 

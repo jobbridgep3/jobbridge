@@ -248,6 +248,8 @@ export default function StaffJobseekerDetail({ basePath = '/staff' }) {
               <div className="col-span-2 sm:col-span-4">{row('Address', profile.address)}</div>
               {row('Region', profile.region_name)}
               {row('ZIP Code', profile.zip_code)}
+              {row('First-time Jobseeker (RA 11261)', profile.is_first_time_jobseeker ? 'Yes' : 'No')}
+              {profile.is_first_time_jobseeker && row('Barangay Certificate Number', profile.barangay_certificate_number)}
             </div>
           )}
         </CardContent>
