@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { motion } from 'framer-motion'
-import { Check, GraduationCap } from 'lucide-react'
+import { Check, FileText, GraduationCap } from 'lucide-react'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 
@@ -138,6 +138,11 @@ export default function JobseekerTrainingReferral() {
                 </div>
 
                 {app.batch_name && <p className="mt-2 text-sm text-text-secondary">Batch: {app.batch_name}</p>}
+                {app.project_proposal_url && (
+                  <a href={app.project_proposal_url} target="_blank" rel="noreferrer" className="mt-2 flex items-center gap-1.5 text-sm text-primary-700 hover:underline">
+                    <FileText className="h-4 w-4" /> View Project Proposal
+                  </a>
+                )}
                 {app.remarks && app.status === 'declined' && <p className="mt-2 text-sm text-red-600">Reason: {app.remarks}</p>}
 
                 <ReferralStepper status={app.status} />
