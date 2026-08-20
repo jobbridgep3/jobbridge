@@ -83,6 +83,7 @@ export default function EmployerVacancyForm() {
     'public:homepage_update': (payload) => {
       if (isEdit && payload?.sections?.includes('jobs')) {
         queryClient.invalidateQueries({ queryKey: ['vacancies', id] })
+        queryClient.invalidateQueries({ queryKey: ['vacancies', id, 'matches'] })
       }
     },
   })
@@ -91,6 +92,7 @@ export default function EmployerVacancyForm() {
     setForm(data)
     queryClient.setQueryData(['vacancies', id], data)
     queryClient.invalidateQueries({ queryKey: ['vacancies', 'my'] })
+    queryClient.invalidateQueries({ queryKey: ['vacancies', id, 'matches'] })
   }
 
   const buildPayload = () => ({

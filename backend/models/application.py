@@ -54,7 +54,7 @@ class Application(BaseModel):
             return vacancy.vacancy_no
         return f"VAC-{str(self.vacancy_id).replace('-', '')[:8].upper()}"
 
-    def to_dict(self):
+    def to_dict(self, current_match_score=None):
         company = self.vacancy.employer_company if self.vacancy else None
         return {
             "id": str(self.id),
@@ -68,6 +68,7 @@ class Application(BaseModel):
             "status": self.status,
             "status_label": APPLICATION_STATUS_LABELS.get(self.status, self.status),
             "match_score": self.match_score,
+            "current_match_score": current_match_score,
             "employer_notes": self.employer_notes,
             "feedback_note": self.feedback_note,
             "has_referral_letter": self.referral_letter is not None,

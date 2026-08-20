@@ -226,7 +226,7 @@ export default function EmployerApplicantDetail() {
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <StatusBadge status={applicant.status} label={applicant.status_label} />
-              <Badge variant="primary">{applicant.match_score}% AI Match</Badge>
+              <Badge variant="primary">{applicant.current_match_score ?? applicant.match_score}% AI Match</Badge>
               <Badge variant={profile.is_verified_by_staff ? 'success' : 'default'}>
                 {profile.is_verified_by_staff ? 'PESO Verified' : 'Unverified'}
               </Badge>

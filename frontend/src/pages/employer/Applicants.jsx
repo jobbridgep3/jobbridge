@@ -64,7 +64,11 @@ export default function EmployerApplicants() {
       header: 'Date Applied',
       cell: ({ row }) => dayjs(row.original.created_at).format('MMM D, YYYY'),
     },
-    { accessorKey: 'match_score', header: 'AI Match', cell: ({ row }) => <Badge variant="primary">{row.original.match_score ?? 0}%</Badge> },
+    {
+      accessorKey: 'current_match_score',
+      header: 'AI Match',
+      cell: ({ row }) => <Badge variant="primary">{row.original.current_match_score ?? row.original.match_score ?? 0}%</Badge>,
+    },
     {
       accessorKey: 'status',
       header: 'Status',

@@ -4,14 +4,17 @@ from services.email_service import send_new_vacancy_email
 from services.matching_service import rank_jobseekers_for_vacancy
 from services.notification_service import notify_role, notify_user
 
-# Threshold kept low deliberately: this is TF-IDF cosine similarity over just
-# two short documents (one profile, one vacancy), which produces much lower
-# absolute scores than intuition suggests even for a strong match — confirmed
-# empirically, a jobseeker whose skills were an exact 1:1 match for
-# required_skills scored only ~14/100, while unrelated or empty-skills
-# profiles reliably score 0. A higher threshold (e.g. 20) silently excluded
-# genuine matches — exactly the reported "no notifications are being sent"
-# symptom.
+# Threshold kept low deliberately. matching_service now weighs title, skills,
+# certifications, education/course, category and description text together
+# (see matching_service.py's module docstring for the weighting table), which
+# raised real-match scores well above the old skills-only baseline (~14/100
+# empirically) — a genuine strong match now typically scores in the 60-80
+# range, and even a partial/skills-only match to an otherwise-unrelated role
+# scores in the low 20s. Unrelated or empty-skills profiles still reliably
+# score 0. Kept at 5 rather than raised, since a higher threshold (e.g. 20)
+# previously silently excluded genuine matches (the reported "no
+# notifications are being sent" incident) — the low cost of an occasional
+# weak-match notification is preferable to that failure mode recurring.
 MATCH_THRESHOLD = 5
 
 

@@ -71,6 +71,11 @@ export default function JobseekerProfile() {
   const refreshFrom = (data) => {
     setForm(data)
     queryClient.setQueryData(['profile'], data)
+    // Match scores shown on Jobs/Recommended/Job-Detail are derived from this
+    // profile — invalidate so they're recomputed against the edited profile
+    // instead of showing a stale pre-edit score if those pages are cached
+    // from earlier in the session.
+    queryClient.invalidateQueries({ queryKey: ['jobs'] })
   }
 
   // Uploads (picture/document) only change one slice of the profile, but the

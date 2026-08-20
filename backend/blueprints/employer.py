@@ -15,7 +15,7 @@ from schemas.employer_schemas import CompanyProfileSchema, HRProfileSchema
 from schemas.vacancy_schemas import VacancyWriteSchema
 from services.application_status_service import build_timeline, is_currently_employed_at_company, transition_application
 from services.audit_service import log_audit
-from services.matching_service import rank_jobseekers_for_vacancy
+from services.matching_service import match_score, rank_jobseekers_for_vacancy
 from services.notification_service import notify_board
 from sockets.events import emit_broadcast
 from services.profile_completion_service import COMPANY_REQUIRED_FIELDS, HR_REQUIRED_FIELDS, compute_completion
@@ -870,7 +870,7 @@ def list_applicants():
     if not company:
         return ok([])
     apps = _applicants_query(company).order_by(Application.created_at.desc()).all()
-    return ok([a.to_dict() for a in apps])
+    return ok([a.to_dict(current_match_score=match_score(a.jobseeker_profile, a.vacancy)) for a in apps])
 
 
 @applicants_bp.get("/export")
@@ -912,7 +912,7 @@ def get_applicant(application_id):
     application = Application.query.get(application_id)
     if not application or not company or application.vacancy.employer_company_id != company.id:
         return fail("Applicant not found.", 404)
-    result = application.to_dict()
+    result = application.to_dict(current_match_score=match_score(application.jobseeker_profile, application.vacancy))
     result["jobseeker_profile"] = application.jobseeker_profile.to_dict()
     result["already_hired_elsewhere_at_company"] = is_currently_employed_at_company(
         application.jobseeker_profile_id, application.vacancy.employer_company_id, exclude_application_id=application.id,
