@@ -23,7 +23,7 @@ function useBreadcrumbItems(role) {
   const crumbs = []
   if (match) crumbs.push({ label: match.label, href: match.href })
   if (segments.length > 2) crumbs.push({ label: 'Details' })
-  return crumbs
+  return { crumbs, activeHref: match?.href }
 }
 
 export function AppShell() {
@@ -31,7 +31,7 @@ export function AppShell() {
   const setUnreadCount = useUiStore((s) => s.setUnreadCount)
   const incrementUnread = useUiStore((s) => s.incrementUnread)
   const location = useLocation()
-  const breadcrumbItems = useBreadcrumbItems(user?.role)
+  const { crumbs: breadcrumbItems, activeHref } = useBreadcrumbItems(user?.role)
 
   const refreshUnreadCount = () => {
     api.get('/api/notifications/unread-count').then((res) => setUnreadCount(res.data.data.count)).catch(() => {})
@@ -97,7 +97,7 @@ export function AppShell() {
           <Outlet />
         </motion.main>
       </div>
-      {user && <ChatbotWidget />}
+      {user && <ChatbotWidget role={user.role} pageHref={activeHref} />}
     </div>
   )
 }

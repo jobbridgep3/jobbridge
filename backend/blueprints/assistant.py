@@ -180,6 +180,9 @@ def chat():
                 return report_reply
 
     context = build_context(role, identity)
+    page = (data.get("page") or "").strip()[:100]
+    if page:
+        context = f"The user is currently viewing: {page}.\n\n{context}"
     history = _clean_history(data.get("history"))
 
     result = get_reply(message, session_id, role, context, history)

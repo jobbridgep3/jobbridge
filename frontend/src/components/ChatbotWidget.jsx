@@ -1,9 +1,11 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowDown, ArrowLeft, Camera, FileText, History, Mic, Paperclip, RotateCcw, Send, Square, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 
+import { getQuickActions } from '../config/chatbotQuickActions'
 import api from '../lib/axios'
+import { glowPulse } from '../lib/motion'
 import { cn } from '../lib/utils'
 import { useAuthStore } from '../store/authStore'
 import { ConversationHistoryPanel } from './ConversationHistoryPanel'
@@ -52,20 +54,31 @@ async function compressImage(file) {
   }
 }
 
-const DEFAULT_GREETING = "Kumusta! I'm Job Bot, your JobBridge assistant. Ask me about jobs, applications, and PESO Pila services."
+// Short, lively, role-varied defaults — used only when the caller doesn't pass an
+// explicit `greeting` prop (PublicLayout's Front Desk persona keeps its own explicit
+// override untouched; this only affects the authenticated AppShell mount).
+const DEFAULT_GREETINGS = {
+  jobseeker: "Hi! 👋 Looking for a job or checking an application? I'm here.",
+  employer: "Hey! 👋 Need help with vacancies or applicants today?",
+  staff: "Hi! 👋 Need to review something or check on a case?",
+  admin: "Hi! 👋 What do you need to look into today?",
+  public: "Kumusta! I'm Job Bot, your JobBridge assistant. Ask me about jobs, applications, and PESO Pila services.",
+}
 
 // "Near the bottom" tolerance in px — auto-scroll only kicks in within this distance,
 // so a user who's scrolled up to read earlier messages never gets yanked back down.
 const NEAR_BOTTOM_THRESHOLD_PX = 100
 
-export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }) {
+export function ChatbotWidget({ title = 'Job Bot', role = null, pageHref = null, greeting }) {
   // Persisted conversation history (Feature 4) only exists for authenticated users —
   // there's no account to scope a saved conversation to on the public/anonymous
   // Front Desk widget, so the History button and all of it below are gated on this.
   const hasAccount = Boolean(useAuthStore((s) => s.token))
+  const resolvedGreeting = greeting || DEFAULT_GREETINGS[role] || DEFAULT_GREETINGS.public
+  const quickActions = useMemo(() => getQuickActions(role, pageHref), [role, pageHref])
 
   const [open, setOpen] = useState(false)
-  const [messages, setMessages] = useState([{ from: 'bot', text: greeting }])
+  const [messages, setMessages] = useState([{ from: 'bot', text: resolvedGreeting }])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [sessionId, setSessionId] = useState(null)
@@ -85,6 +98,8 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
   const revealTimerRef = useRef(null)
   const messagesContainerRef = useRef(null)
   const isNearBottomRef = useRef(true) // read inside effects to avoid a stale closure
+  const dragBoundaryRef = useRef(null) // full-viewport, keeps the FAB draggable-but-contained
+  const didDragRef = useRef(false) // suppresses the open/close click that follows a real drag
 
   useEffect(() => () => clearInterval(revealTimerRef.current), [])
 
@@ -239,8 +254,8 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
     setAttachment(null)
   }
 
-  const sendMessage = async () => {
-    const text = input.trim()
+  const sendMessage = async (overrideText) => {
+    const text = (overrideText ?? input).trim()
     if ((!text && !attachment) || sending) return
     // Captured before appending the new turn — the server trims/validates this
     // regardless, but only what's already been said belongs in "history".
@@ -268,7 +283,7 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
         form.append('history', JSON.stringify(history))
         appendReply(await api.post('/api/assistant/upload-document', form))
       } else {
-        appendReply(await api.post('/api/assistant/chat', { message: text, session_id: sessionId, history }))
+        appendReply(await api.post('/api/assistant/chat', { message: text, session_id: sessionId, history, page: pageHref }))
       }
     } catch (err) {
       appendError(err)
@@ -335,7 +350,7 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
 
   const clearConversation = () => {
     clearInterval(revealTimerRef.current)
-    setMessages([{ from: 'bot', text: greeting }])
+    setMessages([{ from: 'bot', text: resolvedGreeting }])
     setSessionId(null)
     if (attachment?.previewUrl) URL.revokeObjectURL(attachment.previewUrl)
     setAttachment(null)
@@ -407,9 +422,27 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
   }
 
   return (
-    // Bottom offset accounts for the iOS home-indicator gesture area on notched
-    // devices — without this, the FAB/panel can sit flush against or under it.
-    <div className="fixed right-6 z-40" style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}>
+    <>
+      {/* Full-viewport drag boundary — invisible, never intercepts clicks (pointer-events-none).
+          Framer Motion measures this ref's bounding box to keep the FAB draggable anywhere
+          on screen without ever letting it be dragged off-screen. */}
+      <div ref={dragBoundaryRef} className="pointer-events-none fixed inset-0 z-30" aria-hidden="true" />
+      {/* Bottom offset accounts for the iOS home-indicator gesture area on notched
+          devices — without this, the FAB/panel can sit flush against or under it.
+          Draggable only while closed (drag={!open}) — once the panel is open there's
+          nothing to gain from dragging and it would only get in the way of using it,
+          so every interaction inside the panel behaves exactly as before. */}
+      <motion.div
+        drag={!open}
+        dragConstraints={dragBoundaryRef}
+        dragElastic={0.08}
+        dragMomentum={false}
+        onDragStart={() => {
+          didDragRef.current = true
+        }}
+        className={cn('fixed right-6 z-40', !open && 'cursor-grab active:cursor-grabbing')}
+        style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
+      >
       <AnimatePresence>
         {open && (
           <motion.div
@@ -569,6 +602,24 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
                     </span>
                   </div>
                 )}
+                {/* Quick-action chips: only on a fresh conversation (just the greeting) so
+                    they never clutter an active back-and-forth. Clicking one sends the
+                    canned prompt through the exact same sendMessage() a typed message
+                    uses — no new API surface, just a shortcut into the existing pipeline. */}
+                {messages.length <= 1 && quickActions.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 border-t border-border-subtle px-3 py-2">
+                    {quickActions.map((qa) => (
+                      <button
+                        key={qa.label}
+                        onClick={() => sendMessage(qa.prompt)}
+                        disabled={sending}
+                        className="rounded-full border border-border-hover bg-surface px-2.5 py-1 text-xs text-text-secondary hover:bg-surface-hover disabled:opacity-50"
+                      >
+                        {qa.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {/* gap-1/h-8 on mobile, gap-2/h-9 from sm: up — the narrowest phones (~320px)
                     need every pixel back from 4 icon buttons + a still-usable text input. */}
                 <div className="flex items-center gap-1 border-t border-border-subtle p-2 sm:gap-2">
@@ -622,7 +673,7 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
                     className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus-visible:outline-2 focus-visible:outline-primary-500"
                   />
                   <button
-                    onClick={sendMessage}
+                    onClick={() => sendMessage()}
                     disabled={sending || recording || transcribing || (!input.trim() && !attachment)}
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-800 text-white hover:bg-primary-900 disabled:opacity-50 sm:h-9 sm:w-9"
                   >
@@ -635,15 +686,31 @@ export function ChatbotWidget({ title = 'Job Bot', greeting = DEFAULT_GREETING }
         )}
       </AnimatePresence>
 
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={() => setOpen((o) => !o)}
-        className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-800 shadow-lg hover:bg-primary-900"
-        aria-label="Open chat assistant"
-      >
-        <JobBotIcon className="h-9 w-9" />
-      </motion.button>
-    </div>
+      <div className="relative h-14 w-14">
+        {!open && (
+          <motion.span
+            aria-hidden="true"
+            className="pointer-events-none absolute -inset-1 rounded-full bg-primary-400 blur-md"
+            {...glowPulse}
+          />
+        )}
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => {
+            if (didDragRef.current) {
+              didDragRef.current = false
+              return
+            }
+            setOpen((o) => !o)
+          }}
+          className="relative flex h-14 w-14 items-center justify-center rounded-full bg-primary-800 shadow-lg hover:bg-primary-900"
+          aria-label="Open chat assistant"
+        >
+          <JobBotIcon className="h-9 w-9" />
+        </motion.button>
+      </div>
+    </motion.div>
+    </>
   )
 }

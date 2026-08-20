@@ -60,3 +60,11 @@ export const slideDown = {
   exit: { opacity: 0, height: 0 },
   transition: { duration: 0.2 },
 }
+
+// Soft pulsing halo — same "animate an array of values, repeat: Infinity" technique the
+// chat typing-indicator dots already use, applied to a blurred glow instead of opacity
+// dots. Kept slow/subtle so it reads as ambient, not distracting.
+export const glowPulse = {
+  animate: { opacity: [0.35, 0.75, 0.35], scale: [1, 1.18, 1] },
+  transition: { duration: 2.6, repeat: Infinity, ease: 'easeInOut' },
+}
