@@ -3,7 +3,6 @@ import dayjs from 'dayjs'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 
-import { DressCodeEditor } from '../../components/spes/DressCodeEditor'
 import { Button } from '../../components/ui/Button'
 import { Card, CardContent } from '../../components/ui/Card'
 import { useConfirmDialog } from '../../components/ui/ConfirmDialog'
@@ -29,7 +28,6 @@ function ScheduleForm({ batch, event, onSaved }) {
   const [date, setDate] = useState(batch[`${prefix}_at`] ? manila(batch[`${prefix}_at`]).format('YYYY-MM-DD') : '')
   const [time, setTime] = useState(batch[`${prefix}_at`] ? manila(batch[`${prefix}_at`]).format('HH:mm') : '')
   const [venue, setVenue] = useState(batch[`${prefix}_venue`] || '')
-  const [dressCode, setDressCode] = useState(batch[`${prefix}_dress_code`] || { top: [], bottom: [], footwear: [] })
 
   const { data: recipientCount } = useQuery({
     queryKey: ['staff', 'spes', 'batches', batch.id, `${prefix}-schedule`, 'recipient-count'],
@@ -37,7 +35,7 @@ function ScheduleForm({ batch, event, onSaved }) {
   })
 
   const save = useMutation({
-    mutationFn: () => api.put(`/api/staff/spes/batches/${batch.id}/${prefix}-schedule`, { date, time, venue, dress_code: dressCode }),
+    mutationFn: () => api.put(`/api/staff/spes/batches/${batch.id}/${prefix}-schedule`, { date, time, venue }),
     onSuccess: (res) => {
       toast.success(res.data.message)
       onSaved()
@@ -60,10 +58,6 @@ function ScheduleForm({ batch, event, onSaved }) {
       <div>
         <Label>Venue</Label>
         <Input value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="e.g. PESO Pila Multi-Purpose Hall" />
-      </div>
-      <div>
-        <Label>Dress Code</Label>
-        <DressCodeEditor value={dressCode} onChange={setDressCode} />
       </div>
       <div className="flex justify-end">
         <Button

@@ -951,20 +951,19 @@ def send_dilp_no_show_email(to: str, full_name: str, interview_date_str: str):
 # Form PDF, and embed the QR inline as a <img> the same way jobfair.py's registration
 # email already does.
 
-def _dress_code_section(dress_code: dict | None) -> str:
-    dress_code = dress_code or {}
-
-    def _list(label, key):
-        items = dress_code.get(key) or []
-        if not items:
-            return ""
-        lis = "".join(f"<li>{item}</li>" for item in items)
-        return f"<p style='margin-bottom:2px'><b>{label}</b></p><ul style='margin-top:0'>{lis}</ul>"
-
-    sections = _list("TOP", "top") + _list("BOTTOM", "bottom") + _list("FOOTWEAR", "footwear")
-    if not sections:
-        return ""
-    return f"<p><b>✅ DRESS CODE</b></p>{sections}"
+# Fixed policy text included in every orientation/exam schedule email — staff no
+# longer pick a per-batch dress code, so this is a constant rather than a
+# per-batch value.
+_DRESS_CODE_SECTION = """
+      <p><b>✅ DRESS CODE</b></p>
+      <ul>
+        <li>Wear a clean and appropriate shirt/top.</li>
+        <li>Wear proper pants or trousers.</li>
+        <li>No shorts, slippers, sleeveless tops, or overly revealing clothing.</li>
+        <li>Wear clean and appropriate footwear.</li>
+        <li>Maintain a neat, decent, and professional appearance.</li>
+        <li>Bring your valid ID and other required documents, if applicable.</li>
+      </ul>"""
 
 
 def send_spes_application_approved_email(to: str, applicant_name: str):
@@ -1002,14 +1001,14 @@ def send_spes_registration_confirmation_email(to: str, applicant_name: str, batc
     return send_email(to, f"SPES Application Received — {batch_name}", html)
 
 
-def send_spes_orientation_notice_email(to: str, applicant_name: str, batch_name: str, date_str: str, time_str: str, venue: str, dress_code: dict | None):
+def send_spes_orientation_notice_email(to: str, applicant_name: str, batch_name: str, date_str: str, time_str: str, venue: str):
     html = f"""
     <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
       <h2 style="color:#1e3a8a">SPES Orientation &amp; Interview Schedule</h2>
       <p>Hi {applicant_name},</p>
       <p>Your SPES orientation and interview for <b>{batch_name}</b> has been scheduled:</p>
       <p>📅 <b>Date:</b> {date_str}<br/>🕒 <b>Time:</b> {time_str}<br/>📍 <b>Venue:</b> {venue}</p>
-      {_dress_code_section(dress_code)}
+      {_DRESS_CODE_SECTION}
       <p>Please bring your printed Application Form (with QR code) for attendance scanning. Your exam schedule will
       be sent in a separate email once you've completed this step.</p>
       <p>— PESO Pila SPES Team</p>
@@ -1018,14 +1017,14 @@ def send_spes_orientation_notice_email(to: str, applicant_name: str, batch_name:
     return send_email(to, f"SPES Orientation & Interview Schedule — {batch_name}", html)
 
 
-def send_spes_exam_notice_email(to: str, applicant_name: str, batch_name: str, date_str: str, time_str: str, venue: str, dress_code: dict | None):
+def send_spes_exam_notice_email(to: str, applicant_name: str, batch_name: str, date_str: str, time_str: str, venue: str):
     html = f"""
     <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
       <h2 style="color:#1e3a8a">SPES Examination Schedule</h2>
       <p>Hi {applicant_name},</p>
       <p>Following your orientation/interview, your SPES examination for <b>{batch_name}</b> has been scheduled:</p>
       <p>📅 <b>Date:</b> {date_str}<br/>🕒 <b>Time:</b> {time_str}<br/>📍 <b>Venue:</b> {venue}</p>
-      {_dress_code_section(dress_code)}
+      {_DRESS_CODE_SECTION}
       <p>Please bring your printed Application Form (with QR code) for attendance scanning.</p>
       <p>— PESO Pila SPES Team</p>
     </div>

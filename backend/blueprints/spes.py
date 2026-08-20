@@ -396,23 +396,19 @@ def staff_reject_spes_application(application_id):
 
 def _parse_schedule_body(data):
     """Returns (parsed_dict, error_response). parsed_dict has keys
-    scheduled_at/venue/dress_code on success; error_response is a Flask response
+    scheduled_at/venue on success; error_response is a Flask response
     (from utils.responses.fail) on failure — the standard two-tuple shape used
     throughout this blueprint."""
     date_str = (data.get("date") or "").strip()
     time_str = (data.get("time") or "").strip()
     venue = (data.get("venue") or "").strip()
-    dress_code = data.get("dress_code") or {}
     if not date_str or not time_str or not venue:
         return None, fail("Date, time, and venue are required.", 400)
     try:
         scheduled_at = MANILA_TZ.localize(datetime.fromisoformat(f"{date_str}T{time_str}"))
     except ValueError:
         return None, fail("Invalid date/time.", 400)
-    return {
-        "scheduled_at": scheduled_at, "venue": venue,
-        "dress_code": {"top": dress_code.get("top") or [], "bottom": dress_code.get("bottom") or [], "footwear": dress_code.get("footwear") or []},
-    }, None
+    return {"scheduled_at": scheduled_at, "venue": venue}, None
 
 
 @spes_bp.get("/staff/spes/batches/<batch_id>/orientation-schedule/recipient-count")
@@ -434,11 +430,10 @@ def staff_set_spes_orientation_schedule(batch_id):
     parsed, error = _parse_schedule_body(data)
     if error:
         return error
-    scheduled_at, venue, dress_code = parsed["scheduled_at"], parsed["venue"], parsed["dress_code"]
+    scheduled_at, venue = parsed["scheduled_at"], parsed["venue"]
 
     batch.orientation_at = scheduled_at
     batch.orientation_venue = venue
-    batch.orientation_dress_code = dress_code
     batch.orientation_notice_sent_at = now_manila()
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Update", "spes_batch", batch.id, details="Set orientation schedule")
@@ -448,7 +443,7 @@ def staff_set_spes_orientation_schedule(batch_id):
     applications = SpesApplication.query.options(*_APP_EAGER).filter_by(batch_id=batch.id, status="approved_for_orientation").all()
     for application in applications:
         send_spes_orientation_notice_email(
-            application.jobseeker_profile.user.email, application.full_name, batch.batch_name, date_str, time_str, venue, dress_code,
+            application.jobseeker_profile.user.email, application.full_name, batch.batch_name, date_str, time_str, venue,
         )
         _notify_jobseeker(application, "SPES orientation scheduled", f"Orientation for {batch.batch_name} is scheduled on {date_str} at {time_str}.")
     _ping_batch(batch.id)
@@ -474,11 +469,10 @@ def staff_set_spes_exam_schedule(batch_id):
     parsed, error = _parse_schedule_body(data)
     if error:
         return error
-    scheduled_at, venue, dress_code = parsed["scheduled_at"], parsed["venue"], parsed["dress_code"]
+    scheduled_at, venue = parsed["scheduled_at"], parsed["venue"]
 
     batch.exam_at = scheduled_at
     batch.exam_venue = venue
-    batch.exam_dress_code = dress_code
     batch.exam_notice_sent_at = now_manila()
     db.session.commit()
     log_audit(User.query.get(get_jwt_identity()), "Update", "spes_batch", batch.id, details="Set exam schedule")
@@ -488,7 +482,7 @@ def staff_set_spes_exam_schedule(batch_id):
     applications = SpesApplication.query.options(*_APP_EAGER).filter_by(batch_id=batch.id, status="orientation_passed").all()
     for application in applications:
         send_spes_exam_notice_email(
-            application.jobseeker_profile.user.email, application.full_name, batch.batch_name, date_str, time_str, venue, dress_code,
+            application.jobseeker_profile.user.email, application.full_name, batch.batch_name, date_str, time_str, venue,
         )
         _notify_jobseeker(application, "SPES exam scheduled", f"Your SPES exam for {batch.batch_name} is scheduled on {date_str} at {time_str}.")
     _ping_batch(batch.id)
