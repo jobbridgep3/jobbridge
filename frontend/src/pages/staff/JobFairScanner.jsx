@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Html5Qrcode } from 'html5-qrcode'
 import { motion } from 'framer-motion'
-import { ArrowLeft, CheckCircle2, KeyRound, Percent, UserCheck, Users } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, CheckCircle2, KeyRound, Percent, RotateCw, UserCheck, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Link, useParams } from 'react-router-dom'
@@ -28,6 +28,8 @@ export default function StaffJobFairScanner({ basePath = '/staff' }) {
   const announce = useSpeechAnnouncement()
   const [manualToken, setManualToken] = useState('')
   const [lastMarked, setLastMarked] = useState(null)
+  const [cameraError, setCameraError] = useState(false)
+  const [retryKey, setRetryKey] = useState(0)
 
   const { data: dashboard } = useQuery({
     queryKey: ['jobfair', id, 'attendance'],
@@ -59,14 +61,16 @@ export default function StaffJobFairScanner({ basePath = '/staff' }) {
   submitTokenRef.current = submitToken
 
   useEffect(() => {
+    setCameraError(false)
     const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID)
     scannerRef.current = scanner
     let stopped = false
+    let started = false
 
     scanner
       .start(
-        { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
-        { fps: 10, qrbox: 240, experimentalFeatures: { useBarCodeDetectorIfSupported: true } },
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: 240 },
         async (decodedText) => {
           if (isProcessingRef.current) return
           if (decodedText === lastScanRef.current) return
@@ -83,16 +87,30 @@ export default function StaffJobFairScanner({ basePath = '/staff' }) {
         },
         () => {}
       )
-      .catch(() => toast.error('Could not access camera — you can still enter QR tokens manually below.'))
+      .then(() => {
+        started = true
+      })
+      .catch(() => {
+        toast.error('Could not access camera — you can still enter QR tokens manually below.')
+        setCameraError(true)
+      })
 
     return () => {
-      if (!stopped) {
-        stopped = true
-        scanner.stop().catch(() => {}).finally(() => scanner.clear().catch(() => {}))
+      if (stopped) return
+      stopped = true
+      try {
+        if (started) {
+          scanner.stop().catch(() => {}).finally(() => scanner.clear().catch(() => {}))
+        } else {
+          scanner.clear().catch(() => {})
+        }
+      } catch {
+        // A cleanup-time throw must never crash the page — html5-qrcode's stop()
+        // throws "Cannot stop, scanner is not running" if start() never completed.
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
+  }, [id, retryKey])
 
   const scannedLogs = (dashboard?.logs || []).filter((l) => l.attended)
 
@@ -114,6 +132,24 @@ export default function StaffJobFairScanner({ basePath = '/staff' }) {
             QR Attendance Scanner{dashboard?.jobfair?.name ? ` — ${dashboard.jobfair.name}` : ''}
           </h1>
           <div id={SCANNER_ELEMENT_ID} className="mx-auto w-full max-w-sm overflow-hidden rounded-lg" />
+
+          {cameraError && (
+            <div className="mx-auto mt-3 flex max-w-sm flex-col items-center gap-2 rounded-lg bg-red-50 px-3 py-3 text-center text-sm text-red-800">
+              <AlertTriangle className="h-5 w-5" />
+              <p>Camera access failed. Please allow camera access and try again.</p>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  lastScanRef.current = null
+                  isProcessingRef.current = false
+                  setRetryKey((k) => k + 1)
+                }}
+              >
+                <RotateCw className="h-3.5 w-3.5" /> Retry Camera
+              </Button>
+            </div>
+          )}
 
           {lastMarked && (
             <div className="mx-auto mt-3 flex max-w-sm items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">

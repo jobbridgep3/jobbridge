@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Html5Qrcode } from 'html5-qrcode'
-import { CheckCircle2, Download, KeyRound, Percent, UserCheck, Users } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Download, KeyRound, Percent, RotateCw, UserCheck, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 
@@ -38,6 +38,8 @@ export function SPESScanner({ batches }) {
   const [manualToken, setManualToken] = useState('')
   const [lastMarked, setLastMarked] = useState(null)
   const [exporting, setExporting] = useState(null)
+  const [cameraError, setCameraError] = useState(false)
+  const [retryKey, setRetryKey] = useState(0)
   const scannerRef = useRef(null)
   const lastScanRef = useRef(null)
   const isProcessingRef = useRef(false)
@@ -88,14 +90,16 @@ export function SPESScanner({ batches }) {
 
   useEffect(() => {
     if (!batchId) return undefined
+    setCameraError(false)
     const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID)
     scannerRef.current = scanner
     let stopped = false
+    let started = false
 
     scanner
       .start(
-        { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
-        { fps: 10, qrbox: 240, experimentalFeatures: { useBarCodeDetectorIfSupported: true } },
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: 240 },
         async (decodedText) => {
           if (isProcessingRef.current) return
           if (decodedText === lastScanRef.current) return
@@ -112,19 +116,34 @@ export function SPESScanner({ batches }) {
         },
         () => {}
       )
-      .catch(() => toast.error('Could not access camera — you can still enter QR tokens manually below.'))
+      .then(() => {
+        started = true
+      })
+      .catch(() => {
+        toast.error('Could not access camera — you can still enter QR tokens manually below.')
+        setCameraError(true)
+      })
 
     return () => {
-      if (!stopped) {
-        stopped = true
-        scanner.stop().catch(() => {}).finally(() => scanner.clear().catch(() => {}))
+      if (stopped) return
+      stopped = true
+      try {
+        if (started) {
+          scanner.stop().catch(() => {}).finally(() => scanner.clear().catch(() => {}))
+        } else {
+          scanner.clear().catch(() => {})
+        }
+      } catch {
+        // A cleanup-time throw must never crash the page — html5-qrcode's stop()
+        // throws "Cannot stop, scanner is not running" if start() never completed.
       }
     }
     // Camera only needs to (re)mount when the scanner element itself mounts/unmounts
-    // (batch selected/deselected) — batchId/eventType changes are read via submitTokenRef
-    // so switching the Orientation/Exam toggle no longer tears down and restarts the camera.
+    // (batch selected/deselected) or on an explicit Retry — batchId/eventType changes
+    // are read via submitTokenRef so switching the Orientation/Exam toggle doesn't
+    // tear down and restart the camera.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [Boolean(batchId)])
+  }, [Boolean(batchId), retryKey])
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -181,6 +200,24 @@ export function SPESScanner({ batches }) {
                 {eventType === 'orientation' ? 'Orientation' : 'Exam'} Attendance Scanner
               </h2>
               <div id={SCANNER_ELEMENT_ID} className="mx-auto w-full max-w-sm overflow-hidden rounded-lg" />
+
+              {cameraError && (
+                <div className="mx-auto mt-3 flex max-w-sm flex-col items-center gap-2 rounded-lg bg-red-50 px-3 py-3 text-center text-sm text-red-800">
+                  <AlertTriangle className="h-5 w-5" />
+                  <p>Camera access failed. Please allow camera access and try again.</p>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      lastScanRef.current = null
+                      isProcessingRef.current = false
+                      setRetryKey((k) => k + 1)
+                    }}
+                  >
+                    <RotateCw className="h-3.5 w-3.5" /> Retry Camera
+                  </Button>
+                </div>
+              )}
 
               {lastMarked && (
                 <div className="mx-auto mt-3 flex max-w-sm items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">
