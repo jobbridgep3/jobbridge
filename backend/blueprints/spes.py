@@ -515,7 +515,12 @@ def staff_scan_spes_qr():
     if event_type not in SPES_ATTENDANCE_EVENT_TYPES:
         return fail("Select an event type (Orientation or Exam) before scanning.", 400)
 
-    application = SpesApplication.query.options(*_APP_EAGER).filter_by(qr_token=token).first()
+    # Locked read so a near-simultaneous second scan of the same QR (flaky camera firing
+    # twice, two staff devices) blocks until this transaction commits, then correctly sees
+    # the just-created attendance log below and 409s — instead of both racing past the
+    # check and hitting the DB unique constraint as an unhandled 500. Mirrors the
+    # with_for_update() pattern already used for the SPES approve endpoint.
+    application = SpesApplication.query.options(*_APP_EAGER).filter_by(qr_token=token).populate_existing().with_for_update().first()
     if not application:
         return fail("Invalid SPES QR code.", 404)
     if SpesAttendanceLog.query.filter_by(application_id=application.id, event_type=event_type).first():

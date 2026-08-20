@@ -711,7 +711,10 @@ def upload_attachment(jobfair_id):
 def scan_qr(jobfair_id):
     data = request.get_json(force=True) or {}
     token = data.get("qr_token")
-    registration = JobFairRegistration.query.filter_by(jobfair_id=jobfair_id, qr_token=token).first()
+    # Locked read so a near-simultaneous second scan of the same QR blocks until this
+    # transaction commits, then correctly sees attended=True and 409s, instead of both
+    # racing past the check below.
+    registration = JobFairRegistration.query.filter_by(jobfair_id=jobfair_id, qr_token=token).populate_existing().with_for_update().first()
     if not registration:
         return fail("Invalid QR code for this job fair.", 404)
     if registration.attended:

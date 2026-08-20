@@ -10,6 +10,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Label, Select } from '../../components/ui/Input'
 import { StatCard } from '../../components/ui/StatCard'
 import { useSocket } from '../../hooks/useSocket'
+import { useSpeechAnnouncement } from '../../hooks/useSpeechAnnouncement'
 import api from '../../lib/axios'
 import { downloadFile, parseBlobError } from '../../lib/download'
 import { manila } from '../../lib/manilaTime'
@@ -39,6 +40,9 @@ export function SPESScanner({ batches }) {
   const [exporting, setExporting] = useState(null)
   const scannerRef = useRef(null)
   const lastScanRef = useRef(null)
+  const isProcessingRef = useRef(false)
+  const submitTokenRef = useRef(null)
+  const announce = useSpeechAnnouncement()
 
   const { data: dashboard } = useQuery({
     queryKey: ['staff', 'spes', 'attendance', batchId, eventType],
@@ -60,11 +64,13 @@ export function SPESScanner({ batches }) {
       setLastMarked(res.data.data.application)
       playBeep()
       toast.success(res.data.message)
+      announce(res.data.data.application.full_name)
       refresh()
     } catch (err) {
       toast.error(err.response?.data?.message || 'Invalid or duplicate QR code.')
     }
   }
+  submitTokenRef.current = submitToken
 
   const handleExport = async (format) => {
     setExporting(format)
@@ -88,15 +94,21 @@ export function SPESScanner({ batches }) {
 
     scanner
       .start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: 240 },
+        { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+        { fps: 10, qrbox: 240, experimentalFeatures: { useBarCodeDetectorIfSupported: true } },
         async (decodedText) => {
+          if (isProcessingRef.current) return
           if (decodedText === lastScanRef.current) return
           lastScanRef.current = decodedText
-          await submitToken(decodedText)
+          isProcessingRef.current = true
+          try {
+            await submitTokenRef.current(decodedText)
+          } finally {
+            isProcessingRef.current = false
+          }
           setTimeout(() => {
             if (lastScanRef.current === decodedText) lastScanRef.current = null
-          }, 2500)
+          }, 1500)
         },
         () => {}
       )
@@ -108,8 +120,11 @@ export function SPESScanner({ batches }) {
         scanner.stop().catch(() => {}).finally(() => scanner.clear().catch(() => {}))
       }
     }
+    // Camera only needs to (re)mount when the scanner element itself mounts/unmounts
+    // (batch selected/deselected) — batchId/eventType changes are read via submitTokenRef
+    // so switching the Orientation/Exam toggle no longer tears down and restarts the camera.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batchId, eventType])
+  }, [Boolean(batchId)])
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">

@@ -11,6 +11,7 @@ import { Card, CardContent } from '../../components/ui/Card'
 import { Input } from '../../components/ui/Input'
 import { StatCard } from '../../components/ui/StatCard'
 import { useSocket } from '../../hooks/useSocket'
+import { useSpeechAnnouncement } from '../../hooks/useSpeechAnnouncement'
 import api from '../../lib/axios'
 import { manila } from '../../lib/manilaTime'
 import { fadeIn } from '../../lib/motion'
@@ -22,7 +23,11 @@ export default function StaffJobFairScanner({ basePath = '/staff' }) {
   const queryClient = useQueryClient()
   const scannerRef = useRef(null)
   const lastScanRef = useRef(null)
+  const isProcessingRef = useRef(false)
+  const submitTokenRef = useRef(null)
+  const announce = useSpeechAnnouncement()
   const [manualToken, setManualToken] = useState('')
+  const [lastMarked, setLastMarked] = useState(null)
 
   const { data: dashboard } = useQuery({
     queryKey: ['jobfair', id, 'attendance'],
@@ -42,12 +47,16 @@ export default function StaffJobFairScanner({ basePath = '/staff' }) {
   const submitToken = async (token) => {
     try {
       const res = await api.post(`/api/staff/jobfair/${id}/scan-qr`, { qr_token: token })
-      toast.success(`Attendance marked: ${res.data.data.jobseeker_name || 'Jobseeker'}`)
+      const name = res.data.data.jobseeker_name || 'Jobseeker'
+      setLastMarked(res.data.data)
+      toast.success(`Attendance marked: ${name}`)
+      announce(name)
       refreshDashboard()
     } catch (err) {
       toast.error(err.response?.data?.message || 'Invalid or duplicate QR code.')
     }
   }
+  submitTokenRef.current = submitToken
 
   useEffect(() => {
     const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID)
@@ -56,15 +65,21 @@ export default function StaffJobFairScanner({ basePath = '/staff' }) {
 
     scanner
       .start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: 240 },
+        { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+        { fps: 10, qrbox: 240, experimentalFeatures: { useBarCodeDetectorIfSupported: true } },
         async (decodedText) => {
+          if (isProcessingRef.current) return
           if (decodedText === lastScanRef.current) return
           lastScanRef.current = decodedText
-          await submitToken(decodedText)
+          isProcessingRef.current = true
+          try {
+            await submitTokenRef.current(decodedText)
+          } finally {
+            isProcessingRef.current = false
+          }
           setTimeout(() => {
             if (lastScanRef.current === decodedText) lastScanRef.current = null
-          }, 2500)
+          }, 1500)
         },
         () => {}
       )
@@ -99,6 +114,13 @@ export default function StaffJobFairScanner({ basePath = '/staff' }) {
             QR Attendance Scanner{dashboard?.jobfair?.name ? ` — ${dashboard.jobfair.name}` : ''}
           </h1>
           <div id={SCANNER_ELEMENT_ID} className="mx-auto w-full max-w-sm overflow-hidden rounded-lg" />
+
+          {lastMarked && (
+            <div className="mx-auto mt-3 flex max-w-sm items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">
+              <CheckCircle2 className="h-4 w-4" /> {lastMarked.jobseeker_name} — Marked Present
+            </div>
+          )}
+
           <div className="mx-auto mt-4 flex max-w-sm gap-2">
             <Input
               placeholder="Or enter the QR token manually…"
