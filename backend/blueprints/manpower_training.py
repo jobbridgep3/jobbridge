@@ -24,6 +24,7 @@ from services.email_service import (
     send_manpower_referral_awaiting_response_email,
     send_manpower_referral_completed_email,
     send_manpower_referral_declined_email,
+    send_manpower_referral_pooled_email,
     send_manpower_referral_received_email,
     send_manpower_referral_submitted_email,
 )
@@ -280,6 +281,14 @@ def staff_pool_into_batch(batch_id):
         "batch", batch.id, "Applicants pooled into batch",
         f'{len(applications)} applicant(s) added to "{batch.batch_name}".',
     )
+    for application in applications:
+        _notify_application(
+            application, "Added to training batch",
+            f'You have been included in "{batch.batch_name}" for the Manpower Skills Training Program.',
+        )
+        send_manpower_referral_pooled_email(
+            application.jobseeker_profile.user.email, application.jobseeker_profile.full_name, batch.batch_name,
+        )
     return ok(batch.to_dict(), f"{len(applications)} applicant(s) added to {batch.batch_name}.")
 
 

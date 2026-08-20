@@ -624,6 +624,22 @@ def send_interview_result_email(to: str, job_title: str, company_name: str, resu
     return send_email(to, f"Interview result — {job_title}: {result_label}", html)
 
 
+def send_manpower_referral_pooled_email(to: str, full_name: str, batch_name: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">You've Been Included in a Training Batch</h2>
+      <p>Dear {full_name},</p>
+      <p>We are pleased to inform you that you have been successfully included in the
+      <b>{batch_name}</b> batch for the Manpower Skills Training Program.</p>
+      <p>Please monitor your email and JobBridge account for further announcements, instructions,
+      and updates as your batch's project proposal is finalized and submitted to TESDA.</p>
+      <p>Best regards,<br/>Public Employment Service Office (PESO)<br/>Municipality of Pila, Laguna</p>
+      <p style="color:#64748b;font-size:12px">— PESO Pila, Laguna via JobBridge</p>
+    </div>
+    """
+    return send_email(to, f"You've Been Included in {batch_name}", html)
+
+
 def send_manpower_referral_received_email(to: str, full_name: str, program_interest: str, application_date_str: str):
     html = f"""
     <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
@@ -949,6 +965,23 @@ def _dress_code_section(dress_code: dict | None) -> str:
     if not sections:
         return ""
     return f"<p><b>✅ DRESS CODE</b></p>{sections}"
+
+
+def send_spes_application_approved_email(to: str, applicant_name: str):
+    html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#1e3a8a">Your SPES Application Has Been Approved</h2>
+      <p>Hi {applicant_name},</p>
+      <p>Congratulations! We are pleased to inform you that your SPES application has been approved
+      and you are now cleared to proceed to the orientation.</p>
+      <p>Please wait for the official orientation schedule — we will send you a separate email with
+      the date, time, venue, and dress code once it has been set.</p>
+      <p>Additional instructions will be provided through your JobBridge account and email as they
+      become available, so please continue to check both regularly.</p>
+      <p>— PESO Pila SPES Team</p>
+    </div>
+    """
+    return send_email(to, "Your SPES Application Has Been Approved", html)
 
 
 def send_spes_registration_confirmation_email(to: str, applicant_name: str, batch_name: str, application_ref_no: str, requirements: list[str]):

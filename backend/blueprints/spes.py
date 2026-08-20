@@ -30,6 +30,7 @@ from models.user import User
 from services import spes_reporting_service, spes_service
 from services.audit_service import log_audit
 from services.email_service import (
+    send_spes_application_approved_email,
     send_spes_exam_notice_email,
     send_spes_orientation_notice_email,
     send_spes_orientation_result_failed_email,
@@ -344,7 +345,12 @@ def staff_spes_application_detail(application_id):
 @jwt_required()
 @role_required("staff")
 def staff_approve_spes_application(application_id):
-    application = SpesApplication.query.get(application_id)
+    # Locked read (not a plain .get()) so a concurrent second approve request on the
+    # same application blocks until this transaction commits, then sees the updated
+    # status and 400s below — prevents duplicate approval emails/notifications from a
+    # double-click or two staff tabs. Mirrors spes_service.lock_batch_and_check_capacity's
+    # with_for_update() pattern, the only other concurrency guard in this module.
+    application = SpesApplication.query.filter_by(id=application_id).populate_existing().with_for_update().first()
     if not application:
         return fail("Application not found.", 404)
     if application.status != "pending_review":
@@ -358,6 +364,7 @@ def staff_approve_spes_application(application_id):
 
     _notify_jobseeker(application, "SPES application approved", "You've been approved for orientation. Watch for the schedule email.")
     _notify_board(application, "SPES application approved", f"{application.full_name}'s SPES application was approved for orientation.")
+    send_spes_application_approved_email(application.jobseeker_profile.user.email, application.full_name)
     return ok(application.to_dict(), "Application approved for orientation.")
 
 
