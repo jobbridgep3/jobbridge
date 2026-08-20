@@ -15,6 +15,16 @@ neither side's document is arbitrarily inflated relative to the other):
     Category          -                                              -    category.name                                 x2
     Free-text context preferred_industry, WorkExperience.company/  x1    requirements, responsibilities, daily_tasks,  x1
                        .description, Education.school                     summary (HTML-stripped), industry, department
+
+Long free-text fields (WorkExperience.description; requirements/
+responsibilities/daily_tasks/summary) are capped at _MAX_FREE_TEXT_WORDS
+words each before being included — confirmed against real production data
+that an unbounded, hundred-plus-word posting/description measurably dilutes
+cosine similarity (words unique to one side inflate that side's vector
+magnitude without contributing to the shared-term numerator) relative to the
+shorter, already-weighted fields, even for a genuinely strong match. This
+keeps the usually most load-bearing opening portion of long text while
+bounding the dilution; it does not add or inflate any signal.
 """
 
 import html
@@ -39,6 +49,25 @@ def _clean_text(value) -> str:
     text = html.unescape(text)
     text = _SENTENCE_DOT_RE.sub(" ", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+# TF-IDF here is fit fresh on just the two documents being compared (see
+# _score_texts) — a word that appears on only one side still inflates that
+# side's vector magnitude even though it can't contribute to the shared-term
+# numerator. Long free-text fields (job descriptions/responsibilities,
+# work-history descriptions) are the fields most likely to run to hundreds of
+# words of mostly posting-specific boilerplate, which measurably dilutes the
+# score relative to the shorter, higher-signal fields (skills/title/
+# certifications) even when those line up well. Capping keeps the opening,
+# usually most load-bearing, portion of long free text without unbounded
+# dilution — this reduces noise, it does not add or inflate signal.
+_MAX_FREE_TEXT_WORDS = 50
+
+
+def _clean_and_cap(value) -> str:
+    text = _clean_text(value)
+    words = text.split()
+    return " ".join(words[:_MAX_FREE_TEXT_WORDS]) if len(words) > _MAX_FREE_TEXT_WORDS else text
 
 
 def _dedupe(items) -> list:
@@ -71,7 +100,7 @@ def _profile_text(jobseeker_profile) -> str:
     for w in jobseeker_profile.work_experiences:
         experience_parts.append(_repeat(w.position, 2))
         experience_parts.append(_clean_text(w.company))
-        experience_parts.append(_clean_text(w.description))
+        experience_parts.append(_clean_and_cap(w.description))
 
     education_parts = []
     for e in jobseeker_profile.educations:
@@ -96,10 +125,10 @@ def _vacancy_text(vacancy) -> str:
     certifications = _repeat(" ".join(_dedupe(vacancy.required_certifications)), 2)
     course = _repeat(vacancy.course, 2)
     education_level = _clean_text(vacancy.education_level)
-    requirements = _clean_text(vacancy.requirements)
-    responsibilities = _clean_text(vacancy.responsibilities)
-    daily_tasks = _clean_text(vacancy.daily_tasks)
-    summary = _clean_text(vacancy.summary)
+    requirements = _clean_and_cap(vacancy.requirements)
+    responsibilities = _clean_and_cap(vacancy.responsibilities)
+    daily_tasks = _clean_and_cap(vacancy.daily_tasks)
+    summary = _clean_and_cap(vacancy.summary)
     industry = _clean_text(vacancy.industry)
     department = _clean_text(vacancy.department)
 
