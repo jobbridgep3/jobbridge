@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, useMotionValue } from 'framer-motion'
 import { ArrowDown, ArrowLeft, Camera, FileText, History, Mic, Paperclip, RotateCcw, Send, Square, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
@@ -100,8 +100,102 @@ export function ChatbotWidget({ title = 'Job Bot', role = null, pageHref = null,
   const isNearBottomRef = useRef(true) // read inside effects to avoid a stale closure
   const dragBoundaryRef = useRef(null) // full-viewport, keeps the FAB draggable-but-contained
   const didDragRef = useRef(false) // suppresses the open/close click that follows a real drag
+  const fabRef = useRef(null) // read for its live rect — drives resize reclamping + panel placement
+  // Controlled (not framer-internal) so the FAB position survives a viewport change: on
+  // resize/orientation/zoom we can read the current offset and correct it, which an
+  // uncontrolled drag's internal motion value doesn't expose.
+  const dragX = useMotionValue(0)
+  const dragY = useMotionValue(0)
+  // { top, left, width, height } in px, computed fresh from the FAB's current rect each
+  // time the panel opens (and kept in sync while open) — null until first computed.
+  const [panelPos, setPanelPos] = useState(null)
 
   useEffect(() => () => clearInterval(revealTimerRef.current), [])
+
+  // Pulls the FAB back inside the viewport if a resize/orientation/zoom left it outside
+  // (e.g. dragged near the left edge on a wide screen, then the window is narrowed).
+  // Reuses dragBoundaryRef — the same full-viewport box framer already constrains live
+  // dragging to — so both paths agree on what "inside the viewport" means.
+  const clampFabPosition = () => {
+    const el = fabRef.current
+    const boundary = dragBoundaryRef.current
+    if (!el || !boundary) return
+    const elRect = el.getBoundingClientRect()
+    const bRect = boundary.getBoundingClientRect()
+    let dx = 0
+    let dy = 0
+    if (elRect.left < bRect.left) dx = bRect.left - elRect.left
+    else if (elRect.right > bRect.right) dx = bRect.right - elRect.right
+    if (elRect.top < bRect.top) dy = bRect.top - elRect.top
+    else if (elRect.bottom > bRect.bottom) dy = bRect.bottom - elRect.bottom
+    if (dx) dragX.set(dragX.get() + dx)
+    if (dy) dragY.set(dragY.get() + dy)
+  }
+
+  useEffect(() => {
+    clampFabPosition()
+    window.addEventListener('resize', clampFabPosition)
+    window.addEventListener('orientationchange', clampFabPosition)
+    window.visualViewport?.addEventListener('resize', clampFabPosition)
+    return () => {
+      window.removeEventListener('resize', clampFabPosition)
+      window.removeEventListener('orientationchange', clampFabPosition)
+      window.visualViewport?.removeEventListener('resize', clampFabPosition)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Popover-style placement: anchors the panel to the FAB's current rect (wherever it's
+  // been dragged) rather than relying on document flow, so it can flip below the FAB
+  // when there's no room above, and clamp horizontally so it's never clipped by an edge.
+  // Same width/height figures the panel used to get from Tailwind's dvh/vw arbitrary
+  // values — computed here instead so the same numbers drive both sizing and placement.
+  const computePanelPosition = () => {
+    const fab = fabRef.current?.getBoundingClientRect()
+    if (!fab) return
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const isSmUp = vw >= 640
+    const margin = 12 // matches the old mb-3 gap between panel and FAB
+    const edgeGap = 12 // minimum breathing room from any viewport edge
+    const width = isSmUp ? 360 : vw - 48
+    const height = Math.min(vh * (isSmUp ? 0.7 : 0.75), isSmUp ? 480 : 560)
+
+    let left = fab.right - width // right-aligned to the FAB by default
+    let top = fab.top - margin - height // above the FAB by default
+    if (top < edgeGap) {
+      const belowTop = fab.bottom + margin
+      top = belowTop + height <= vh - edgeGap ? belowTop : Math.max(edgeGap, vh - edgeGap - height)
+    }
+    left = Math.min(Math.max(left, edgeGap), vw - width - edgeGap)
+    setPanelPos({ top, left, width, height })
+  }
+
+  // Keeps the open panel correctly placed if the viewport changes while it's open
+  // (resize, orientation flip, pinch-zoom) — same recalculation used when it first opens.
+  useEffect(() => {
+    if (!open) return
+    computePanelPosition()
+    window.addEventListener('resize', computePanelPosition)
+    window.addEventListener('orientationchange', computePanelPosition)
+    window.visualViewport?.addEventListener('resize', computePanelPosition)
+    return () => {
+      window.removeEventListener('resize', computePanelPosition)
+      window.removeEventListener('orientationchange', computePanelPosition)
+      window.visualViewport?.removeEventListener('resize', computePanelPosition)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  const toggleOpen = () => {
+    if (didDragRef.current) {
+      didDragRef.current = false
+      return
+    }
+    const next = !open
+    if (next) computePanelPosition() // compute before mount so it never flashes at (0,0)
+    setOpen(next)
+  }
 
   const scrollToBottom = (behavior = 'smooth') => {
     messagesContainerRef.current?.scrollTo({ top: messagesContainerRef.current.scrollHeight, behavior })
@@ -427,12 +521,11 @@ export function ChatbotWidget({ title = 'Job Bot', role = null, pageHref = null,
           Framer Motion measures this ref's bounding box to keep the FAB draggable anywhere
           on screen without ever letting it be dragged off-screen. */}
       <div ref={dragBoundaryRef} className="pointer-events-none fixed inset-0 z-30" aria-hidden="true" />
-      {/* Bottom offset accounts for the iOS home-indicator gesture area on notched
-          devices — without this, the FAB/panel can sit flush against or under it.
-          Draggable only while closed (drag={!open}) — once the panel is open there's
-          nothing to gain from dragging and it would only get in the way of using it,
-          so every interaction inside the panel behaves exactly as before. */}
+      {/* The FAB is its own draggable element (not a wrapper around the panel) so its 56x56
+          rect is all framer/clampFabPosition ever need to reason about — the panel is
+          positioned independently below, anchored to this rect via computePanelPosition. */}
       <motion.div
+        ref={fabRef}
         drag={!open}
         dragConstraints={dragBoundaryRef}
         dragElastic={0.08}
@@ -440,22 +533,53 @@ export function ChatbotWidget({ title = 'Job Bot', role = null, pageHref = null,
         onDragStart={() => {
           didDragRef.current = true
         }}
+        onDragEnd={() => {
+          // The browser's own trailing click (fired on the same mouseup that ends the
+          // drag) is what's supposed to consume this flag via toggleOpen. But when the
+          // drag ends constrained against dragBoundaryRef (dragged into a corner/edge),
+          // that trailing click can fail to land on the FAB — leaving the flag stuck
+          // true and silently swallowing the user's next genuine tap. Clearing it
+          // shortly after drag end bounds the window to "the trailing click, if any"
+          // instead of "forever until some click happens to arrive."
+          setTimeout(() => {
+            didDragRef.current = false
+          }, 150)
+        }}
+        style={{ x: dragX, y: dragY, bottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
         className={cn('fixed right-6 z-40', !open && 'cursor-grab active:cursor-grabbing')}
-        style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
       >
+        <div className="relative h-14 w-14">
+          {!open && (
+            <motion.span
+              aria-hidden="true"
+              className="pointer-events-none absolute -inset-1 rounded-full bg-primary-400 blur-md"
+              {...glowPulse}
+            />
+          )}
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={toggleOpen}
+            className="relative flex h-14 w-14 items-center justify-center rounded-full bg-primary-800 shadow-lg hover:bg-primary-900"
+            aria-label="Open chat assistant"
+          >
+            <JobBotIcon className="h-9 w-9" />
+          </motion.button>
+        </div>
+      </motion.div>
+
       <AnimatePresence>
-        {open && (
+        {open && panelPos && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 12 }}
             transition={{ duration: 0.15 }}
-            // Mobile-first: near-full-width with symmetric margins matching the parent's
-            // own right-6 offset (calc(100vw-3rem)), and `dvh` (not `vh`) so the panel's
-            // height correctly shrinks when the on-screen keyboard opens — `vh` is based
-            // on the layout viewport and doesn't react to it, which is what covers the
-            // input bar. Reverts to the compact floating-panel size at sm: (640px) and up.
-            className="mb-3 flex h-[min(75dvh,560px)] w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-xl sm:h-[min(70dvh,480px)] sm:w-[360px]"
+            // Placed by computePanelPosition (popover-style: anchored to the FAB's current
+            // rect, flips above/below and clamps horizontally to stay fully on-screen) —
+            // kept in sync with panelPos on resize/orientation/zoom via its effect above.
+            style={{ position: 'fixed', top: panelPos.top, left: panelPos.left, width: panelPos.width, height: panelPos.height }}
+            className="z-40 flex flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-xl"
           >
             <div className="flex items-center justify-between bg-primary-900 px-4 py-3 text-white">
               <div className="flex items-center gap-2">
@@ -685,32 +809,6 @@ export function ChatbotWidget({ title = 'Job Bot', role = null, pageHref = null,
           </motion.div>
         )}
       </AnimatePresence>
-
-      <div className="relative h-14 w-14">
-        {!open && (
-          <motion.span
-            aria-hidden="true"
-            className="pointer-events-none absolute -inset-1 rounded-full bg-primary-400 blur-md"
-            {...glowPulse}
-          />
-        )}
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => {
-            if (didDragRef.current) {
-              didDragRef.current = false
-              return
-            }
-            setOpen((o) => !o)
-          }}
-          className="relative flex h-14 w-14 items-center justify-center rounded-full bg-primary-800 shadow-lg hover:bg-primary-900"
-          aria-label="Open chat assistant"
-        >
-          <JobBotIcon className="h-9 w-9" />
-        </motion.button>
-      </div>
-    </motion.div>
     </>
   )
 }
